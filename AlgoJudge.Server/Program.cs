@@ -1,4 +1,3 @@
-
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
@@ -14,13 +13,13 @@ namespace AlgoJudge.Server
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Configuration.AddEnvironmentVariables(prefix: "AJ_");
-            
+
             // Add services to the container.
 
             {
                 var dbConnectionString = builder.Configuration.GetConnectionString("DbConnectionString");
                 builder.Services.AddDbContext<ApplicationDbContext>(
-                options => options.UseNpgsql(dbConnectionString));
+                    options => options.UseNpgsql(dbConnectionString));
             }
 
             builder.Services.AddAuthorization();
@@ -40,14 +39,21 @@ namespace AlgoJudge.Server
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
+            var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<List<string>>();
+
             builder.Services.AddCors(options =>
             {
-                options.AddDefaultPolicy(
-                    policy =>
-                    {
-                        policy.WithOrigins("https://localhost:5173").AllowAnyMethod().AllowAnyHeader();
-                        policy.AllowCredentials();
-                    });
+                corsOrigins ??= [];
+                
+                if (corsOrigins.Count > 0)
+                {
+                    options.AddDefaultPolicy(
+                        policy =>
+                        {
+                            policy.WithOrigins(corsOrigins.ToArray()).AllowAnyMethod().AllowAnyHeader()
+                                .AllowCredentials();
+                        });
+                }
             });
 
             var app = builder.Build();
@@ -75,8 +81,6 @@ namespace AlgoJudge.Server
                     throw new Exception("Database has pending migrations");
                 }
             }
-
-            //app.UseCors(builder => builder.AllowAnyMethod().AllowAnyHeader().AllowAnyOrigin()); // TODO
 
             app.UseHttpsRedirection();
 
