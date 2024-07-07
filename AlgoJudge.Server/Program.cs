@@ -39,12 +39,11 @@ namespace AlgoJudge.Server
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
-            var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<List<string>>();
 
             builder.Services.AddCors(options =>
             {
-                corsOrigins ??= [];
-                
+                var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<List<string>>() ?? [];
+
                 if (corsOrigins.Count > 0)
                 {
                     options.AddDefaultPolicy(
