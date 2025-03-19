@@ -101,13 +101,13 @@ export default function ActivitiesPage() {
     const pages = Math.ceil(data.length / MAX_ITEMS_PER_PAGE);
     const firstItem = MAX_ITEMS_PER_PAGE * (page - 1);
     const list = data.slice(firstItem, firstItem + MAX_ITEMS_PER_PAGE).map(item =>
-        <Card className={classes.item + " " + (item.isActive && classes.active)} onClick={() => navigate(`/activity/${item.id}/problems`)}>
+        <Card key={item.id} className={classes.item + " " + (item.isActive && classes.active)} onClick={() => navigate(`/activity/${item.id}/problems`)}>
             <Group justify="space-between">
                 <Group>
                     {getIcon(item.type)}<Text size="lg">{item.name}</Text>
                 </Group>
                 <Stack justify="flex-end" gap={0} className={classes.stack}>
-                    {item.props.map(p => <Text>{p.key}: {p.value}</Text>)}
+                    {item.props.map(p => <Text key={p.key}>{p.key}: {p.value}</Text>)}
                 </Stack>
             </Group>
         </Card>

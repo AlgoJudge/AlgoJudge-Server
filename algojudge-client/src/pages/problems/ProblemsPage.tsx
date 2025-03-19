@@ -3,7 +3,7 @@ import classes from "./ProblemsPage.module.css";
 import { useEffect, useState } from "react";
 import { useInterval } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Problem {
     id: string,
@@ -79,10 +79,10 @@ const placeholderProblems: Problem[] = [
 const Problem = (props: { problem: Problem, activityId: string }) => {
     const { t } = useTranslation();
     return (
-        <Card className={classes.problem}>
+        <Card className={classes.problem} component={Link} to={`/activity/${props.activityId}/problem/${props.problem.id}`}>
             <Group justify="space-between">
                 <Text size="md">[{props.problem.id}] {props.problem.name}</Text>
-                <Button component={Link} to={`/activity/${props.activityId}/problem/${props.problem.id}`}>{t("Submit")}</Button>
+                <Button component={Link} to={`/activity/${props.activityId}/submit/${props.problem.id}`}>{t("Submit")}</Button>
             </Group>
         </Card>
     );
@@ -111,7 +111,7 @@ const RoundOverlay = (props: { startDate: string }) => {
 }
 
 const Round = (props: { round: Round, activityId: string }) => {
-    const problems = (props.round.problems ?? placeholderProblems).map(p => <Problem problem={p} activityId={props.activityId} />);
+    const problems = (props.round.problems ?? placeholderProblems).map(p => <Problem key={p.id} problem={p} activityId={props.activityId} />);
     return (
         <Card className={classes.round}>
             <Group justify="space-between">
@@ -126,7 +126,7 @@ const Round = (props: { round: Round, activityId: string }) => {
 
 export default function ProblemsPage() {
     const { t } = useTranslation();
-    const rounds = data.map(r => <Round round={r} activityId={activityId} />);
+    const rounds = data.map(r => <Round key={r.id} round={r} activityId={activityId} />);
     return (
         <>
             <Title>{t("Problems")}</Title>

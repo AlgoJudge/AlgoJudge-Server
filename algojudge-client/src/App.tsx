@@ -14,6 +14,12 @@ import Authentication from './routers/Authentication';
 import AppLayout from './layouts/app/AppLayout';
 import ActivitiesPage from './pages/activities/ActivitiesPage';
 import ProblemsPage from './pages/problems/ProblemsPage';
+import SubmitPage from './pages/submit/SubmitPage';
+import SubmissionsPage from './pages/submissions/SubmissionsPage';
+import RankingPage from './pages/ranking/RankingPage';
+import QuestionsPage from './pages/questions/QuestionsPage';
+import RulesPage from './pages/rules/RulesPage';
+import ProblemPage from './pages/problem/ProblemPage';
 
 function App() {
 
@@ -51,6 +57,30 @@ function App() {
                 {
                     path: "/activity/:activityId/problems",
                     element: <ProblemsPage />
+                },
+                {
+                    path: "/activity/:activityId/submit/:problemId?",
+                    element: <SubmitPage />
+                },
+                {
+                    path: "/activity/:activityId/submissions",
+                    element: <SubmissionsPage />
+                },
+                {
+                    path: "/activity/:activityId/ranking",
+                    element: <RankingPage />
+                },
+                {
+                    path: "/activity/:activityId/questions",
+                    element: <QuestionsPage />
+                },
+                {
+                    path: "/activity/:activityId/rules",
+                    element: <RulesPage />
+                },
+                {
+                    path: "/activity/:activityId/problem/:problemId",
+                    element: <ProblemPage />
                 }
             ]
         }

@@ -50,7 +50,7 @@ const ActivityNavbar = (props: { collapsed: boolean }) => {
         { to: `/activity/${currentActivity.id}/submit`, label: t("Submit"), icon: IconPackageExport },
         { to: `/activity/${currentActivity.id}/submissions`, label: t("My submissions"), icon: IconBox },
         currentActivity.hasRanking && { to: `/activity/${currentActivity.id}/ranking`, label: t("Ranking"), icon: IconChartBarPopular },
-        currentActivity.hasQestions && { to: `/activity/${currentActivity.id}/qestions`, label: t("Questions and announcements"), icon: IconMessageQuestion },
+        currentActivity.hasQestions && { to: `/activity/${currentActivity.id}/questions`, label: t("Questions and announcements"), icon: IconMessageQuestion },
         currentActivity.hasRules && { to: `/activity/${currentActivity.id}/rules`, label: t("Rules"), icon: IconSectionSign },
     ]
     return (
@@ -95,7 +95,6 @@ const LangSelector = () => {
 }
 
 const UserButton = (props: any) => {
-    console.log(props)
     return (
         <UnstyledButton mx="xl" {...props} className={classes.user}>
             <Group>
