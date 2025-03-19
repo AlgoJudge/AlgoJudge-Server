@@ -13,13 +13,15 @@ import Register from './pages/register/Register';
 import Authentication from './routers/Authentication';
 import AppLayout from './layouts/app/AppLayout';
 import ActivitiesPage from './pages/activities/ActivitiesPage';
-import ProblemsPage from './pages/problems/ProblemsPage';
-import SubmitPage from './pages/submit/SubmitPage';
-import SubmissionsPage from './pages/submissions/SubmissionsPage';
-import RankingPage from './pages/ranking/RankingPage';
-import QuestionsPage from './pages/questions/QuestionsPage';
-import RulesPage from './pages/rules/RulesPage';
-import ProblemPage from './pages/problem/ProblemPage';
+import ProblemsPage from './pages/activity/problems/ProblemsPage';
+import SubmitPage from './pages/activity/submit/SubmitPage';
+import SubmissionsPage from './pages/activity/submissions/SubmissionsPage';
+import RankingPage from './pages/activity/ranking/RankingPage';
+import QuestionsPage from './pages/activity/questions/QuestionsPage';
+import RulesPage from './pages/activity/rules/RulesPage';
+import ProblemPage from './pages/activity/problem/ProblemPage';
+import SubmissionPage from './pages/activity/submission/SubmissionPage';
+import CodePage from './pages/activity/submission/code/CodePage';
 
 function App() {
 
@@ -81,6 +83,14 @@ function App() {
                 {
                     path: "/activity/:activityId/problem/:problemId",
                     element: <ProblemPage />
+                },
+                {
+                    path: "/activity/:activityId/submission/:submissionId",
+                    element: <SubmissionPage />
+                },
+                {
+                    path: "/activity/:activityId/submission/:submissionId/code",
+                    element: <CodePage />
                 }
             ]
         }
