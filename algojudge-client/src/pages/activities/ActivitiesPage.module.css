@@ -1,0 +1,27 @@
+.item {
+    margin: var(--mantine-spacing-md);
+    background-color: var(--mantine-color-gray-4);
+    padding: var(--mantine-spacing-md) var(--mantine-spacing-xl);
+    cursor: pointer;
+    color: var(--mantine-color-gray-6);
+
+    @mixin hover {
+        box-shadow: var(--mantine-shadow-md);
+        transform: scale(1.01);
+        z-index: 100000;
+        background-color: var(--mantine-color-gray-4);
+    }
+}
+
+.active {
+    background-color: var(--mantine-color-gray-2);
+    color: var(--mantine-text-color);
+
+    @mixin hover {
+        background-color: var(--mantine-color-gray-1);
+    }
+}
+
+.stack {
+    vertical-align: bottom;
+}

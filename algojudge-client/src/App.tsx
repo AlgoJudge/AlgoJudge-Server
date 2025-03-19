@@ -11,11 +11,15 @@ import Login from './pages/login/Login';
 import Manage from './pages/manage/Manage';
 import Register from './pages/register/Register';
 import Authentication from './routers/Authentication';
+import AppLayout from './layouts/app/AppLayout';
+import ActivitiesPage from './pages/activities/ActivitiesPage';
+import ProblemsPage from './pages/problems/ProblemsPage';
 
 function App() {
 
     const router = createBrowserRouter([
         {
+            path: "/",
             element: <Layout />,
             children: [
                 {
@@ -33,6 +37,20 @@ function App() {
                 {
                     path: "/manage",
                     element: <Authentication><Manage /></Authentication>
+                }
+            ]
+        },
+        {
+            path: "/",
+            element: <AppLayout />,
+            children: [
+                {
+                    path: "/activities",
+                    element: <ActivitiesPage />
+                },
+                {
+                    path: "/activity/:activityId/problems",
+                    element: <ProblemsPage />
                 }
             ]
         }

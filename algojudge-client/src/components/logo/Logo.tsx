@@ -1,11 +1,10 @@
 import image from '../../assets/algojudge2.png'
 import classes from './Logo.module.css'
+import { Image } from '@mantine/core';
 
-function Logo(props: { size: string | number | undefined; }) {
+function Logo(props: any) {
     return (
-        <>
-            <img className={classes.ajlogo} src={image} height={props.size}></img>
-        </>
+        <Image className={classes.ajlogo} src={image} h="1em" w="auto" {...props} />
     )
 }
 
