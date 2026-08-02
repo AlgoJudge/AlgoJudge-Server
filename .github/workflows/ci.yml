@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Nothing here needs to write to the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Restore and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore AlgoJudge.sln
+
+      # Warnings are reported but do not fail the build. One of them is NU1903:
+      # AutoMapper 13.0.1 carries a known high-severity advisory. Turning
+      # warnings into errors would block every change until that is upgraded,
+      # so it is tracked separately instead of gating CI here.
+      - name: Build
+        run: dotnet build AlgoJudge.sln -c Release --no-restore
+
+      # There is no test project yet. When one is added, add a `dotnet test`
+      # step here rather than relying on the build alone.
