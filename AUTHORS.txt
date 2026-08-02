@@ -1,8 +1,9 @@
 AlgoJudge-Server authors
 
 Everyone who has contributed commits to this repository, ordered by number of
-commits. Names and addresses are taken verbatim from the Git history, so this
-file can be checked against it at any time with:
+commits. Names and addresses come from the Git history, with alternate addresses
+folded onto one identity by .mailmap, so this file can be checked against it at
+any time with:
 
     git shortlog -sne --all
 

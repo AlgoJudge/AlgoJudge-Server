@@ -1,0 +1,7 @@
+# Maps alternate addresses onto one identity, so `git shortlog`, `git log` and
+# `git blame` count a contributor once instead of splitting them across the
+# addresses they have committed under.
+#
+# Format: Canonical Name <canonical@email> <other@email>
+
+Patryk Kisielewski <pkisielewski@patkis.pl> <poczta.kisielewski@gmail.com>
