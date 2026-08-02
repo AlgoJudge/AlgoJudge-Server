@@ -55,9 +55,14 @@ After cloning, inspect the solution and project files, then document:
 ## Layout
 
 The frontend is in
-[AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client). An older copy
-under `algojudge-client/` was removed on 2026-08-02 after being verified as an
-outdated duplicate; it remains in this repository's history.
+[AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client). A duplicate
+copy sat under `algojudge-client/` here until 2026-08-02, when it was verified
+as outdated and removed.
+
+**Do not go looking for that code in this repository's history.** It was
+migrated to `AlgoJudge-Client` with its commits — that history reaches back to
+December 2023 and carries the contributors who worked on it. The commits here
+stop on 2026-08-02 and are not where the work continued.
 
 ## Working here
 

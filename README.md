@@ -125,8 +125,23 @@ this repository — no type-specific controller, table or conditional.
 
 ## Related repositories
 
-- [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client) — the web frontend. An older copy sat in `algojudge-client/` here until 2026-08-02, when it was verified as an outdated duplicate and removed; it remains in this repository's history.
+- [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client) — the web frontend
 - [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner) — isolated execution and evaluation
+
+### The frontend that used to live here
+
+A copy of the frontend sat in `algojudge-client/` in this repository until
+2026-08-02. It was verified as an outdated duplicate and removed, and its
+`AlgoJudge.sln` entry went with it, so `dotnet build` no longer runs
+`npm install`.
+
+**Look for that code and its history in `AlgoJudge-Client`, not here.** The
+frontend was migrated there with its commits: that repository's history starts
+in December 2023, well before the repository itself was created, and it carries
+the contributors who worked on the copy that used to be in this one.
+
+Commits touching `algojudge-client/` do still exist in this repository's own
+history, but they end on 2026-08-02 and are not where the work continued.
 
 ## License
 
