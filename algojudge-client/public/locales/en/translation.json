@@ -11,5 +11,19 @@
   "Password": "Password",
   "Your password": "Your password",
   "mail@example.com": "mail@example.com",
-  "I accept the terms and conditions": "I accept the terms and conditions"
+  "I accept the terms and conditions": "I accept the terms and conditions",
+  "Lang": "Lang",
+  "Activities": "Activities",
+  "Collapse": "Collapse",
+  "Expand": "Expand",
+  "Problems": "Problems",
+  "Submit": "Submit",
+  "My submissions": "My submissions",
+  "Ranking": "Ranking",
+  "Questions and announcements": "Questions and announcements",
+  "Rules": "Rules",
+  "Problem": "Problem",
+  "Submission": "Submission",
+  "Back": "Back",
+  "Source code": "Source code"
 }

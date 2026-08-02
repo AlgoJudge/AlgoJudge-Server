@@ -1,0 +1,116 @@
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.user {
+    display: block;
+    padding: 0 2em;
+    height: 4em;
+    color: light-dark(var(--mantine-color-black), var(--mantine-color-dark-0));
+
+    @mixin hover {
+        background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+    }
+}
+
+.text {
+    color: white;
+    min-height: 5em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.navbar {
+    padding: var(--mantine-spacing-md);
+    display: flex;
+    flex-direction: column;
+    background-color: var(--mantine-color-blue-filled);
+    transition: width 200ms;
+}
+
+.divider {
+    border-color: var(--mantine-color-blue-4);
+}
+
+.link {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    font-size: var(--mantine-font-size-sm);
+    color: var(--mantine-color-white);
+    padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+    border-radius: var(--mantine-radius-sm);
+    font-weight: 500;
+
+    @mixin hover {
+        background-color: var(--mantine-color-blue-7);
+        color: var(--mantine-color-white);
+
+        .linkIcon {
+            color: var(--mantine-color-white);
+        }
+    }
+
+    &[data-collapsed] {
+
+        &,
+        &:hover {
+            text-align: center;
+            display: block;
+
+            .linkIcon {
+                margin-right: 0;
+            }
+        }
+
+        & span {
+            display: none;
+        }
+    }
+}
+
+.active,
+.active:hover {
+    box-shadow: var(--mantine-shadow-sm);
+    background-color: var(--mantine-color-white);
+    color: var(--mantine-color-blue-filled);
+
+    .linkIcon {
+        color: var(--mantine-color-blue-filled);
+    }
+}
+
+.linkIcon {
+    color: var(--mantine-color-blue-1);
+    margin-right: var(--mantine-spacing-sm);
+    width: 25px;
+    height: 25px;
+}
+
+.color_schema_icon {
+    vertical-align: sub;
+}
+
+.color_schema_icon.dark {
+    @mixin dark {
+        display: none;
+    }
+
+    @mixin light {
+        display: block;
+    }
+}
+
+.color_schema_icon.light {
+    @mixin light {
+        display: none;
+    }
+
+    @mixin dark {
+        display: block;
+    }
+}

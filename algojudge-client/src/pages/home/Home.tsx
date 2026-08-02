@@ -1,4 +1,4 @@
-import { Anchor } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -8,7 +8,7 @@ function Home() {
     return (
         <>
             <h1>{t('Home')}</h1>
-            <Anchor component={Link} to="/manage">{t('Manage activities')}</Anchor>
+            <Button size="xl" component={Link} to="/activities">Participant panel</Button>
         </>
     )
 }

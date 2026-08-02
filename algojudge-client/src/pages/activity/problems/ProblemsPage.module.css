@@ -1,0 +1,29 @@
+.round {
+    margin: var(--mantine-spacing-md);
+    border: solid 1px var(--mantine-color-gray-4);
+}
+
+.problem {
+    margin: 4px var(--mantine-spacing-xs);
+    background-color: var(--mantine-color-gray-2);
+    padding: var(--mantine-spacing-xs) var(--mantine-spacing-xl);
+    cursor: pointer;
+
+    @mixin hover {
+        box-shadow: var(--mantine-shadow-md);
+        z-index: 100000;
+        background-color: var(--mantine-color-gray-1);
+    }
+}
+
+.roundoverlay {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    height: 100%;
+}
+
+.roundproblemlist {
+    position: relative;
+}
