@@ -1,5 +1,0 @@
-.ajlogo {
-    @mixin dark {
-        filter: invert(1);
-    }
-}

@@ -77,6 +77,8 @@ dotnet ef database update --project AlgoJudge.Server
 ## Notes
 
 - The Server does not compile or execute submitted code. Evaluation belongs to
-  AlgoJudge-Runner.
-- `algojudge-client/` holds an older frontend kept for reference. The current
-  frontend is [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client).
+  [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner).
+- The frontend lives in
+  [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client). An older
+  copy used to sit in `algojudge-client/` here; it was removed once verified to
+  be an outdated duplicate, and remains in this repository's history.
