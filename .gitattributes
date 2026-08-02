@@ -1,0 +1,19 @@
+# Normalise every text file to LF, both in the repository and in the working
+# tree, on every platform. This overrides core.autocrlf, so the result does not
+# depend on how an individual contributor's Git happens to be configured.
+* text=auto eol=lf
+
+# Windows batch files are the exception: they need CRLF to run reliably.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never apply end-of-line conversion to these.
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.png binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary
