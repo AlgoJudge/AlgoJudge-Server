@@ -1,1 +1,12 @@
+AlgoJudge-Server authors
+
+Everyone who has contributed commits to this repository, ordered by number of
+commits. Names and addresses are taken verbatim from the Git history, so this
+file can be checked against it at any time with:
+
+    git shortlog -sne --all
+
 Patryk Kisielewski <pkisielewski@patkis.pl>
+mikolajjuda <mikolaj.juda@gmail.com>
+Jakub Pawlowski <59766830+pawl0wski@users.noreply.github.com>
+Kamil Jodłowski <kamil239811@wp.pl>
