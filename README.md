@@ -3,6 +3,44 @@
 Persistent state, REST API, authorization, activities, tasks, submissions and
 results for [AlgoJudge](https://github.com/AlgoJudge).
 
+The Server is deliberately simple. It stores files, metadata, access policies
+and results, and moves data between the Client and the Runners. It never
+compiles or executes submitted code, and it holds no knowledge of what a
+particular task type means.
+
+## Status
+
+Early development. The domain model exists; most of the API does not.
+
+| Endpoint | State |
+|---|---|
+| `GET /ping/ping` | implemented |
+| `GET /activity/list` | implemented; the `Query` paging and ordering parameters are accepted but ignored |
+| `POST /activity/create` | implemented |
+| `/identity/*` | provided by ASP.NET Identity |
+
+Entities: `Activity`, `Series`, `SeriesProblem`, `Problem`, `Submission`,
+`Result`, `File`, `User`. One migration, `20240130140424_InitialCreate`.
+
+Not implemented: WebSocket, the Runner registry, job reservation, task and
+submission endpoints, file upload and download, and result payloads — `Result`
+currently carries no verdict, score or per-test data. Authorization checks only
+that a request is authenticated.
+
+## Decisions in force
+
+- **Identity stays here for the MVP.** ASP.NET Identity and password storage
+  remain. Moving identity into a separate component behind OIDC is the target,
+  deliberately deferred.
+- **`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
+  `Result`, naming the Runner that is evaluating or has evaluated a submission.
+  Because it must name a Runner while evaluation is still running, `Result` is
+  created at claim time and doubles as the job record.
+- **All identifiers become string UUIDs.** The entities still use `int` keys;
+  that migration is outstanding.
+- `Activity.Type` is the type discriminator, formatted `name@version`. Adding a
+  task or activity type must not require a change here.
+
 ## Requirements
 
 - .NET 8 SDK
@@ -74,11 +112,22 @@ startup. Outside Development it refuses to start while migrations are pending.
 dotnet ef database update --project AlgoJudge.Server
 ```
 
-## Notes
+## Contributing
 
-- The Server does not compile or execute submitted code. Evaluation belongs to
-  [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner).
-- The frontend lives in
-  [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client). An older
-  copy used to sit in `algojudge-client/` here; it was removed once verified to
-  be an outdated duplicate, and remains in this repository's history.
+`main` is the integration and default branch; changes arrive through pull
+requests. `dotnet build` must succeed before opening one. There is no CI and no
+test project yet, so that is the whole gate.
+
+Architecture rules that apply here: the Server does not compile or execute code,
+does not implement a sandbox or a checker, and must not depend on one Runner
+implementation. Adding an activity or task type must not require a change to
+this repository — no type-specific controller, table or conditional.
+
+## Related repositories
+
+- [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client) — the web frontend. An older copy sat in `algojudge-client/` here until 2026-08-02, when it was verified as an outdated duplicate and removed; it remains in this repository's history.
+- [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner) — isolated execution and evaluation
+
+## License
+
+See [LICENSE](LICENSE). Contributors are listed in [AUTHORS.txt](AUTHORS.txt).
