@@ -3,7 +3,12 @@ name: algojudge-server
 services:
 
   postgres:
-    image: postgres:latest
+    # Pinned deliberately. `postgres:latest` broke this file when the image
+    # moved to PostgreSQL 18, which expects the volume at /var/lib/postgresql
+    # rather than /var/lib/postgresql/data and refuses to start otherwise.
+    # 16 is also inside the range Npgsql 8 is tested against. Moving to 17 or 18
+    # means changing the mount path below and checking the Npgsql version.
+    image: postgres:16
     volumes:
       - algojudge_dev_db_data:/var/lib/postgresql/data
     environment:

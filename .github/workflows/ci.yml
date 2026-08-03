@@ -39,3 +39,40 @@ jobs:
 
       # There is no test project yet. When one is added, add a `dotnet test`
       # step here rather than relying on the build alone.
+
+  docker:
+    name: Build the container image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Built but not pushed: no registry has been chosen yet. The build context
+      # is the repository root, as the Compose file expects.
+      - name: Build image
+        run: docker build -f AlgoJudge.Server/Dockerfile -t algojudge-server:ci .
+
+  compose:
+    name: Start the development stack
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # This is the documented way to run the Server locally, so it is worth
+      # proving it still works. It caught the postgres image moving to 18, which
+      # changed the expected volume mount and stopped the stack from starting.
+      - name: Compose up
+        run: docker compose -f example-server-development-docker-compose.yaml up -d --wait
+
+      - name: The API answers
+        run: curl -fsS http://127.0.0.1:8080/ping/ping
+
+      - name: Migrations created the schema
+        run: |
+          docker compose -f example-server-development-docker-compose.yaml \
+            exec -T postgres psql -U algojudge -d algojudge -c '\dt' | grep -q Activities
+
+      - name: Compose down
+        if: always()
+        run: docker compose -f example-server-development-docker-compose.yaml down -v
