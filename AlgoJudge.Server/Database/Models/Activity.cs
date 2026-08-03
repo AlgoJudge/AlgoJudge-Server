@@ -58,6 +58,17 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>Submissions one participant may make per problem. Null means unlimited.</summary>
         public int? MaxSubmissionsPerProblem { get; set; }
 
+        /// <summary>
+        /// Archived: still readable, accepting nothing new — no submissions, no
+        /// questions, no edits.
+        /// <para>
+        /// This is the ordinary way an activity ends. Deleting one destroys
+        /// submissions participants may still want to look back at, which is why
+        /// it is a separate permission and not in the manager template.
+        /// </para>
+        /// </summary>
+        public DateTime? ArchivedAt { get; set; }
+
         /// <summary>Rules text, in the same content format as a problem statement.</summary>
         public Guid? RulesFileId { get; set; }
         public File? RulesFile { get; set; }

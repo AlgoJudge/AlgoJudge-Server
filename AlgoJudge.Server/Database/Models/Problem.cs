@@ -49,6 +49,18 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public string SharedWith { get; set; } = "[]";
 
+        /// <summary>
+        /// Archived: gone from the attach picker and taking no new versions,
+        /// while every assignment already using it keeps working.
+        /// <para>
+        /// Retiring a problem must not break an activity that ran with it, which
+        /// is why this exists and why deletion is refused while any
+        /// <see cref="SeriesProblem"/> still points here — a rule the database
+        /// enforces on its own through <c>DeleteBehavior.Restrict</c>.
+        /// </para>
+        /// </summary>
+        public DateTime? ArchivedAt { get; set; }
+
         public ICollection<ProblemVersion> Versions { get; set; } = new List<ProblemVersion>();
         public ICollection<SeriesProblem> SeriesProblems { get; set; } = new List<SeriesProblem>();
     }

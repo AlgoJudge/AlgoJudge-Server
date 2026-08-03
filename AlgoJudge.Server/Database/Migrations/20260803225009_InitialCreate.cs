@@ -205,7 +205,8 @@ namespace AlgoJudge.Server.Database.Migrations
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     OwnerUserId = table.Column<string>(type: "text", nullable: false),
                     Visibility = table.Column<int>(type: "integer", nullable: false),
-                    SharedWith = table.Column<string>(type: "jsonb", nullable: false)
+                    SharedWith = table.Column<string>(type: "jsonb", nullable: false),
+                    ArchivedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -268,6 +269,7 @@ namespace AlgoJudge.Server.Database.Migrations
                     MaxUploadBytes = table.Column<long>(type: "bigint", nullable: false),
                     MaxAttachments = table.Column<int>(type: "integer", nullable: false),
                     MaxSubmissionsPerProblem = table.Column<int>(type: "integer", nullable: true),
+                    ArchivedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     RulesFileId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
