@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Database.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260803205954_InitialCreate")]
+    [Migration("20260803223950_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -47,6 +47,9 @@ namespace AlgoJudge.Server.Database.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("LogVisibility")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxAttachments")
                         .HasColumnType("integer");
 
                     b.Property<int?>("MaxSubmissionsPerProblem")
@@ -288,6 +291,14 @@ namespace AlgoJudge.Server.Database.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SharedWith")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -297,10 +308,15 @@ namespace AlgoJudge.Server.Database.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Visibility")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Slug")
                         .IsUnique();
+
+                    b.HasIndex("OwnerUserId", "Visibility");
 
                     b.ToTable("Problems", (string)null);
                 });
@@ -310,6 +326,10 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Config")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -553,6 +573,15 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<string>("Config")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<int?>("MaxAttachments")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxSubmissions")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("MaxUploadBytes")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Name")
                         .HasColumnType("text");
@@ -879,6 +908,17 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Navigation("Activity");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.Problem", b =>
+                {
+                    b.HasOne("AlgoJudge.Server.Database.Models.User", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.ProblemVersion", b =>

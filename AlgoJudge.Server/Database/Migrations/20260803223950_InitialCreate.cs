@@ -68,21 +68,6 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Problems",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Type = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Problems", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Runners",
                 columns: table => new
                 {
@@ -210,6 +195,30 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Problems",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Type = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    OwnerUserId = table.Column<string>(type: "text", nullable: false),
+                    Visibility = table.Column<int>(type: "integer", nullable: false),
+                    SharedWith = table.Column<string>(type: "jsonb", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Problems", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Problems_AspNetUsers_OwnerUserId",
+                        column: x => x.OwnerUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ProblemVersions",
                 columns: table => new
                 {
@@ -218,7 +227,8 @@ namespace AlgoJudge.Server.Database.Migrations
                     Version = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedByUserId = table.Column<string>(type: "text", nullable: true),
-                    Note = table.Column<string>(type: "text", nullable: true)
+                    Note = table.Column<string>(type: "text", nullable: true),
+                    Config = table.Column<string>(type: "jsonb", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -256,6 +266,7 @@ namespace AlgoJudge.Server.Database.Migrations
                     LogVisibility = table.Column<int>(type: "integer", nullable: false),
                     JoinPolicy = table.Column<int>(type: "integer", nullable: false),
                     MaxUploadBytes = table.Column<long>(type: "bigint", nullable: false),
+                    MaxAttachments = table.Column<int>(type: "integer", nullable: false),
                     MaxSubmissionsPerProblem = table.Column<int>(type: "integer", nullable: true),
                     RulesFileId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
@@ -331,7 +342,10 @@ namespace AlgoJudge.Server.Database.Migrations
                     Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     Name = table.Column<string>(type: "text", nullable: true),
                     Order = table.Column<int>(type: "integer", nullable: false),
-                    Config = table.Column<string>(type: "jsonb", nullable: false)
+                    Config = table.Column<string>(type: "jsonb", nullable: false),
+                    MaxUploadBytes = table.Column<long>(type: "bigint", nullable: true),
+                    MaxAttachments = table.Column<int>(type: "integer", nullable: true),
+                    MaxSubmissions = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -669,6 +683,11 @@ namespace AlgoJudge.Server.Database.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_Problems_OwnerUserId_Visibility",
+                table: "Problems",
+                columns: new[] { "OwnerUserId", "Visibility" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Problems_Slug",
                 table: "Problems",
                 column: "Slug",
@@ -809,13 +828,13 @@ namespace AlgoJudge.Server.Database.Migrations
                 name: "Series");
 
             migrationBuilder.DropTable(
-                name: "AspNetUsers");
-
-            migrationBuilder.DropTable(
                 name: "Problems");
 
             migrationBuilder.DropTable(
                 name: "Activities");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUsers");
         }
     }
 }

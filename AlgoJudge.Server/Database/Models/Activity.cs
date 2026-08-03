@@ -52,6 +52,9 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public long MaxUploadBytes { get; set; } = 8 * 1024 * 1024;
 
+        /// <summary>How many files one submission may carry.</summary>
+        public int MaxAttachments { get; set; } = 1;
+
         /// <summary>Submissions one participant may make per problem. Null means unlimited.</summary>
         public int? MaxSubmissionsPerProblem { get; set; }
 

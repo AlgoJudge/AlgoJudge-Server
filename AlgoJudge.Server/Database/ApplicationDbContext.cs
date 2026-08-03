@@ -55,6 +55,14 @@ namespace AlgoJudge.Server.Database
                 e.ToTable("Problems");
                 e.HasIndex(p => p.Slug).IsUnique();
                 e.Property(p => p.Slug).HasMaxLength(32);
+                e.Property(p => p.SharedWith).HasColumnType("jsonb");
+                // The library list is filtered by owner and visibility on every
+                // load, which is the one query this table has to be fast at.
+                e.HasIndex(p => new { p.OwnerUserId, p.Visibility });
+                e.HasOne(p => p.Owner)
+                    .WithMany()
+                    .HasForeignKey(p => p.OwnerUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<ProblemVersion>(e =>
@@ -65,6 +73,7 @@ namespace AlgoJudge.Server.Database
                     .WithMany(p => p.Versions)
                     .HasForeignKey(v => v.ProblemId)
                     .OnDelete(DeleteBehavior.Cascade);
+                e.Property(v => v.Config).HasColumnType("jsonb");
                 e.HasOne(v => v.CreatedBy)
                     .WithMany()
                     .HasForeignKey(v => v.CreatedByUserId)

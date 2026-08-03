@@ -31,6 +31,22 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>Free note explaining what changed, shown to managers only.</summary>
         public string? Note { get; set; }
 
+        /// <summary>
+        /// Limits and scoring for this version, as <c>jsonb</c> and **opaque to
+        /// the Server**, which stores it and never reads it.
+        /// <para>
+        /// It is the middle of three layers: the package's own defaults, then
+        /// this, then <see cref="SeriesProblem.Config"/>. Each overrides the one
+        /// before, and the Client and the Runner both parse the result — the
+        /// Client to show limits and draw a result, the Runner to enforce them.
+        /// </para>
+        /// <para>
+        /// Nothing the Server has to enforce belongs here. A limit it cannot read
+        /// is a limit it cannot police, so those are explicit columns instead.
+        /// </para>
+        /// </summary>
+        public string Config { get; set; } = "{}";
+
         public ICollection<File> Files { get; set; } = new List<File>();
     }
 }

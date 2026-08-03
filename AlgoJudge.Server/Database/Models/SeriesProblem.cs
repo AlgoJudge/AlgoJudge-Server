@@ -54,6 +54,20 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public string Config { get; set; } = "{}";
 
+        /// <summary>
+        /// Limits the **Server** enforces, narrowing the activity's. Null inherits.
+        /// <para>
+        /// These are columns rather than entries in <see cref="Config"/> on
+        /// purpose: the Server rejects an oversized or too-frequent submission
+        /// before anything runs, and it cannot police a value it does not read.
+        /// Time and memory are the Runner's, and stay in the configuration chain,
+        /// because they only become knowable while the solution is running.
+        /// </para>
+        /// </summary>
+        public long? MaxUploadBytes { get; set; }
+        public int? MaxAttachments { get; set; }
+        public int? MaxSubmissions { get; set; }
+
         public ICollection<Submission> Submissions { get; set; } = new List<Submission>();
         public ICollection<Question> Questions { get; set; } = new List<Question>();
     }

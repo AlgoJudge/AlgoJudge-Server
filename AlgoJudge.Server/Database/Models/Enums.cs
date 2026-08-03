@@ -32,6 +32,19 @@ namespace AlgoJudge.Server.Database.Models
         Revoked = 2,
     }
 
+    /// <summary>
+    /// Who can see a problem in the library. Private is the default: a manager's
+    /// drafts are not everyone's business.
+    /// </summary>
+    public enum ProblemVisibility
+    {
+        Private = 0,
+        /// <summary>Visible to the users listed on the problem.</summary>
+        Shared = 1,
+        /// <summary>Visible to everyone in the installation.</summary>
+        Instance = 2,
+    }
+
     public enum QuestionKind
     {
         Question = 0,
