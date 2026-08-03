@@ -52,6 +52,22 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "PermissionTemplates",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    Permissions = table.Column<string>(type: "jsonb", nullable: false),
+                    IsBuiltIn = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PermissionTemplates", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Problems",
                 columns: table => new
                 {
@@ -246,6 +262,36 @@ namespace AlgoJudge.Server.Database.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Activities", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Grants",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ActivityId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Permissions = table.Column<string>(type: "jsonb", nullable: false),
+                    CreatedFromTemplate = table.Column<string>(type: "text", nullable: true),
+                    State = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    GrantedByUserId = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Grants", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Grants_Activities_ActivityId",
+                        column: x => x.ActivityId,
+                        principalTable: "Activities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Grants_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -587,6 +633,31 @@ namespace AlgoJudge.Server.Database.Migrations
                 column: "SubmissionId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Grants_ActivityId_State",
+                table: "Grants",
+                columns: new[] { "ActivityId", "State" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Grants_UserId",
+                table: "Grants",
+                column: "UserId",
+                unique: true,
+                filter: "\"ActivityId\" IS NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Grants_UserId_ActivityId",
+                table: "Grants",
+                columns: new[] { "UserId", "ActivityId" },
+                unique: true,
+                filter: "\"ActivityId\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PermissionTemplates_Name",
+                table: "PermissionTemplates",
+                column: "Name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ProblemVersions_CreatedByUserId",
                 table: "ProblemVersions",
                 column: "CreatedByUserId");
@@ -697,6 +768,12 @@ namespace AlgoJudge.Server.Database.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetUserTokens");
+
+            migrationBuilder.DropTable(
+                name: "Grants");
+
+            migrationBuilder.DropTable(
+                name: "PermissionTemplates");
 
             migrationBuilder.DropTable(
                 name: "QuestionReads");

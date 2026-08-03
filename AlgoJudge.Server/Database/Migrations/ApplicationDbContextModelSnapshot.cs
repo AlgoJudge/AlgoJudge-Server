@@ -197,6 +197,81 @@ namespace AlgoJudge.Server.Database.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.Grant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedFromTemplate")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GrantedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"ActivityId\" IS NULL");
+
+                    b.HasIndex("ActivityId", "State");
+
+                    b.HasIndex("UserId", "ActivityId")
+                        .IsUnique()
+                        .HasFilter("\"ActivityId\" IS NOT NULL");
+
+                    b.ToTable("Grants", (string)null);
+                });
+
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.PermissionTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("PermissionTemplates", (string)null);
+                });
+
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.Problem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -785,6 +860,24 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Navigation("Submission");
                 });
 
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.Grant", b =>
+                {
+                    b.HasOne("AlgoJudge.Server.Database.Models.Activity", "Activity")
+                        .WithMany("Grants")
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("AlgoJudge.Server.Database.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Activity");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.ProblemVersion", b =>
                 {
                     b.HasOne("AlgoJudge.Server.Database.Models.User", "CreatedBy")
@@ -967,6 +1060,8 @@ namespace AlgoJudge.Server.Database.Migrations
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.Activity", b =>
                 {
+                    b.Navigation("Grants");
+
                     b.Navigation("Questions");
 
                     b.Navigation("Series");

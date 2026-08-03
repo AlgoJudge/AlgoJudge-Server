@@ -61,5 +61,12 @@ namespace AlgoJudge.Server.Database.Models
 
         public ICollection<Series> Series { get; set; } = new List<Series>();
         public ICollection<Question> Questions { get; set; } = new List<Question>();
+
+        /// <summary>
+        /// Who is in this activity and what they may do. A grant is the
+        /// membership, so this is the participant list as well as the permission
+        /// list — there is no second table that could disagree with it.
+        /// </summary>
+        public ICollection<Grant> Grants { get; set; } = new List<Grant>();
     }
 }

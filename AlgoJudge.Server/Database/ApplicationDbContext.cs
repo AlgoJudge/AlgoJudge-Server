@@ -19,6 +19,8 @@ namespace AlgoJudge.Server.Database
         public DbSet<Runner> Runners { get; set; }
         public DbSet<Question> Questions { get; set; }
         public DbSet<QuestionRead> QuestionReads { get; set; }
+        public DbSet<PermissionTemplate> PermissionTemplates { get; set; }
+        public DbSet<Grant> Grants { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -196,6 +198,39 @@ namespace AlgoJudge.Server.Database
                 e.HasOne(r => r.Question)
                     .WithMany(q => q.Reads)
                     .HasForeignKey(r => r.QuestionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<PermissionTemplate>(e =>
+            {
+                e.ToTable("PermissionTemplates");
+                e.Property(t => t.Permissions).HasColumnType("jsonb");
+                e.HasIndex(t => t.Name).IsUnique();
+            });
+
+            builder.Entity<Grant>(e =>
+            {
+                e.ToTable("Grants");
+                e.Property(g => g.Permissions).HasColumnType("jsonb");
+                // One grant per user per scope. A null ActivityId is the system
+                // scope, and Postgres treats nulls as distinct in a unique index,
+                // so the system grant needs its own filtered index to be unique.
+                e.HasIndex(g => new { g.UserId, g.ActivityId })
+                    .IsUnique()
+                    .HasFilter("\"ActivityId\" IS NOT NULL");
+                e.HasIndex(g => g.UserId)
+                    .IsUnique()
+                    .HasFilter("\"ActivityId\" IS NULL");
+                // "Who is in this activity" is a query over this table, because
+                // there is no membership table beside it.
+                e.HasIndex(g => new { g.ActivityId, g.State });
+                e.HasOne(g => g.User)
+                    .WithMany()
+                    .HasForeignKey(g => g.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(g => g.Activity)
+                    .WithMany(a => a.Grants)
+                    .HasForeignKey(g => g.ActivityId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }
