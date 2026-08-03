@@ -65,8 +65,21 @@ jobs:
       - name: Compose up
         run: docker compose -f example-server-development-docker-compose.yaml up -d --wait
 
+      # `--wait` only waits for a healthcheck, and the application service has
+      # none, so the container counts as up while the .NET host is still
+      # starting. Poll instead of assuming.
       - name: The API answers
-        run: curl -fsS http://127.0.0.1:8080/ping/ping
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/ping/ping; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the API did not answer within 60s" >&2
+          docker compose -f example-server-development-docker-compose.yaml logs --no-color algojudge >&2
+          exit 1
 
       - name: Migrations created the schema
         run: |
