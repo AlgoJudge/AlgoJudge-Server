@@ -1,6 +1,7 @@
 @AlgoJudge.Server_HostAddress = http://localhost:5171
 
-GET {{AlgoJudge.Server_HostAddress}}/ping/ping
+### Liveness. Everything is served under /api/v1, on every installation.
+GET {{AlgoJudge.Server_HostAddress}}/api/v1/health
 Accept: application/json
 
 ###

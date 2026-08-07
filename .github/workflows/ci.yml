@@ -30,10 +30,9 @@ jobs:
       - name: Restore
         run: dotnet restore AlgoJudge.sln
 
-      # Warnings are reported but do not fail the build. One of them is NU1903:
-      # AutoMapper 13.0.1 carries a known high-severity advisory. Turning
-      # warnings into errors would block every change until that is upgraded,
-      # so it is tracked separately instead of gating CI here.
+      # Warnings are reported but do not fail the build. NU1903 was the standing
+      # exception here — AutoMapper 13.0.1 carried a high-severity advisory —
+      # and it is gone with the package, so the restore above is clean.
       - name: Build
         run: dotnet build AlgoJudge.sln -c Release --no-restore
 
@@ -71,7 +70,7 @@ jobs:
       - name: The API answers
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/ping/ping; then
+            if curl -fsS http://127.0.0.1:8080/api/v1/health; then
               echo
               exit 0
             fi
@@ -81,10 +80,35 @@ jobs:
           docker compose -f example-server-development-docker-compose.yaml logs --no-color algojudge >&2
           exit 1
 
+      # The API lives under /api/v1 on every installation, so a bare path must
+      # NOT answer. This is here because UsePathBase only strips the prefix when
+      # it is present — it does not require it — so without an explicit guard
+      # every endpoint quietly answers at both paths.
+      - name: The API is not served at the root
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health)
+          test "$code" = "404" || { echo "expected 404 at /health, got $code" >&2; exit 1; }
+
       - name: Migrations created the schema
         run: |
           docker compose -f example-server-development-docker-compose.yaml \
             exec -T postgres psql -U algojudge -d algojudge -c '\dt' | grep -q Activities
+
+      # The two rules the schema is asked to defend on its own, checked as
+      # schema rather than as behaviour: a file reference with no owner, and a
+      # second Instance row. Both would also be caught by a service, and both
+      # are the kind of rule a service forgets.
+      - name: The database refuses a reference with no owner
+        run: |
+          docker compose -f example-server-development-docker-compose.yaml \
+            exec -T postgres psql -U algojudge -d algojudge -c '\d "FileReferences"' \
+            | grep -q 'CK_FileReferences_SingleOwner'
+
+      - name: The instance table is a singleton
+        run: |
+          docker compose -f example-server-development-docker-compose.yaml \
+            exec -T postgres psql -U algojudge -d algojudge -c '\d "Instance"' \
+            | grep -q 'CK_Instance_Singleton'
 
       - name: Compose down
         if: always()
