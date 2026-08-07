@@ -20,6 +20,8 @@ namespace AlgoJudge.Server
                     options => options.UseNpgsql(dbConnectionString));
             }
 
+            builder.Services.AddHttpContextAccessor();
+
             builder.Services.AddAuthorization();
             builder.Services.AddIdentityApiEndpoints<User>()
                 .AddEntityFrameworkStores<ApplicationDbContext>();
@@ -27,8 +29,11 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IPermissionService, PermissionService>();
 
-            builder.Services.AddControllers(options =>
-                options.Filters.Add<HttpResponseExceptionFilter>());
+            // One shape for every failure, including the ones raised outside MVC.
+            builder.Services.AddProblemDetails();
+            builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
+
+            builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
@@ -48,6 +53,8 @@ namespace AlgoJudge.Server
             });
 
             var app = builder.Build();
+
+            app.UseExceptionHandler();
 
             app.MapGroup("/identity").MapIdentityApi<User>();
 
@@ -74,6 +81,10 @@ namespace AlgoJudge.Server
 
             app.UseCors();
 
+            // Both, in this order. Only UseAuthorization was here before, which
+            // meant the identity cookie was never turned into a ClaimsPrincipal
+            // and every [Authorize] endpoint answered 401 to a signed-in caller.
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();
