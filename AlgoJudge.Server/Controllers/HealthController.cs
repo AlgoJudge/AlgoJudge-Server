@@ -16,6 +16,7 @@ namespace AlgoJudge.Server.Controllers
     public class HealthController : ControllerBase
     {
         [HttpGet]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         public IActionResult Get() => Ok(new { status = "ok" });
     }
 }

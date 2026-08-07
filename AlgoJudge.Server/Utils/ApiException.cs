@@ -43,6 +43,19 @@ namespace AlgoJudge.Server.Utils
     }
 
     /// <summary>
+    /// Signed in, allowed in principle, and refused because of <b>when</b> or
+    /// <b>what</b> — a closed round, a language the activity does not accept, a
+    /// submission ceiling already reached.
+    /// <para>
+    /// Distinct from <see cref="AccessDeniedException"/>: that one is about a
+    /// permission somebody does not hold and is fixed by granting it. This one
+    /// no grant would change, and the Client shows the two differently.
+    /// </para>
+    /// </summary>
+    public class ForbiddenActionException(string message, string code)
+        : ApiException(StatusCodes.Status403Forbidden, message, code);
+
+    /// <summary>
     /// It is not there — or it is there and this caller may not know that.
     /// <para>
     /// Both cases answer the same way on purpose. A problem in a series that has

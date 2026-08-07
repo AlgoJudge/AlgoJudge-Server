@@ -1,6 +1,7 @@
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
+using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Utils;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Diagnostics;
@@ -92,8 +93,26 @@ namespace AlgoJudge.Server
                 options.SignIn.RequireConfirmedEmail = false;
             }).AddEntityFrameworkStores<ApplicationDbContext>();
 
+            // Injected rather than DateTime.UtcNow, so the scheduler and the
+            // file collector can be tested against a clock somebody turns.
+            builder.Services.AddSingleton(TimeProvider.System);
+
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IPermissionService, PermissionService>();
+            builder.Services.AddScoped<IFileService, FileService>();
+            builder.Services.AddScoped<IInstanceService, InstanceService>();
+            builder.Services.AddScoped<IActivityService, ActivityService>();
+            builder.Services.AddScoped<ISeriesService, SeriesService>();
+            builder.Services.AddScoped<IProblemService, ProblemService>();
+            builder.Services.AddScoped<ISubmissionService, SubmissionService>();
+            builder.Services.AddScoped<IRunnerService, RunnerService>();
+            builder.Services.AddSingleton<ISeriesGate, SeriesGate>();
+
+            // The connection registry outlives any request: it is what the
+            // users screen counts, and what an event is fanned out over.
+            builder.Services.AddSingleton<IEventHub, EventHub>();
+
+            builder.Services.AddScoped<Seeder>();
 
             // One shape for every failure, including the ones raised outside MVC.
             builder.Services.AddProblemDetails();
@@ -200,8 +219,21 @@ namespace AlgoJudge.Server
             app.UseAuthentication();
             app.UseAuthorization();
 
+            app.UseWebSockets();
+
             app.MapGroup("/identity").MapIdentityApi<User>();
             app.MapControllers();
+
+            // One socket per tab, carrying core, participant and manager events
+            // together. Authenticated by the same cookie as everything else — no
+            // token in the query string, which would end up in proxy logs.
+            app.MapEventSocket("/ws");
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var seed = scope.ServiceProvider.GetRequiredService<Seeder>();
+                seed.EnsureAsync(app.Environment.IsDevelopment()).GetAwaiter().GetResult();
+            }
 
             app.Run();
         }

@@ -22,6 +22,7 @@ namespace AlgoJudge.Server.Utils
     /// </summary>
     public class ProblemDetailsExceptionHandler(
         IProblemDetailsService problems,
+        IHostEnvironment environment,
         ILogger<ProblemDetailsExceptionHandler> logger
     ) : IExceptionHandler
     {
@@ -52,8 +53,11 @@ namespace AlgoJudge.Server.Utils
                 Title = title,
                 // The message is safe to show for our own refusals; for anything
                 // unexpected it is not, because it may carry a connection string
-                // or a file path.
-                Detail = status >= StatusCodes.Status500InternalServerError ? null : exception.Message,
+                // or a file path — so outside Development an unhandled fault says
+                // only its status, and the detail is in the log.
+                Detail = status < StatusCodes.Status500InternalServerError
+                    ? exception.Message
+                    : environment.IsDevelopment() ? exception.ToString() : null,
             };
             if (code is not null) details.Extensions["code"] = code;
             if (fields is not null) details.Extensions["errors"] = fields;

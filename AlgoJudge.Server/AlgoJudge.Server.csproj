@@ -17,6 +17,12 @@
       a startup assembly scan and a security advisory to save writing out a
       dozen assignments that the compiler would otherwise have checked.
     -->
+    <!--
+      Ed25519, for the Runner handshake. .NET 8 has no Ed25519 — it arrives in
+      the framework later — and this is the pure-managed option, so a container
+      needs no native libsodium beside it.
+    -->
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>

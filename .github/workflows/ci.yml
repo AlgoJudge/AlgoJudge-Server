@@ -36,8 +36,13 @@ jobs:
       - name: Build
         run: dotnet build AlgoJudge.sln -c Release --no-restore
 
-      # There is no test project yet. When one is added, add a `dotnet test`
-      # step here rather than relying on the build alone.
+      # Testcontainers starts a real PostgreSQL 18 per run. Not an in-memory
+      # provider: the job queue rests on FOR UPDATE SKIP LOCKED, on filtered
+      # unique indexes and on two check constraints, none of which in-memory
+      # has — a suite that passed on it would be testing a database this
+      # product never runs on.
+      - name: Test
+        run: dotnet test AlgoJudge.sln -c Release --no-build
 
   docker:
     name: Build the container image
