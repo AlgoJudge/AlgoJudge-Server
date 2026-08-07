@@ -8,7 +8,8 @@ namespace AlgoJudge.Server.Database.Models
     /// judged under are properties of the assignment.
     /// <para>
     /// A submission does not carry a verdict. Each attempt at evaluating it is an
-    /// <see cref="EvaluationJob"/>, and the full attempt history is retained.
+    /// <see cref="EvaluationJob"/>, the full attempt history is retained, and a
+    /// rejudge adds one rather than overwriting anything.
     /// </para>
     /// </summary>
     public class Submission
@@ -30,7 +31,13 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>Declared by the participant; meaningful only to the problem type.</summary>
         public string? Language { get; set; }
 
-        public ICollection<File> Files { get; set; } = new List<File>();
+        /// <summary>
+        /// What was sent — the source, or the archive — under the name
+        /// <c>source</c>. On the submission rather than on an attempt, because it
+        /// is what somebody did once and every rejudge reads the same bytes.
+        /// </summary>
+        public ICollection<FileReference> Files { get; set; } = new List<FileReference>();
+
         public ICollection<EvaluationJob> Jobs { get; set; } = new List<EvaluationJob>();
     }
 }

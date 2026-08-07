@@ -10,7 +10,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AutoMapper" Version="13.0.1" />
+    <!--
+      AutoMapper was dropped in favour of explicit mapping. 13.0.1 carries
+      NU1903, a known high-severity advisory, and the two maps it held were
+      `CreateMap<Activity, ActivityInfo>()` with no customisation — a dependency,
+      a startup assembly scan and a security advisory to save writing out a
+      dozen assignments that the compiler would otherwise have checked.
+    -->
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>

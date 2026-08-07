@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,6 +13,36 @@ namespace AlgoJudge.Server.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "Activities",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Type = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    RankingType = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    TimeZone = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    StartDate = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    EndDate = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    HasQuestions = table.Column<bool>(type: "boolean", nullable: false),
+                    ScoreVisibility = table.Column<int>(type: "integer", nullable: false),
+                    JoinPolicy = table.Column<int>(type: "integer", nullable: false),
+                    JoinPassword = table.Column<string>(type: "text", nullable: true),
+                    Unlisted = table.Column<bool>(type: "boolean", nullable: false),
+                    HideEndedSeriesProblems = table.Column<bool>(type: "boolean", nullable: false),
+                    Languages = table.Column<List<string>>(type: "text[]", nullable: false),
+                    Props = table.Column<string>(type: "jsonb", nullable: true),
+                    MaxUploadBytes = table.Column<long>(type: "bigint", nullable: false),
+                    MaxAttachments = table.Column<int>(type: "integer", nullable: false),
+                    MaxSubmissionsPerProblem = table.Column<int>(type: "integer", nullable: true),
+                    ArchivedAt = table.Column<DateTime>(type: "timestamptz", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Activities", x => x.Id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "AspNetRoles",
                 columns: table => new
@@ -31,6 +62,17 @@ namespace AlgoJudge.Server.Database.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
+                    FirstName = table.Column<string>(type: "text", nullable: true),
+                    LastName = table.Column<string>(type: "text", nullable: true),
+                    Note = table.Column<string>(type: "text", nullable: true),
+                    Tags = table.Column<string>(type: "text", nullable: true),
+                    ApprovedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    IsTemporary = table.Column<bool>(type: "boolean", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    BlockedReason = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    LastSeenAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    Anonymized = table.Column<bool>(type: "boolean", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -52,15 +94,32 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Instance",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: true),
+                    LocalRegistrationEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    RequireEmail = table.Column<bool>(type: "boolean", nullable: false),
+                    RequireConfirmedEmail = table.Column<bool>(type: "boolean", nullable: false),
+                    ShowLogo = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Instance", x => x.Id);
+                    table.CheckConstraint("CK_Instance_Singleton", "\"Id\" = '00000000-0000-7000-8000-000000000001'");
+                });
+
+            migrationBuilder.CreateTable(
                 name: "PermissionTemplates",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     Description = table.Column<string>(type: "text", nullable: true),
                     Permissions = table.Column<string>(type: "jsonb", nullable: false),
                     IsBuiltIn = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -72,20 +131,82 @@ namespace AlgoJudge.Server.Database.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    Product = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    Version = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     PublicKey = table.Column<string>(type: "text", nullable: false),
-                    Fingerprint = table.Column<string>(type: "text", nullable: false),
+                    Fingerprint = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     State = table.Column<int>(type: "integer", nullable: false),
-                    Capabilities = table.Column<string>(type: "jsonb", nullable: false),
-                    Version = table.Column<string>(type: "text", nullable: true),
-                    RegisteredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ApprovedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ProblemTypes = table.Column<List<string>>(type: "text[]", nullable: false),
+                    Tags = table.Column<List<string>>(type: "text[]", nullable: false),
+                    Address = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    Machine = table.Column<string>(type: "jsonb", nullable: true),
+                    RegisteredAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    ApprovedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
                     ApprovedByUserId = table.Column<string>(type: "text", nullable: true),
-                    LastSeenAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    RevokedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    RevokedReason = table.Column<string>(type: "text", nullable: true),
+                    LastSeenAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    CompletedJobs = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Runners", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AttachmentRules",
+                columns: table => new
+                {
+                    ActivityId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Visibility = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AttachmentRules", x => new { x.ActivityId, x.Name });
+                    table.ForeignKey(
+                        name: "FK_AttachmentRules_Activities_ActivityId",
+                        column: x => x.ActivityId,
+                        principalTable: "Activities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Series",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ActivityId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    StartDate = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    EndDate = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    IsOpen = table.Column<bool>(type: "boolean", nullable: false),
+                    PausedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    HideProblemsWhilePaused = table.Column<bool>(type: "boolean", nullable: false),
+                    RevealProblemCount = table.Column<bool>(type: "boolean", nullable: false),
+                    RankingFreezeAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    RankingRevealAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    RankingVisibleFrom = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    RankingVisibleTo = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    StartAnnouncedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    EndAnnouncedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    WindowAnnouncedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    UnfrozenAnnouncedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Series", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Series_Activities_ActivityId",
+                        column: x => x.ActivityId,
+                        principalTable: "Activities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -195,86 +316,27 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Problems",
+                name: "Files",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Type = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    OwnerUserId = table.Column<string>(type: "text", nullable: false),
-                    Visibility = table.Column<int>(type: "integer", nullable: false),
-                    SharedWith = table.Column<string>(type: "jsonb", nullable: false),
-                    ArchivedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    Name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    MimeType = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    Content = table.Column<byte[]>(type: "bytea", nullable: false),
+                    SizeBytes = table.Column<long>(type: "bigint", nullable: false),
+                    Sha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    UploadedByUserId = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Problems", x => x.Id);
+                    table.PrimaryKey("PK_Files", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Problems_AspNetUsers_OwnerUserId",
-                        column: x => x.OwnerUserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "ProblemVersions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ProblemId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Version = table.Column<int>(type: "integer", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CreatedByUserId = table.Column<string>(type: "text", nullable: true),
-                    Note = table.Column<string>(type: "text", nullable: true),
-                    Config = table.Column<string>(type: "jsonb", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProblemVersions", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ProblemVersions_AspNetUsers_CreatedByUserId",
-                        column: x => x.CreatedByUserId,
+                        name: "FK_Files_AspNetUsers_UploadedByUserId",
+                        column: x => x.UploadedByUserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_ProblemVersions_Problems_ProblemId",
-                        column: x => x.ProblemId,
-                        principalTable: "Problems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Activities",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Type = table.Column<string>(type: "text", nullable: false),
-                    RankingType = table.Column<string>(type: "text", nullable: false),
-                    TimeZone = table.Column<string>(type: "text", nullable: false),
-                    StartDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    HasRanking = table.Column<bool>(type: "boolean", nullable: false),
-                    HasQuestions = table.Column<bool>(type: "boolean", nullable: false),
-                    HasRules = table.Column<bool>(type: "boolean", nullable: false),
-                    ScoreVisibility = table.Column<int>(type: "integer", nullable: false),
-                    LogVisibility = table.Column<int>(type: "integer", nullable: false),
-                    JoinPolicy = table.Column<int>(type: "integer", nullable: false),
-                    MaxUploadBytes = table.Column<long>(type: "bigint", nullable: false),
-                    MaxAttachments = table.Column<int>(type: "integer", nullable: false),
-                    MaxSubmissionsPerProblem = table.Column<int>(type: "integer", nullable: true),
-                    ArchivedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    RulesFileId = table.Column<Guid>(type: "uuid", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Activities", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -285,9 +347,10 @@ namespace AlgoJudge.Server.Database.Migrations
                     UserId = table.Column<string>(type: "text", nullable: false),
                     ActivityId = table.Column<Guid>(type: "uuid", nullable: true),
                     Permissions = table.Column<string>(type: "jsonb", nullable: false),
+                    IsSystem = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedFromTemplate = table.Column<string>(type: "text", nullable: true),
                     State = table.Column<int>(type: "integer", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
                     GrantedByUserId = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
@@ -308,27 +371,103 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Series",
+                name: "Problems",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ActivityId = table.Column<Guid>(type: "uuid", nullable: false),
                     Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    StartDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Order = table.Column<int>(type: "integer", nullable: false),
-                    RevealProblemCount = table.Column<bool>(type: "boolean", nullable: false),
-                    RankingFreezeAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    RankingRevealAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Type = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    OwnerUserId = table.Column<string>(type: "text", nullable: false),
+                    Visibility = table.Column<int>(type: "integer", nullable: false),
+                    ArchivedAt = table.Column<DateTime>(type: "timestamptz", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Series", x => x.Id);
+                    table.PrimaryKey("PK_Problems", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Series_Activities_ActivityId",
-                        column: x => x.ActivityId,
-                        principalTable: "Activities",
+                        name: "FK_Problems_AspNetUsers_OwnerUserId",
+                        column: x => x.OwnerUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserSessions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    StartedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    LastRequestAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    LastRequestPath = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    IpAddress = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    UserAgent = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    EndedAt = table.Column<DateTime>(type: "timestamptz", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserSessions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserSessions_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ProblemShares",
+                columns: table => new
+                {
+                    ProblemId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProblemShares", x => new { x.ProblemId, x.UserId });
+                    table.ForeignKey(
+                        name: "FK_ProblemShares_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ProblemShares_Problems_ProblemId",
+                        column: x => x.ProblemId,
+                        principalTable: "Problems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ProblemVersions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProblemId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Version = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "text", nullable: true),
+                    Note = table.Column<string>(type: "text", nullable: true),
+                    Config = table.Column<string>(type: "jsonb", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProblemVersions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ProblemVersions_AspNetUsers_CreatedByUserId",
+                        column: x => x.CreatedByUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_ProblemVersions_Problems_ProblemId",
+                        column: x => x.ProblemId,
+                        principalTable: "Problems",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -339,12 +478,14 @@ namespace AlgoJudge.Server.Database.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     SeriesId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ActivityId = table.Column<Guid>(type: "uuid", nullable: false),
                     ProblemId = table.Column<Guid>(type: "uuid", nullable: false),
                     PinnedProblemVersionId = table.Column<Guid>(type: "uuid", nullable: true),
                     Slug = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: true),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     Order = table.Column<int>(type: "integer", nullable: false),
-                    Config = table.Column<string>(type: "jsonb", nullable: false),
+                    MaxPoints = table.Column<int>(type: "integer", nullable: true),
+                    Config = table.Column<string>(type: "jsonb", nullable: true),
                     MaxUploadBytes = table.Column<long>(type: "bigint", nullable: true),
                     MaxAttachments = table.Column<int>(type: "integer", nullable: true),
                     MaxSubmissions = table.Column<int>(type: "integer", nullable: true)
@@ -352,6 +493,12 @@ namespace AlgoJudge.Server.Database.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SeriesProblems", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SeriesProblems_Activities_ActivityId",
+                        column: x => x.ActivityId,
+                        principalTable: "Activities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_SeriesProblems_ProblemVersions_PinnedProblemVersionId",
                         column: x => x.PinnedProblemVersionId,
@@ -381,14 +528,14 @@ namespace AlgoJudge.Server.Database.Migrations
                     SeriesId = table.Column<Guid>(type: "uuid", nullable: true),
                     SeriesProblemId = table.Column<Guid>(type: "uuid", nullable: true),
                     Kind = table.Column<int>(type: "integer", nullable: false),
-                    Topic = table.Column<string>(type: "text", nullable: false),
+                    Topic = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Body = table.Column<string>(type: "text", nullable: false),
                     AuthorUserId = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
                     IsPublished = table.Column<bool>(type: "boolean", nullable: false),
                     AnswerBody = table.Column<string>(type: "text", nullable: true),
                     AnswerAuthorUserId = table.Column<string>(type: "text", nullable: true),
-                    AnsweredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    AnsweredAt = table.Column<DateTime>(type: "timestamptz", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -424,7 +571,7 @@ namespace AlgoJudge.Server.Database.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedDate = table.Column<DateTime>(type: "timestamptz", nullable: false),
                     UserId = table.Column<string>(type: "text", nullable: false),
                     SeriesProblemId = table.Column<Guid>(type: "uuid", nullable: false),
                     Language = table.Column<string>(type: "text", nullable: true)
@@ -452,7 +599,7 @@ namespace AlgoJudge.Server.Database.Migrations
                 {
                     QuestionId = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<string>(type: "text", nullable: false),
-                    ReadAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    ReadAt = table.Column<DateTime>(type: "timestamptz", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -476,11 +623,13 @@ namespace AlgoJudge.Server.Database.Migrations
                     RunnerId = table.Column<Guid>(type: "uuid", nullable: true),
                     State = table.Column<int>(type: "integer", nullable: false),
                     LeaseToken = table.Column<Guid>(type: "uuid", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ClaimedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    LeaseExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    FinishedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    FailureReason = table.Column<string>(type: "text", nullable: true)
+                    Deliveries = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    ClaimedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    LeaseExpiresAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    FinishedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    FailureReason = table.Column<string>(type: "text", nullable: true),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -506,32 +655,68 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Files",
+                name: "FileReferences",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    MimeType = table.Column<string>(type: "text", nullable: false),
-                    Content = table.Column<byte[]>(type: "bytea", nullable: false),
-                    SizeBytes = table.Column<long>(type: "bigint", nullable: false),
-                    Sha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    FileId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OwnerKind = table.Column<int>(type: "integer", nullable: false),
                     Scope = table.Column<int>(type: "integer", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    Language = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    ValidFrom = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    SupersededAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
                     ProblemVersionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    SubmissionId = table.Column<Guid>(type: "uuid", nullable: true)
+                    ActivityId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SubmissionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    EvaluationJobId = table.Column<Guid>(type: "uuid", nullable: true),
+                    RunnerId = table.Column<Guid>(type: "uuid", nullable: true),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Files", x => x.Id);
-                    table.CheckConstraint("CK_Files_SingleOwner", "num_nonnulls(\"ProblemVersionId\", \"SubmissionId\") <= 1");
+                    table.PrimaryKey("PK_FileReferences", x => x.Id);
+                    table.CheckConstraint("CK_FileReferences_OwnerKindMatches", "(\"OwnerKind\" = 0 AND \"ProblemVersionId\" IS NOT NULL) OR (\"OwnerKind\" = 1 AND \"ActivityId\" IS NOT NULL) OR (\"OwnerKind\" = 2 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 3 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 4 AND \"RunnerId\" IS NOT NULL) OR (\"OwnerKind\" = 5 AND \"SubmissionId\" IS NOT NULL) OR (\"OwnerKind\" = 6 AND \"EvaluationJobId\" IS NOT NULL)");
+                    table.CheckConstraint("CK_FileReferences_SingleOwner", "num_nonnulls(\"ProblemVersionId\", \"ActivityId\", \"SubmissionId\", \"EvaluationJobId\", \"RunnerId\", \"InstanceId\") = 1");
                     table.ForeignKey(
-                        name: "FK_Files_ProblemVersions_ProblemVersionId",
+                        name: "FK_FileReferences_Activities_ActivityId",
+                        column: x => x.ActivityId,
+                        principalTable: "Activities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_FileReferences_EvaluationJobs_EvaluationJobId",
+                        column: x => x.EvaluationJobId,
+                        principalTable: "EvaluationJobs",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_FileReferences_Files_FileId",
+                        column: x => x.FileId,
+                        principalTable: "Files",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_FileReferences_Instance_InstanceId",
+                        column: x => x.InstanceId,
+                        principalTable: "Instance",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_FileReferences_ProblemVersions_ProblemVersionId",
                         column: x => x.ProblemVersionId,
                         principalTable: "ProblemVersions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_Files_Submissions_SubmissionId",
+                        name: "FK_FileReferences_Runners_RunnerId",
+                        column: x => x.RunnerId,
+                        principalTable: "Runners",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_FileReferences_Submissions_SubmissionId",
                         column: x => x.SubmissionId,
                         principalTable: "Submissions",
                         principalColumn: "Id",
@@ -545,12 +730,11 @@ namespace AlgoJudge.Server.Database.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     EvaluationJobId = table.Column<Guid>(type: "uuid", nullable: false),
                     ProblemVersionId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedDate = table.Column<DateTime>(type: "timestamptz", nullable: false),
                     Score = table.Column<double>(type: "double precision", nullable: true),
                     MaxScore = table.Column<double>(type: "double precision", nullable: true),
-                    Verdict = table.Column<string>(type: "text", nullable: true),
-                    Log = table.Column<string>(type: "text", nullable: true),
-                    Detail = table.Column<string>(type: "jsonb", nullable: false),
+                    Verdict = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    Extra = table.Column<string>(type: "jsonb", nullable: true),
                     RunnerVersion = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
@@ -565,15 +749,15 @@ namespace AlgoJudge.Server.Database.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Activities_RulesFileId",
-                table: "Activities",
-                column: "RulesFileId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Activities_Slug",
                 table: "Activities",
                 column: "Slug",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Activities_Unlisted_ArchivedAt",
+                table: "Activities",
+                columns: new[] { "Unlisted", "ArchivedAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetRoleClaims_RoleId",
@@ -613,6 +797,18 @@ namespace AlgoJudge.Server.Database.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_EvaluationJobs_LeaseExpiresAt",
+                table: "EvaluationJobs",
+                column: "LeaseExpiresAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EvaluationJobs_LeaseToken",
+                table: "EvaluationJobs",
+                column: "LeaseToken",
+                unique: true,
+                filter: "\"LeaseToken\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_EvaluationJobs_ProblemVersionId",
                 table: "EvaluationJobs",
                 column: "ProblemVersionId");
@@ -634,9 +830,49 @@ namespace AlgoJudge.Server.Database.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Files_ProblemVersionId",
-                table: "Files",
+                name: "IX_FileReferences_ActivityId",
+                table: "FileReferences",
+                column: "ActivityId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_EvaluationJobId",
+                table: "FileReferences",
+                column: "EvaluationJobId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_FileId",
+                table: "FileReferences",
+                column: "FileId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_InstanceId",
+                table: "FileReferences",
+                column: "InstanceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_OwnerKind_SupersededAt",
+                table: "FileReferences",
+                columns: new[] { "OwnerKind", "SupersededAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_ProblemVersionId",
+                table: "FileReferences",
                 column: "ProblemVersionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_RunnerId",
+                table: "FileReferences",
+                column: "RunnerId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_SubmissionId",
+                table: "FileReferences",
+                column: "SubmissionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Files_CreatedAt",
+                table: "Files",
+                column: "CreatedAt");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Files_Sha256",
@@ -644,14 +880,14 @@ namespace AlgoJudge.Server.Database.Migrations
                 column: "Sha256");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Files_SubmissionId",
+                name: "IX_Files_UploadedByUserId",
                 table: "Files",
-                column: "SubmissionId");
+                column: "UploadedByUserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Grants_ActivityId_State",
+                name: "IX_Grants_ActivityId_State_IsSystem",
                 table: "Grants",
-                columns: new[] { "ActivityId", "State" });
+                columns: new[] { "ActivityId", "State", "IsSystem" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Grants_UserId",
@@ -672,6 +908,11 @@ namespace AlgoJudge.Server.Database.Migrations
                 table: "PermissionTemplates",
                 column: "Name",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProblemShares_UserId",
+                table: "ProblemShares",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ProblemVersions_CreatedByUserId",
@@ -728,8 +969,39 @@ namespace AlgoJudge.Server.Database.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_Runners_State",
+                table: "Runners",
+                column: "State");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Series_ActivityId_Slug",
                 table: "Series",
+                columns: new[] { "ActivityId", "Slug" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Series_EndDate_EndAnnouncedAt",
+                table: "Series",
+                columns: new[] { "EndDate", "EndAnnouncedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Series_RankingRevealAt_UnfrozenAnnouncedAt",
+                table: "Series",
+                columns: new[] { "RankingRevealAt", "UnfrozenAnnouncedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Series_RankingVisibleFrom_WindowAnnouncedAt",
+                table: "Series",
+                columns: new[] { "RankingVisibleFrom", "WindowAnnouncedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Series_StartDate_StartAnnouncedAt",
+                table: "Series",
+                columns: new[] { "StartDate", "StartAnnouncedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SeriesProblems_ActivityId_Slug",
+                table: "SeriesProblems",
                 columns: new[] { "ActivityId", "Slug" },
                 unique: true);
 
@@ -744,37 +1016,34 @@ namespace AlgoJudge.Server.Database.Migrations
                 column: "ProblemId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SeriesProblems_SeriesId_Slug",
+                name: "IX_SeriesProblems_SeriesId",
                 table: "SeriesProblems",
-                columns: new[] { "SeriesId", "Slug" },
-                unique: true);
+                column: "SeriesId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Submissions_SeriesProblemId_UserId",
+                name: "IX_Submissions_SeriesProblemId_UserId_CreatedDate",
                 table: "Submissions",
-                columns: new[] { "SeriesProblemId", "UserId" });
+                columns: new[] { "SeriesProblemId", "UserId", "CreatedDate" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Submissions_UserId",
                 table: "Submissions",
                 column: "UserId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Activities_Files_RulesFileId",
-                table: "Activities",
-                column: "RulesFileId",
-                principalTable: "Files",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+            migrationBuilder.CreateIndex(
+                name: "IX_UserSessions_ExpiresAt",
+                table: "UserSessions",
+                column: "ExpiresAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserSessions_UserId_EndedAt",
+                table: "UserSessions",
+                columns: new[] { "UserId", "EndedAt" });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Activities_Files_RulesFileId",
-                table: "Activities");
-
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims");
 
@@ -791,10 +1060,19 @@ namespace AlgoJudge.Server.Database.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "AttachmentRules");
+
+            migrationBuilder.DropTable(
+                name: "FileReferences");
+
+            migrationBuilder.DropTable(
                 name: "Grants");
 
             migrationBuilder.DropTable(
                 name: "PermissionTemplates");
+
+            migrationBuilder.DropTable(
+                name: "ProblemShares");
 
             migrationBuilder.DropTable(
                 name: "QuestionReads");
@@ -803,7 +1081,16 @@ namespace AlgoJudge.Server.Database.Migrations
                 name: "Results");
 
             migrationBuilder.DropTable(
+                name: "UserSessions");
+
+            migrationBuilder.DropTable(
                 name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "Files");
+
+            migrationBuilder.DropTable(
+                name: "Instance");
 
             migrationBuilder.DropTable(
                 name: "Questions");
@@ -813,9 +1100,6 @@ namespace AlgoJudge.Server.Database.Migrations
 
             migrationBuilder.DropTable(
                 name: "Runners");
-
-            migrationBuilder.DropTable(
-                name: "Files");
 
             migrationBuilder.DropTable(
                 name: "Submissions");

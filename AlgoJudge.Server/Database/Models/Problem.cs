@@ -28,26 +28,13 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// Who owns it. A problem is **private by default**: only its author sees
-        /// it and only its author may attach it to an activity.
+        /// Who owns it. A problem is <b>private by default</b>: only its author
+        /// sees it and only its author may attach it to an activity.
         /// </summary>
         public required string OwnerUserId { get; set; }
         public User? Owner { get; set; }
 
         public ProblemVisibility Visibility { get; set; } = ProblemVisibility.Private;
-
-        /// <summary>
-        /// Who else may see it when <see cref="Visibility"/> is
-        /// <see cref="ProblemVisibility.Shared"/>, as a <c>jsonb</c> array of user ids.
-        /// <para>
-        /// This is an access control list, and it is the only one in the product.
-        /// The permission model settles what a manager may **do** with a problem;
-        /// this settles **which** problems that applies to. Keeping the two apart
-        /// is what stops the exception from becoming a second authorisation
-        /// system — nothing else gets a list like this.
-        /// </para>
-        /// </summary>
-        public string SharedWith { get; set; } = "[]";
 
         /// <summary>
         /// Archived: gone from the attach picker and taking no new versions,
@@ -63,5 +50,32 @@ namespace AlgoJudge.Server.Database.Models
 
         public ICollection<ProblemVersion> Versions { get; set; } = new List<ProblemVersion>();
         public ICollection<SeriesProblem> SeriesProblems { get; set; } = new List<SeriesProblem>();
+
+        /// <summary>
+        /// Who else may see it under <see cref="ProblemVisibility.Shared"/>.
+        /// <para>
+        /// This is an access control list, and it is the only one in the product.
+        /// The permission model settles what a manager may <b>do</b> with a
+        /// problem; this settles <b>which</b> problems that applies to. Keeping
+        /// the two apart is what stops the exception becoming a second
+        /// authorisation system — nothing else gets a list like this.
+        /// </para>
+        /// <para>
+        /// A table rather than a <c>jsonb</c> array because the Server authorises
+        /// on it and the library listing filters by it: it is a join, and a join
+        /// written as a document is a join the database cannot index.
+        /// </para>
+        /// </summary>
+        public ICollection<ProblemShare> SharedWith { get; set; } = new List<ProblemShare>();
+    }
+
+    /// <summary>One user a shared problem is shared with.</summary>
+    public class ProblemShare
+    {
+        public Guid ProblemId { get; set; }
+        public Problem? Problem { get; set; }
+
+        public required string UserId { get; set; }
+        public User? User { get; set; }
     }
 }

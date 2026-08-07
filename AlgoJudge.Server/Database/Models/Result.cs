@@ -8,9 +8,12 @@ namespace AlgoJudge.Server.Database.Models
     /// job, and the Runner is reached through <see cref="EvaluationJob"/> rather
     /// than copied here.
     /// <para>
-    /// Per-test rows, metrics and anything a ranking needs are in
-    /// <see cref="Detail"/>, which the Server stores and never parses. That is
-    /// what lets a new ranking format or a new metric ship without a migration.
+    /// Four columns are everything the Server reads of a result. Per-test rows,
+    /// the compiler log and anything else the Runner produced are
+    /// <b>attachments</b> — <see cref="FileReference"/> rows under the attempt,
+    /// named <c>log</c> and <c>details</c> — because a per-test table is a
+    /// hundred and twenty bytes a row times two thousand tests times every
+    /// attempt, and a database column is the wrong place for it.
     /// </para>
     /// </summary>
     public class Result
@@ -22,36 +25,44 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// Copied from the job. Unlike the Runner, this is duplicated on purpose:
-        /// what a result was judged against has to stay pinned to it.
+        /// what a result was judged against has to stay pinned to it, and the job
+        /// is not where somebody looks a year later.
         /// </summary>
         public Guid ProblemVersionId { get; set; }
 
         public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// Kept so the Server can order and paginate without parsing
-        /// <see cref="Detail"/>. Its meaning is the problem type's business.
+        /// The Runner's own scale, before any rescaling by
+        /// <see cref="SeriesProblem.MaxPoints"/>. Kept so the Server can order
+        /// and paginate without parsing anything; its meaning is the problem
+        /// type's business.
         /// </summary>
         public double? Score { get; set; }
         public double? MaxScore { get; set; }
 
-        /// <summary>Short outcome label produced by the Runner, e.g. <c>Accepted</c>.</summary>
+        /// <summary>
+        /// Short outcome label produced by the Runner, e.g. <c>Accepted</c>.
+        /// An opaque string: the Server matches it exactly where a filter asks
+        /// for it and never parses it, so a problem type may invent a verdict
+        /// without a Server release.
+        /// </summary>
         public string? Verdict { get; set; }
 
         /// <summary>
-        /// Evaluation log. Released according to the activity's
-        /// <see cref="LogVisibility"/> — it is produced while running hidden
-        /// tests and can carry test fragments, checker internals and paths.
+        /// Whatever else the problem type wants a <b>board</b> to have — cycles
+        /// used, peak memory, a domain measure. Filled by the Runner, stored
+        /// without being read, shaped by the problem type.
+        /// <para>
+        /// Public by construction: everyone who may see the board is sent this,
+        /// so nothing goes in it that is not meant to be seen. It rides in a
+        /// list, multiplied by every submission of every contestant, which is why
+        /// its ceiling is a hundredth of a configuration document's — 2 kB, and
+        /// over it is refused rather than truncated.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
         /// </summary>
-        public string? Log { get; set; }
-
-        /// <summary>
-        /// The document the Runner attaches, as <c>jsonb</c>, opaque here and
-        /// consumed by the Client. Its entries carry their own scope so the
-        /// Server can project what another participant may see — for a ranking,
-        /// for instance — without understanding any of it.
-        /// </summary>
-        public string Detail { get; set; } = "{}";
+        public string? Extra { get; set; }
 
         /// <summary>Which Runner build produced this, for reproducing a disputed result.</summary>
         public string? RunnerVersion { get; set; }

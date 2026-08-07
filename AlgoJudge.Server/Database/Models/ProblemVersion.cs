@@ -8,9 +8,9 @@ namespace AlgoJudge.Server.Database.Models
     /// editing an old one, so a result stays attached to what was actually
     /// evaluated.
     /// <para>
-    /// The Server stores the files and nothing else. There is no statement
-    /// concept here: <c>content.json</c> is only a well-known name inside
-    /// <see cref="Files"/>, understood by the Client.
+    /// The Server stores references to files and nothing else. There is no
+    /// statement concept here: <c>content.md</c> is only a well-known
+    /// <see cref="FileReference.Name"/>, understood by the Client.
     /// </para>
     /// </summary>
     public class ProblemVersion
@@ -32,8 +32,8 @@ namespace AlgoJudge.Server.Database.Models
         public string? Note { get; set; }
 
         /// <summary>
-        /// Limits and scoring for this version, as <c>jsonb</c> and **opaque to
-        /// the Server**, which stores it and never reads it.
+        /// Limits and scoring for this version, as <c>jsonb</c> and <b>opaque to
+        /// the Server</b>, which stores it and never reads it.
         /// <para>
         /// It is the middle of three layers: the package's own defaults, then
         /// this, then <see cref="SeriesProblem.Config"/>. Each overrides the one
@@ -41,12 +41,19 @@ namespace AlgoJudge.Server.Database.Models
         /// Client to show limits and draw a result, the Runner to enforce them.
         /// </para>
         /// <para>
-        /// Nothing the Server has to enforce belongs here. A limit it cannot read
-        /// is a limit it cannot police, so those are explicit columns instead.
+        /// Null means none; never <c>{}</c>. Nothing the Server has to enforce
+        /// belongs here — a limit it cannot read is a limit it cannot police, so
+        /// those are explicit columns instead.
         /// </para>
         /// </summary>
-        public string Config { get; set; } = "{}";
+        public string? Config { get; set; }
 
-        public ICollection<File> Files { get; set; } = new List<File>();
+        /// <summary>
+        /// Everything this version is made of — the statement and its
+        /// translations, the figures, the package, the example archive — as
+        /// references. The bytes are shared: carrying a figure forward into the
+        /// next version is a second reference, not a second upload.
+        /// </summary>
+        public ICollection<FileReference> Files { get; set; } = new List<FileReference>();
     }
 }

@@ -14,8 +14,6 @@ namespace AlgoJudge.Server
 
             builder.Configuration.AddEnvironmentVariables(prefix: "AJ_");
 
-            // Add services to the container.
-
             {
                 var dbConnectionString = builder.Configuration.GetConnectionString("DbConnectionString");
                 builder.Services.AddDbContext<ApplicationDbContext>(
@@ -26,19 +24,13 @@ namespace AlgoJudge.Server
             builder.Services.AddIdentityApiEndpoints<User>()
                 .AddEntityFrameworkStores<ApplicationDbContext>();
 
-            builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
-
-            builder.Services.AddSingleton<INotificationService, NotificationService>();
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IPermissionService, PermissionService>();
-            builder.Services.AddScoped<IActivityService, ActivityService>();
 
             builder.Services.AddControllers(options =>
                 options.Filters.Add<HttpResponseExceptionFilter>());
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-
 
             builder.Services.AddCors(options =>
             {
@@ -59,17 +51,14 @@ namespace AlgoJudge.Server
 
             app.MapGroup("/identity").MapIdentityApi<User>();
 
-            // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
 
-                using (var scope = app.Services.CreateScope())
-                {
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                    db.Database.Migrate();
-                }
+                using var scope = app.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                db.Database.Migrate();
             }
 
             using (var scope = app.Services.CreateScope())

@@ -10,7 +10,7 @@ namespace AlgoJudge.Server.Database.Models
     }
 
     /// <summary>
-    /// What a user may do within a scope — and, for an activity, **is** the
+    /// What a user may do within a scope — and, for an activity, <b>is</b> the
     /// membership.
     /// <para>
     /// Adding someone to an activity and giving them rights in it are one act, so
@@ -49,9 +49,21 @@ namespace AlgoJudge.Server.Database.Models
         public string Permissions { get; set; } = "[]";
 
         /// <summary>
+        /// A membership that runs the activity rather than takes part in it.
+        /// <para>
+        /// <b>Computed by the Server on every write</b>, never accepted from the
+        /// caller: a grant carrying any permission an ordinary participant does
+        /// not hold is systemic, always. A jury member counted among the
+        /// competitors is a bug, not a preference — so this is what excludes them
+        /// from the participant count and from the results feed.
+        /// </para>
+        /// </summary>
+        public bool IsSystem { get; set; }
+
+        /// <summary>
         /// Which template it was created from. Informational, for the interface —
-        /// **not** a reference: once the set has been edited, the name describes
-        /// where it started, not what it is.
+        /// <b>not</b> a reference: once the set has been edited, the name
+        /// describes where it started, not what it is.
         /// </summary>
         public string? CreatedFromTemplate { get; set; }
 
