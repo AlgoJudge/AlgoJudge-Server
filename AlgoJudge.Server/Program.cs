@@ -1,3 +1,4 @@
+using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
@@ -218,6 +219,12 @@ namespace AlgoJudge.Server
             // and every [Authorize] endpoint answered 401 to a signed-in caller.
             app.UseAuthentication();
             app.UseAuthorization();
+
+            // In front of the endpoints rather than around them: MapIdentityApi
+            // maps a surface this product has decided not to have in full, and a
+            // refusal has to land before the framework binds a body it is going
+            // to reject for its own reasons.
+            app.UseIdentitySurfaceRules();
 
             app.UseWebSockets();
 

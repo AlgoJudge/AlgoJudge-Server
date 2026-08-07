@@ -115,6 +115,31 @@ jobs:
             exec -T postgres psql -U algojudge -d algojudge -c '\d "Instance"' \
             | grep -q 'CK_Instance_Singleton'
 
+      # The committed OpenAPI document is the contract the Client is generated
+      # and checked against, so it must not drift from what the Server actually
+      # serves. Regenerated here and compared: a route added without updating it
+      # fails the build rather than being noticed by whoever tries to call it.
+      - name: The OpenAPI document matches what is served
+        run: |
+          curl -fsS http://127.0.0.1:8080/api/v1/swagger/v1/swagger.json -o served.json
+          if ! diff -u openapi.json served.json > openapi.diff; then
+            echo "openapi.json is out of date. Regenerate it and commit:" >&2
+            head -60 openapi.diff >&2
+            exit 1
+          fi
+
+      # Self-service registration is refused when the instance says it is closed,
+      # which is how it ships. MapIdentityApi maps /register unconditionally, so
+      # without the guard an installation that declares registration closed
+      # accepts registrations anyway — and the account can then sign in.
+      - name: Registration is closed by default
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            http://127.0.0.1:8080/api/v1/identity/register \
+            -H 'content-type: application/json' \
+            -d '{"email":"intruder@example.invalid","password":"twelve-characters-at-least"}')
+          test "$code" = "403" || { echo "expected 403 from /identity/register, got $code" >&2; exit 1; }
+
       - name: Compose down
         if: always()
         run: docker compose -f example-server-development-docker-compose.yaml down -v

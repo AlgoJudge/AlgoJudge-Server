@@ -80,8 +80,16 @@ namespace AlgoJudge.Server.Utils
             // these out of the 5xx count that pages somebody.
             OperationCanceledException => (499, "Client Closed Request", "cancelled", null),
 
-            BadHttpRequestException bad when bad.StatusCode == StatusCodes.Status413PayloadTooLarge =>
-                (StatusCodes.Status413PayloadTooLarge, "Payload Too Large", "payload_too_large", null),
+            // The framework's own request failures already carry the right
+            // status — a body it could not bind is 400, one too large is 413.
+            // Mapping only the one we happened to think of left every malformed
+            // body answering 500, which says the Server is broken when the
+            // request was.
+            BadHttpRequestException bad => (
+                bad.StatusCode,
+                TitleFor(bad.StatusCode),
+                bad.StatusCode == StatusCodes.Status413PayloadTooLarge ? "payload_too_large" : "malformed_request",
+                null),
 
             JsonException => (StatusCodes.Status400BadRequest, "Bad Request", "malformed_json", null),
 
@@ -90,6 +98,7 @@ namespace AlgoJudge.Server.Utils
 
         private static string TitleFor(int status) => status switch
         {
+            StatusCodes.Status400BadRequest => "Bad Request",
             StatusCodes.Status401Unauthorized => "Unauthorized",
             StatusCodes.Status403Forbidden => "Forbidden",
             StatusCodes.Status404NotFound => "Not Found",

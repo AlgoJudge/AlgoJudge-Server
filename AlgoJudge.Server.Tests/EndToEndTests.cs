@@ -234,6 +234,57 @@ public class EndToEndTests(ServerFixture server)
         Assert.Equal("checksum_mismatch", problem.GetProperty("code").GetString());
     }
 
+    /// <summary>
+    /// `MapIdentityApi` maps `/register` unconditionally, so an installation
+    /// that declares registration closed accepted registrations anyway — and the
+    /// account could then sign in. The setting has to be a rule, not a label.
+    /// </summary>
+    [Fact]
+    public async Task Registration_is_refused_when_the_instance_says_it_is_closed()
+    {
+        var client = server.CreateClient();
+
+        var instance = await client.GetFromJsonAsync<JsonElement>("/api/v1/instance");
+        Assert.False(instance.GetProperty("localRegistrationEnabled").GetBoolean());
+
+        var response = await client.PostAsJsonAsync("/api/v1/identity/register", new
+        {
+            email = "intruder@example.invalid",
+            password = "twelve-characters-at-least",
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("registration.closed", problem.GetProperty("code").GetString());
+
+        // And nothing was created, so nothing can sign in with it.
+        var signIn = await client.PostAsJsonAsync(
+            "/api/v1/identity/login?useSessionCookies=true",
+            new { email = "intruder@example.invalid", password = "twelve-characters-at-least" });
+        Assert.Equal(HttpStatusCode.Unauthorized, signIn.StatusCode);
+    }
+
+    /// <summary>
+    /// There is no mail sender in v1, so there is no password reset. An endpoint
+    /// that exists and cannot work invites a screen to promise something nothing
+    /// will deliver.
+    /// </summary>
+    [Theory]
+    [InlineData("forgotPassword")]
+    [InlineData("resetPassword")]
+    [InlineData("resendConfirmationEmail")]
+    public async Task Everything_that_needs_mail_is_refused(string endpoint)
+    {
+        var client = server.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/v1/identity/{endpoint}", new { email = "someone@example.invalid" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("mail.unavailable", problem.GetProperty("code").GetString());
+    }
+
     [Fact]
     public async Task A_participant_cannot_read_the_manager_view()
     {
