@@ -105,8 +105,14 @@ namespace AlgoJudge.Server.Workers
             var due = await context.Series
                 .Include(s => s.Activity)
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
+                // A round with no start is already started, which is what
+                // `ManagerWriteService.Reconcile` has always said — an untimed
+                // activity runs rather than waiting for a date it does not have.
+                // This asked for `StartDate != null` until 2026-08-08, so the two
+                // gave different answers about the same round and one of them
+                // could never open it again once it had closed.
                 .Where(s => s.StartAnnouncedAt == null
-                    && s.StartDate != null && s.StartDate <= now
+                    && (s.StartDate == null || s.StartDate <= now)
                     && s.PausedAt == null
                     && (s.EndDate == null || s.EndDate > now))
                 .ToListAsync(ct);

@@ -131,6 +131,17 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? EndDate { get; init; }
         public required bool IsOpen { get; init; }
         public string? PausedAt { get; init; }
+        /// <summary>
+        /// Whether the pause in force took the statements with it.
+        /// <para>
+        /// A manager answers this as they pause, and until 2026-08-08 nothing
+        /// ever told them what they had answered: reloading the screen lost it.
+        /// Manager-only — the participant's <c>SeriesDto</c> has no counterpart,
+        /// because the Server withholds by leaving <c>problems</c> out rather
+        /// than by asking the reader to.
+        /// </para>
+        /// </summary>
+        public required bool HideProblemsWhilePaused { get; init; }
         public required bool RevealProblemCount { get; init; }
         public string? RankingFreezeAt { get; init; }
         public string? RankingRevealAt { get; init; }
