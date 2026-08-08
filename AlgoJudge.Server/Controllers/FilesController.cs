@@ -58,8 +58,20 @@ namespace AlgoJudge.Server.Controllers
         /// the answer does not depend on who is asking, which is only true of an
         /// instance document and the logo.
         /// </para>
+        /// <para>
+        /// <b>Anonymous by attribute, authorized by the rule.</b> The class
+        /// carries <c>[Authorize]</c>, which refused a signed-out caller with 401
+        /// <b>before</b> the rule ran — and the rule says an instance document
+        /// and the logo are readable by anybody, signed in or not. So the terms
+        /// of service, which the registration form asks acceptance of and the
+        /// footer links from every signed-out screen, could not be opened without
+        /// an account. Found on 2026-08-08 by clicking it. Nothing is loosened:
+        /// an anonymous caller now reaches the rule, and the rule answers
+        /// <c>false</c> for everything else, which becomes a 404.
+        /// </para>
         /// </summary>
         [HttpGet("{id:guid}")]
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Download(Guid id, CancellationToken ct)
@@ -68,13 +80,19 @@ namespace AlgoJudge.Server.Controllers
 
             var file = await files.FindAsync(id, ct) ?? throw new NotFoundException("File");
 
-            Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+            // What the paragraph above promises, rather than `private` for
+            // everything: a shared cache may hold the terms of service, and must
+            // never hold a model solution.
+            var visibility = await files.IsPublicAsync(id, ct) ? "public" : "private";
+            Response.Headers.CacheControl = $"{visibility}, max-age=31536000, immutable";
             Response.Headers.ETag = $"\"{file.Sha256}\"";
             return File(file.Content, file.MimeType, file.Name);
         }
 
         /// <summary>The same document <c>POST /files</c> answers with, without the bytes.</summary>
         [HttpGet("{id:guid}/meta")]
+        // Same reasoning as the download above: the rule decides, not the attribute.
+        [AllowAnonymous]
         [ProducesResponseType<UploadedFileDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         public async Task<UploadedFileDto> Meta(Guid id, CancellationToken ct)

@@ -21,6 +21,16 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         Task<bool> CanReadAsync(Guid fileId, CancellationToken ct);
 
+        /// <summary>
+        /// Whether the answer does not depend on who is asking.
+        /// <para>
+        /// True of an instance document and the logo, and of nothing else — they
+        /// are what a signed-out screen renders. It decides one thing: whether a
+        /// shared cache may keep a copy.
+        /// </para>
+        /// </summary>
+        Task<bool> IsPublicAsync(Guid fileId, CancellationToken ct);
+
         /// <summary>Lowercase hexadecimal SHA-256, the one way it is written.</summary>
         static string Checksum(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
@@ -101,6 +111,13 @@ namespace AlgoJudge.Server.Services
             }
             return false;
         }
+
+        public Task<bool> IsPublicAsync(Guid fileId, CancellationToken ct) =>
+            context.FileReferences
+                .AsNoTracking()
+                .AnyAsync(r => r.FileId == fileId
+                    && (r.OwnerKind == FileOwnerKind.InstanceDocument
+                        || r.OwnerKind == FileOwnerKind.InstanceLogo), ct);
 
         private async Task<bool> CanReadThroughAsync(FileReference reference, string? userId, CancellationToken ct)
         {
