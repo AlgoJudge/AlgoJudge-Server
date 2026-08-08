@@ -226,6 +226,11 @@ namespace AlgoJudge.Server.Database
 
             await context.SaveChangesAsync(ct);
             logger.LogInformation("Development data seeded: activity {Slug}", activity.Slug);
+
+            // And the two the Client's fake also states, so the same screen can
+            // be compared against both. `DEV-2026` above stays because the test
+            // suite is written against it; these are for looking at.
+            await new ParityWorld(context, users, logger).SeedAsync(admin, ct);
         }
 
         private async Task<Models.File> StoreAsync(
