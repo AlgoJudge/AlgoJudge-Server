@@ -135,6 +135,14 @@ namespace AlgoJudge.Server
             builder.Services.AddSingleton<Workers.LeaseReaper>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.LeaseReaper>());
 
+            // Owns every open/close transition, because openness is stored.
+            builder.Services.AddSingleton<Workers.SeriesScheduler>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.SeriesScheduler>());
+
+            // Retention is a property of what references a file, not of the file.
+            builder.Services.AddSingleton<Workers.FileCollector>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.FileCollector>());
+
             // One shape for every failure, including the ones raised outside MVC.
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
@@ -245,6 +253,10 @@ namespace AlgoJudge.Server
             // refusal has to land before the framework binds a body it is going
             // to reject for its own reasons.
             app.UseIdentitySurfaceRules();
+
+            // After authentication, so it knows who is asking, and last so it
+            // records only requests that actually got somewhere.
+            app.UseMiddleware<SessionTrackingMiddleware>();
 
             app.UseWebSockets();
 
