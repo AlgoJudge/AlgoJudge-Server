@@ -170,7 +170,10 @@ public class EndToEndTests(ServerFixture server)
         var submissionId = submitted.GetProperty("id").GetString()!;
         Assert.Equal("queued", submitted.GetProperty("state").GetString());
         // Nothing has judged it, so there is no score — and absent is not zero.
-        Assert.Equal(JsonValueKind.Null, submitted.GetProperty("score").ValueKind);
+        // Absent, not null: an unjudged submission has no score, and the contract
+        // says a value that is not there is left out rather than written as
+        // `null` — which the Client's `!== undefined` guards would let through.
+        Assert.False(submitted.TryGetProperty("score", out _));
 
         // ── a Runner registers, is approved, and takes this job ─────────────
         var runner = await RegisterRunnerAsync();

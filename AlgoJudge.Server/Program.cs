@@ -147,7 +147,25 @@ namespace AlgoJudge.Server
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
 
-            builder.Services.AddControllers();
+            // An absent value is **absent**, not `null`.
+            //
+            // The contract says optional throughout, and the Client guards with
+            // `!== undefined` — so a field written as `"finalScore": null`
+            // passes every one of those guards and reaches the screen, where
+            // `Wynik: ${finalScore} / ${maxScore}` renders the word "null" at a
+            // competitor. Found on the activities list on 2026-08-08, the first
+            // time a screen was pointed at this Server.
+            //
+            // Set in both places because the surface has two halves: the
+            // controllers, and the minimal-API endpoints `MapIdentityApi` adds.
+            static void OmitNulls(System.Text.Json.JsonSerializerOptions options) =>
+                options.DefaultIgnoreCondition =
+                    System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+
+            builder.Services.AddControllers()
+                .AddJsonOptions(options => OmitNulls(options.JsonSerializerOptions));
+            builder.Services.ConfigureHttpJsonOptions(options => OmitNulls(options.SerializerOptions));
+
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
