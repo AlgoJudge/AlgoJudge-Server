@@ -4,6 +4,7 @@ using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Utils;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,9 +42,95 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         IActivityService activities,
         ISeriesService series,
+        IEventHub events,
+        IEventAudience audience,
         TimeProvider clock
     ) : IManagerWriteService
     {
+        /// <summary>
+        /// Tells whoever runs this activity that it changed, and its members
+        /// that what they see of it did.
+        /// <para>
+        /// Both, because they are different facts to different readers: a
+        /// manager's row carries the ceilings and the join password, and a
+        /// participant's carries their own standing. Sending one and calling it
+        /// done leaves one of the two screens stale, which is how this surface
+        /// behaved until 2026-08-08 — every write here was silent, and the
+        /// screens listening for these had never received one.
+        /// </para>
+        /// <para>
+        /// Announced <b>after</b> the save, so a screen that refetches on the
+        /// event reads what has already been committed.
+        /// </para>
+        /// </summary>
+        private async Task AnnounceActivityAsync(Guid activityId, CancellationToken ct)
+        {
+            var staff = await audience.InActivityAsync(activityId, Permissions.ActivityUpdate, ct);
+            if (staff.Count == 0) return;
+
+            await events.SendToUsersAsync(staff, EventTypes.ActivityChanged, new
+            {
+                activity = await activities.GetManagedAsync(Wire.Id(activityId), ct),
+            }, ct);
+        }
+
+        /// <summary>
+        /// The dates moving, to the activity's members.
+        /// <para>
+        /// Its own event because it is the one change to an activity that can be
+        /// described **without knowing who is reading**: a countdown reads the
+        /// two instants and nothing else. `activityUpdated` carries a whole
+        /// `Activity`, which is a per-reader projection — it holds that reader's
+        /// membership and their own final score — so it cannot be computed once
+        /// and sent to everybody, and this does not pretend otherwise.
+        /// </para>
+        /// </summary>
+        private async Task AnnounceTimesAsync(Activity activity, CancellationToken ct)
+        {
+            var members = await audience.InActivityAsync(activity.Id, Permissions.ActivityRead, ct);
+            if (members.Count == 0) return;
+
+            await events.SendToUsersAsync(members, EventTypes.ActivityTimesChanged, new
+            {
+                activityId = Wire.Id(activity.Id),
+                startDate = Wire.At(activity.StartDate),
+                endDate = Wire.At(activity.EndDate),
+            }, ct);
+        }
+
+        /// <summary>
+        /// The same for a round. The manager's event carries the whole series,
+        /// assignments included, because they are edited together; a deletion
+        /// carries the id instead, because there is nothing left to send.
+        /// </summary>
+        private async Task AnnounceSeriesAsync(Guid activityId, Series? round, CancellationToken ct)
+        {
+            var staff = await audience.InActivityAsync(activityId, Permissions.ActivityUpdate, ct);
+            if (staff.Count == 0) return;
+
+            object payload = round is null
+                ? new { activityId = Wire.Id(activityId) }
+                : new { activityId = Wire.Id(activityId), series = await OneAsync(round, ct) };
+
+            await events.SendToUsersAsync(staff, EventTypes.ManagerSeriesChanged, payload, ct);
+        }
+
+        /// <summary>
+        /// A round that is gone, named by the id it had. Its own overload because
+        /// there is no `Series` left to project.
+        /// </summary>
+        private async Task AnnounceSeriesDeletedAsync(
+            Guid activityId, Guid seriesId, CancellationToken ct)
+        {
+            var staff = await audience.InActivityAsync(activityId, Permissions.ActivityUpdate, ct);
+            if (staff.Count == 0) return;
+
+            await events.SendToUsersAsync(staff, EventTypes.ManagerSeriesChanged, new
+            {
+                activityId = Wire.Id(activityId),
+                deletedId = Wire.Id(seriesId),
+            }, ct);
+        }
         public async Task<ManagedActivityDto> UpdateActivityAsync(
             string idOrSlug, ActivityInputDto input, CancellationToken ct)
         {
@@ -109,6 +196,10 @@ namespace AlgoJudge.Server.Services
             }
 
             await context.SaveChangesAsync(ct);
+            // The dates moving is its own event: a participant's countdown reads
+            // them, and a round list has to be rebuilt when they shift.
+            await AnnounceActivityAsync(activity.Id, ct);
+            await AnnounceTimesAsync(activity, ct);
             return await activities.GetManagedAsync(idOrSlug, ct);
         }
 
@@ -122,6 +213,7 @@ namespace AlgoJudge.Server.Services
             // nothing new.
             activity.ArchivedAt = archived ? clock.GetUtcNow().UtcDateTime : null;
             await context.SaveChangesAsync(ct);
+            await AnnounceActivityAsync(activity.Id, ct);
             return await activities.GetManagedAsync(idOrSlug, ct);
         }
 
@@ -144,8 +236,25 @@ namespace AlgoJudge.Server.Services
                     "activity.hasSubmissions");
             }
 
+            // Read before the row goes: afterwards there are no grants left to
+            // resolve an audience from.
+            var staff = await audience.InActivityAsync(activity.Id, Permissions.ActivityUpdate, ct);
+            var members = await audience.InActivityAsync(activity.Id, Permissions.ActivityRead, ct);
+            var id = Wire.Id(activity.Id);
+
             context.Activities.Remove(activity);
             await context.SaveChangesAsync(ct);
+
+            if (staff.Count > 0)
+            {
+                await events.SendToUsersAsync(
+                    staff, EventTypes.ActivityChanged, new { deletedId = id }, ct);
+            }
+            if (members.Count > 0)
+            {
+                await events.SendToUsersAsync(
+                    members, EventTypes.ActivityDeleted, new { activityId = id }, ct);
+            }
         }
 
         public async Task<IReadOnlyList<ManagedSeriesDto>> ReorderSeriesAsync(
@@ -159,6 +268,7 @@ namespace AlgoJudge.Server.Services
             Reorder(rounds, ordered, s => s.Id, (s, order) => s.Order = order);
 
             await context.SaveChangesAsync(ct);
+            await AnnounceActivityAsync(activity.Id, ct);
             return await series.ListManagedAsync(idOrSlug, ct);
         }
 
@@ -231,6 +341,7 @@ namespace AlgoJudge.Server.Services
 
             Reconcile(round);
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }
 
@@ -278,8 +389,10 @@ namespace AlgoJudge.Server.Services
                     "This series holds submissions and cannot be deleted", "series.hasSubmissions");
             }
 
+            var activityId = round.ActivityId;
             context.Series.Remove(round);
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesDeletedAsync(activityId, seriesId, ct);
         }
 
         /// <summary>
@@ -307,6 +420,7 @@ namespace AlgoJudge.Server.Services
 
             Reconcile(round);
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }
 
@@ -328,6 +442,7 @@ namespace AlgoJudge.Server.Services
             round.IsOpen = false;
 
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }
 
@@ -360,6 +475,7 @@ namespace AlgoJudge.Server.Services
             Reconcile(round);
 
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }
 
@@ -373,6 +489,7 @@ namespace AlgoJudge.Server.Services
             Reorder(assignments, ordered, sp => sp.Id, (sp, order) => sp.Order = order);
 
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }
 
@@ -439,6 +556,7 @@ namespace AlgoJudge.Server.Services
             var round = assignment.Series!;
             context.SeriesProblems.Remove(assignment);
             await context.SaveChangesAsync(ct);
+            await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }
 
