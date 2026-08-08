@@ -3,6 +3,7 @@ using AlgoJudge.Server.Api;
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services.Models;
 using AlgoJudge.Server.Utils;
@@ -26,9 +27,47 @@ namespace AlgoJudge.Server.Services
     public class GrantService(
         ApplicationDbContext context,
         ICurrentUserService currentUser,
-        IPermissionService permissions
+        IPermissionService permissions,
+        IEventHub events,
+        IEventAudience audience
     ) : IGrantService
     {
+
+        /// <summary>
+        /// Tells whoever may read grants that one changed.
+        /// <para>
+        /// Scoped to the activity where the grant is in one, and to the whole
+        /// installation where it is a system grant — a system grant is not any
+        /// activity's business, and narrowing it to one would tell the wrong
+        /// people. The affected user is told too: what they may do has changed,
+        /// and their own screens read that.
+        /// </para>
+        /// </summary>
+        private async Task AnnounceGrantAsync(
+            Guid? activityId, string subjectUserId, object payload, CancellationToken ct)
+        {
+            var readers = activityId is { } id
+                ? await audience.InActivityAsync(id, Permissions.GrantReadAll, ct)
+                : await audience.AnywhereAsync(Permissions.GrantReadAll, ct);
+
+            var recipients = new HashSet<string>(readers, StringComparer.Ordinal) { subjectUserId };
+            await events.SendToUsersAsync([.. recipients], EventTypes.GrantChanged, payload, ct);
+        }
+
+        /// <summary>
+        /// A template is the installation's, so its audience is everybody who may
+        /// read one. Templates are **copied** into a grant and never referenced,
+        /// so this changes what a future grant starts from and nobody's access.
+        /// </summary>
+        private async Task AnnounceTemplateAsync(
+            PermissionTemplateDto? template, string? deletedId, CancellationToken ct)
+        {
+            var readers = await audience.AnywhereAsync(Permissions.TemplateRead, ct);
+            if (readers.Count == 0) return;
+
+            await events.SendToUsersAsync(readers, EventTypes.PermissionTemplateChanged,
+                deletedId is null ? new { template } : new { deletedId }, ct);
+        }
         public async Task<PageDto<GrantDto>> ListAsync(
             PageQuery paging, string? userId, Guid? activityId, string? scope, CancellationToken ct)
         {
@@ -166,7 +205,9 @@ namespace AlgoJudge.Server.Services
                 .Include(g => g.User)
                 .Include(g => g.Activity)
                 .FirstAsync(g => g.Id == grant.Id, ct);
-            return Project(stored);
+            var projected = Project(stored);
+            await AnnounceGrantAsync(stored.ActivityId, stored.UserId, new { grant = projected }, ct);
+            return projected;
         }
 
         /// <summary>
@@ -182,8 +223,16 @@ namespace AlgoJudge.Server.Services
 
             await permissions.RequireAsync(Permissions.GrantUpdate, grant.ActivityId, ct);
 
+            // Read before the row goes: revoking a grant removes the very thing
+            // an audience is resolved from, so afterwards the holder would not be
+            // among the people told that they no longer hold it.
+            var scope = grant.ActivityId;
+            var subject = grant.UserId;
+            var removed = Wire.Id(grant.Id);
+
             context.Grants.Remove(grant);
             await context.SaveChangesAsync(ct);
+            await AnnounceGrantAsync(scope, subject, new { deletedId = removed }, ct);
         }
 
         public async Task<IReadOnlyList<PermissionTemplateDto>> ListTemplatesAsync(CancellationToken ct)
@@ -235,7 +284,9 @@ namespace AlgoJudge.Server.Services
             };
             context.PermissionTemplates.Add(template);
             await context.SaveChangesAsync(ct);
-            return ProjectTemplate(template);
+            var created = ProjectTemplate(template);
+            await AnnounceTemplateAsync(created, null, ct);
+            return created;
         }
 
         public async Task<PermissionTemplateDto> UpdateTemplateAsync(
@@ -269,7 +320,9 @@ namespace AlgoJudge.Server.Services
             // here afterwards. That is the whole reason it is a template rather
             // than a role.
             await context.SaveChangesAsync(ct);
-            return ProjectTemplate(template);
+            var updated = ProjectTemplate(template);
+            await AnnounceTemplateAsync(updated, null, ct);
+            return updated;
         }
 
         public async Task DeleteTemplateAsync(Guid id, CancellationToken ct)
@@ -284,8 +337,10 @@ namespace AlgoJudge.Server.Services
                 throw new ConflictException("A built-in template cannot be deleted", "template.builtIn");
             }
 
+            var removedTemplate = Wire.Id(template.Id);
             context.PermissionTemplates.Remove(template);
             await context.SaveChangesAsync(ct);
+            await AnnounceTemplateAsync(null, removedTemplate, ct);
         }
     }
 }
