@@ -48,7 +48,25 @@ namespace AlgoJudge.Server.Api.Contracts
         public const string GrantChanged = "grantChanged";
         public const string ProblemChanged = "problemChanged";
         public const string ActivityChanged = "activityChanged";
-        public const string ManagerSeriesChanged = "seriesChanged";
+        /// <summary>
+        /// A round as its <b>manager</b> sees it — the whole `ManagedSeries`,
+        /// assignments included, or a `deletedId`.
+        /// <para>
+        /// Its own wire name since 2026-08-08. It shared
+        /// <see cref="SeriesChanged"/>'s name until then, and the two carry
+        /// different payloads: the participant's requires `series` and `change`,
+        /// this one has neither and may carry `deletedId` instead. The envelope
+        /// has no scope member, so one name meant one shape had to be guessed
+        /// from its contents — and the Client's router, an `if / else if` chain
+        /// testing the participant first, never reached its manager dispatcher
+        /// at all.
+        /// </para>
+        /// <para>
+        /// One wire name, one shape. The same rule the HTTP surface follows,
+        /// where the manager reads live under <c>/manager/</c>.
+        /// </para>
+        /// </summary>
+        public const string ManagerSeriesChanged = "managerSeriesChanged";
         public const string SubmissionChanged = "submissionChanged";
         public const string QuestionChanged = "questionChanged";
         public const string UserChanged = "userChanged";

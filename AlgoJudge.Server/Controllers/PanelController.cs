@@ -237,6 +237,16 @@ namespace AlgoJudge.Server.Controllers
             panel.ListRunnersAsync(new PageQuery { Page = page, PageSize = pageSize }, state, search, ct);
 
         /// <summary>
+        /// Nothing is evaluated until a manager approves the fingerprint.
+        /// Answers the whole row, as its two siblings below do.
+        /// </summary>
+        [HttpPost("{id:guid}/approve")]
+        [ProducesResponseType<ManagedRunnerDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<ManagedRunnerDto> Approve(Guid id, CancellationToken ct) =>
+            panel.ApproveRunnerAsync(id, ct);
+
+        /// <summary>
         /// Permanent: there is no rotation, so a revoked key never comes back and
         /// that Runner returns as a new identity. Whatever it was holding goes
         /// back into the queue.

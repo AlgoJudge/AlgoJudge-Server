@@ -1,0 +1,32 @@
+{
+  "$comment": "What this Server puts on the socket, and the one thing the Client must know to ignore. Generated from Api/Contracts/Events.cs; EventCatalogueTests fails if the two part company, and the Client's check:events diffs its own records against this file. Kept beside openapi.json and for the same reason: events are not HTTP operations, so that document cannot carry them.",
+  "events": [
+    "activityChanged",
+    "activityCreated",
+    "activityDeleted",
+    "activityTimesChanged",
+    "activityUpdated",
+    "announcementPublished",
+    "grantChanged",
+    "instanceChanged",
+    "managerSeriesChanged",
+    "permissionTemplateChanged",
+    "problemChanged",
+    "problemStatusChanged",
+    "questionAnswered",
+    "questionChanged",
+    "questionPublished",
+    "rankingChanged",
+    "runnerChanged",
+    "seriesChanged",
+    "sessionExpired",
+    "submissionChanged",
+    "submissionStateChanged",
+    "systemMessage",
+    "userChanged"
+  ],
+  "transport": [
+    "ping"
+  ],
+  "$transportComment": "A keep-alive the hub writes every 25 seconds, outside the event envelope. Not a domain event and deliberately not in `events`: nothing subscribes to it, and the Client drops any type it does not know."
+}

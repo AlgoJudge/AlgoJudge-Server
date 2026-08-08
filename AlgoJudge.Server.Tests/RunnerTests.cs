@@ -317,4 +317,54 @@ public class RunnerTests(ServerFixture server)
             "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    /// <summary>
+    /// Two endpoints, two readers, two shapes — and the shapes must not be
+    /// swapped.
+    /// <para>
+    /// Registering tells a Runner who it now is: three members, nothing about
+    /// the installation. Approving tells a <b>manager</b> what the row shows,
+    /// because that is who is refreshing one. Approving answered the
+    /// registration shape until 2026-08-08, which no test caught: every one of
+    /// them checked that the call succeeded and none checked what came back.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Approving_answers_the_row_a_manager_shows_not_the_registration()
+    {
+        var generator = new Ed25519KeyPairGenerator();
+        generator.Init(new Ed25519KeyGenerationParameters(new SecureRandom()));
+        var pub = Convert.ToBase64String(
+            ((Ed25519PublicKeyParameters)generator.GenerateKeyPair().Public).GetEncoded());
+
+        var registration = await server.CreateClient().PostAsJsonAsync("/api/v1/runner/register", new
+        {
+            name = "shape-check",
+            product = "AlgoJudge-Runner-Stub",
+            version = "0.0.1",
+            publicKey = pub,
+            problemTypes = new[] { "standard-io@1" },
+        });
+        await Sign.Succeeded(registration);
+        var registered = await registration.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.True(registered.TryGetProperty("runnerId", out _));
+        Assert.False(registered.TryGetProperty("name", out _));
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var response = await admin.PostAsync(
+            $"/api/v1/runners/{registered.GetProperty("runnerId").GetString()}/approve", null);
+        await Sign.Succeeded(response);
+        var approved = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Keyed on `id`, not `runnerId`: this is the manager's row, and it is
+        // what `ManagerApiHttp.approveRunner` puts straight back into the table.
+        Assert.Equal("approved", approved.GetProperty("state").GetString());
+        Assert.Equal("shape-check", approved.GetProperty("name").GetString());
+
+        foreach (var member in new[] { "id", "problemTypes", "tags", "registeredAt", "approvedAt" })
+        {
+            Assert.True(approved.TryGetProperty(member, out _), $"the row is missing {member}");
+        }
+    }
 }

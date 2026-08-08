@@ -238,7 +238,7 @@ public class PanelTests(ServerFixture server)
         var resumed = await Post(admin, $"/api/v1/series/{roundId}/resume", new { extendEnd = true });
 
         Assert.True(resumed.GetProperty("isOpen").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, resumed.GetProperty("pausedAt").ValueKind);
+        Assert.False(resumed.TryGetProperty("pausedAt", out _), "a resumed round carries no pause");
         var after = DateTime.Parse(resumed.GetProperty("endDate").GetString()!).ToUniversalTime();
         Assert.True(after >= before, "the interruption is given back, so the end does not move earlier");
     }
@@ -308,7 +308,7 @@ public class PanelTests(ServerFixture server)
         }
 
         var unblocked = await Post(admin, $"/api/v1/users/{id}/blocked", new { blocked = false });
-        Assert.Equal(JsonValueKind.Null, unblocked.GetProperty("blockedAt").ValueKind);
+        Assert.False(unblocked.TryGetProperty("blockedAt", out _), "an unblocked account carries no block");
     }
 
     [Fact]

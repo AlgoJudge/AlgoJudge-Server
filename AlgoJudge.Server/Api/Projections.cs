@@ -285,6 +285,7 @@ namespace AlgoJudge.Server.Api
                 EndDate = Contracts.Wire.At(series.EndDate),
                 IsOpen = series.IsOpen,
                 PausedAt = Contracts.Wire.At(series.PausedAt),
+                HideProblemsWhilePaused = series.HideProblemsWhilePaused,
                 RevealProblemCount = series.RevealProblemCount,
                 RankingFreezeAt = Contracts.Wire.At(series.RankingFreezeAt),
                 RankingRevealAt = Contracts.Wire.At(series.RankingRevealAt),
