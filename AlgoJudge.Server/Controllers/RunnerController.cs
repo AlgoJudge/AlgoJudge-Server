@@ -226,45 +226,10 @@ namespace AlgoJudge.Server.Controllers
         private string? Address() => HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
-    /// <summary>
-    /// Approving and revoking a Runner. A manager surface, not a Runner one, so
-    /// it carries the ordinary session authentication.
-    /// </summary>
-    [ApiController]
-    [Route("runners")]
-    [Authorize]
-    public class RunnersAdminController(
-        Database.ApplicationDbContext context,
-        IPermissionService permissions,
-        ICurrentUserService currentUser,
-        TimeProvider clock
-    ) : ControllerBase
-    {
-        [HttpPost("{id:guid}/approve")]
-        [ProducesResponseType<RunnerRegisteredDto>(StatusCodes.Status200OK)]
-        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
-        public async Task<RunnerRegisteredDto> Approve(Guid id, CancellationToken ct)
-        {
-            await permissions.RequireAsync(Authorization.Permissions.RunnerApprove, null, ct);
-            var runner = await context.Runners.FindAsync([id], ct) ?? throw new NotFoundException("Runner");
-
-            if (runner.State == Database.Models.RunnerState.Revoked)
-            {
-                throw new ConflictException(
-                    "A revoked Runner cannot be approved; it must register again", "runner.revoked");
-            }
-
-            runner.State = Database.Models.RunnerState.Approved;
-            runner.ApprovedAt = clock.GetUtcNow().UtcDateTime;
-            runner.ApprovedByUserId = currentUser.UserId;
-            await context.SaveChangesAsync(ct);
-
-            return new RunnerRegisteredDto
-            {
-                RunnerId = Api.Contracts.Wire.Id(runner.Id),
-                Fingerprint = runner.Fingerprint,
-                State = Api.Projections.Wire(runner.State),
-            };
-        }
-    }
+    // Approving a Runner lives with revoking and tagging in
+    // `PanelController.ManagerRunnersController`, not here. It is a manager
+    // surface carrying the ordinary session, and it belongs beside its siblings
+    // — kept apart, it drifted onto the registration acknowledgement's shape and
+    // answered a manager with `{runnerId, fingerprint, state}` where the two
+    // endpoints next to it answered the whole row.
 }

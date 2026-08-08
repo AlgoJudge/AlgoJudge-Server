@@ -37,6 +37,7 @@ namespace AlgoJudge.Server.Services
 
         Task<PageDto<ManagedRunnerDto>> ListRunnersAsync(
             PageQuery paging, string? state, string? search, CancellationToken ct);
+        Task<ManagedRunnerDto> ApproveRunnerAsync(Guid id, CancellationToken ct);
         Task<ManagedRunnerDto> RevokeRunnerAsync(Guid id, string? reason, CancellationToken ct);
         Task<ManagedRunnerDto> SetTagsAsync(Guid id, IReadOnlyList<string> tags, CancellationToken ct);
         Task ForgetRunnerAsync(Guid id, CancellationToken ct);
@@ -688,6 +689,39 @@ namespace AlgoJudge.Server.Services
                     UploadedAt = Wire.At(a.CreatedAt),
                 }).ToList(),
             };
+        }
+
+        /// <summary>
+        /// A manager approves the fingerprint, and nothing is evaluated before
+        /// that.
+        /// <para>
+        /// Answers the whole record, not the registration acknowledgement. The
+        /// caller is a manager refreshing a row and needs everything the row
+        /// shows; a Runner learning its own id is the other endpoint, and this
+        /// one sat on that shape until 2026-08-08. Its two siblings — revoking
+        /// and tagging — always answered this way.
+        /// </para>
+        /// </summary>
+        public async Task<ManagedRunnerDto> ApproveRunnerAsync(Guid id, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.RunnerApprove, null, ct);
+
+            var runner = await context.Runners.FirstOrDefaultAsync(r => r.Id == id, ct)
+                ?? throw new NotFoundException("Runner");
+
+            // Revocation is permanent, so there is nothing to approve back into.
+            if (runner.State == RunnerState.Revoked)
+            {
+                throw new ConflictException(
+                    "A revoked Runner cannot be approved; it must register again", "runner.revoked");
+            }
+
+            runner.State = RunnerState.Approved;
+            runner.ApprovedAt = clock.GetUtcNow().UtcDateTime;
+            runner.ApprovedByUserId = currentUser.UserId;
+            await context.SaveChangesAsync(ct);
+
+            return await ProjectRunnerAsync(runner, ct);
         }
 
         /// <summary>
