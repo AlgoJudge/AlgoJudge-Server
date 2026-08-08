@@ -22,4 +22,20 @@ RUN dotnet publish "./AlgoJudge.Server.csproj" -c $BUILD_CONFIGURATION -o /app/p
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+# Whether the API is actually answering, not merely whether the process exists.
+#
+# Without this `docker compose up --wait` returns the moment the container
+# starts — the .NET host is still booting, migrations have not run, and whatever
+# runs next gets a connection refused. The Server's own CI works around it by
+# polling; a compose file that waits on this service could not.
+#
+# Written with bash's /dev/tcp because this image has no curl and no wget, and
+# adding one would mean a package install — a network dependency at build time
+# for four lines of shell. `grep -q` closes the descriptor as soon as it matches.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=40s --retries=5 \
+    CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 \
+        && printf "GET /api/v1/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 \
+        && grep -q "200 OK" <&3'
+
 ENTRYPOINT ["dotnet", "AlgoJudge.Server.dll"]
