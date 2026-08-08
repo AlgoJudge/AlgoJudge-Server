@@ -163,6 +163,36 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string FileId { get; init; }
     }
 
+    public record LeaseDto
+    {
+        public required string JobId { get; init; }
+        public required string LeaseToken { get; init; }
+        public required string LeaseExpiresAt { get; init; }
+    }
+
+    public record LeaseRequestDto
+    {
+        public required string LeaseToken { get; init; }
+        public int? LeaseSeconds { get; init; }
+    }
+
+    /// <summary>Naming a file the Runner has already uploaded, on the attempt it holds.</summary>
+    public record AttachToJobDto
+    {
+        public required string LeaseToken { get; init; }
+        public required string FileId { get; init; }
+        /// <summary>`log`, `details`. The role within the attempt, not the file name.</summary>
+        public required string Name { get; init; }
+    }
+
+    /// <summary>Naming a file the Runner uploaded about itself. Replaces the name.</summary>
+    public record AttachToSelfDto
+    {
+        public required string FileId { get; init; }
+        /// <summary>`runner.log`, `lscpu.txt`.</summary>
+        public required string Name { get; init; }
+    }
+
     public record ReportAcceptedDto
     {
         public required string ResultId { get; init; }

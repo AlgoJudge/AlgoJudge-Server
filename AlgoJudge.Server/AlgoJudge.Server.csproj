@@ -37,4 +37,13 @@
     <Folder Include="Database\Migrations\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      A background worker's single unit of work is `internal` so nothing in the
+      application calls it out of band, and visible to the tests so a sweep can
+      be run against a clock somebody turns rather than waited for.
+    -->
+    <InternalsVisibleTo Include="AlgoJudge.Server.Tests" />
+  </ItemGroup>
+
 </Project>

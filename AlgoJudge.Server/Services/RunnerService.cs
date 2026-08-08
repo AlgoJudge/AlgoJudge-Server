@@ -22,6 +22,22 @@ namespace AlgoJudge.Server.Services
         Task<DbRunner> AuthenticateAsync(string? token, CancellationToken ct);
         Task<ClaimedJobDto?> ClaimAsync(DbRunner runner, int? leaseSeconds, CancellationToken ct);
         Task<ReportAcceptedDto> ReportAsync(DbRunner runner, Guid jobId, ReportResultDto report, CancellationToken ct);
+
+        Task HeartbeatAsync(DbRunner runner, string? address, CancellationToken ct);
+        Task<LeaseDto> RenewAsync(DbRunner runner, Guid jobId, string leaseToken, int? seconds, CancellationToken ct);
+        Task ProgressAsync(DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct);
+
+        /// <summary>
+        /// Whether this Runner may read these bytes <b>through a job it is
+        /// holding</b>. The whole authorization question for a Runner's reads.
+        /// </summary>
+        Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct);
+
+        /// <summary>Attaches a file the Runner uploaded to itself, under a name it replaces.</summary>
+        Task AttachToSelfAsync(DbRunner runner, Guid fileId, string name, CancellationToken ct);
+
+        /// <summary>Attaches a file to an attempt the Runner is holding.</summary>
+        Task AttachToJobAsync(DbRunner runner, Guid jobId, string leaseToken, Guid fileId, string name, CancellationToken ct);
     }
 
     /// <summary>
@@ -506,7 +522,208 @@ namespace AlgoJudge.Server.Services
             };
         }
 
+        public async Task HeartbeatAsync(DbRunner runner, string? address, CancellationToken ct)
+        {
+            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+            // Read from the connection every time, not only at registration: a
+            // Runner that moved is at a new address, and it is still a bad
+            // witness to its own.
+            if (address is not null) runner.Address = address;
+            await context.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// Extends a lease the Runner still holds.
+        /// <para>
+        /// The deadline is a correctness mechanism, not a safety net: the Runner
+        /// is stateless, so a job whose lease runs out is reclaimed and given to
+        /// somebody else. A long evaluation renews rather than being cut off.
+        /// </para>
+        /// </summary>
+        public async Task<LeaseDto> RenewAsync(
+            DbRunner runner, Guid jobId, string leaseToken, int? seconds, CancellationToken ct)
+        {
+            var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
+
+            var lease = seconds is { } requested
+                ? TimeSpan.FromSeconds(Math.Clamp(requested, 60, MaxLease.TotalSeconds))
+                : DefaultLease;
+
+            job.LeaseExpiresAt = clock.GetUtcNow().UtcDateTime.Add(lease);
+            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+            await context.SaveChangesAsync(ct);
+
+            return new LeaseDto
+            {
+                JobId = Wire.Id(job.Id),
+                LeaseToken = leaseToken,
+                LeaseExpiresAt = Wire.At(job.LeaseExpiresAt.Value),
+            };
+        }
+
+        /// <summary>
+        /// Says the Runner is still working. Renews the lease as a side effect,
+        /// because that is what "still working" means to the Server — there is
+        /// nothing else it can do with the news.
+        /// </summary>
+        public async Task ProgressAsync(
+            DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct)
+        {
+            var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
+            job.LeaseExpiresAt = clock.GetUtcNow().UtcDateTime.Add(DefaultLease);
+            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+            await context.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// The job this Runner is holding under this lease, or a refusal.
+        /// <para>
+        /// Three separate things are checked, and each is a different mistake:
+        /// the job exists, this Runner has it, and the lease it presents is the
+        /// current one. A Runner whose lease was reclaimed while it worked must
+        /// be refused rather than allowed to overwrite whoever has it now.
+        /// </para>
+        /// </summary>
+        private async Task<EvaluationJob> HeldJobAsync(
+            DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct)
+        {
+            var job = await context.EvaluationJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct)
+                ?? throw new NotFoundException("Evaluation job");
+
+            if (!Guid.TryParse(leaseToken, out var presented) || job.LeaseToken != presented)
+            {
+                throw new ForbiddenActionException(
+                    "This lease is no longer held; the job was reclaimed", "runner.lease.stale");
+            }
+            if (job.RunnerId != runner.Id)
+            {
+                throw new ForbiddenActionException("That job belongs to another Runner", "runner.lease.foreign");
+            }
+            if (job.State != EvaluationJobState.Running)
+            {
+                throw new ConflictException(
+                    $"A job in state {Projections.Wire(job.State)} is not being worked on", "job.state");
+            }
+
+            return job;
+        }
+
+        /// <summary>
+        /// A Runner reads what the jobs it is <b>currently holding</b> need, and
+        /// nothing else.
+        /// <para>
+        /// Authorized against the job, not against being a Runner. Without that,
+        /// any approved Runner could fetch every test package in the
+        /// installation by asking for file ids — and the packages are the
+        /// problems.
+        /// </para>
+        /// </summary>
+        public async Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct)
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+
+            var held = await context.EvaluationJobs
+                .AsNoTracking()
+                .Where(j => j.RunnerId == runner.Id
+                    && j.State == EvaluationJobState.Running
+                    && j.LeaseExpiresAt != null && j.LeaseExpiresAt > now)
+                .Select(j => new { j.Id, j.ProblemVersionId, j.SubmissionId })
+                .ToListAsync(ct);
+
+            if (held.Count == 0) return false;
+
+            var versions = held.Select(j => j.ProblemVersionId).ToList();
+            var submissions = held.Select(j => j.SubmissionId).ToList();
+            var jobs = held.Select(j => j.Id).ToList();
+
+            return await context.FileReferences.AsNoTracking().AnyAsync(r =>
+                r.FileId == fileId
+                && ((r.ProblemVersionId != null && versions.Contains(r.ProblemVersionId.Value))
+                    || (r.SubmissionId != null && submissions.Contains(r.SubmissionId.Value))
+                    || (r.EvaluationJobId != null && jobs.Contains(r.EvaluationJobId.Value))), ct);
+        }
+
+        /// <summary>
+        /// What a Runner uploads about itself — `runner.log`, `lscpu.txt`.
+        /// <para>
+        /// It <b>replaces</b> the name rather than adding another, so "old
+        /// versions" means earlier ones under the same name. That is what the
+        /// twenty-revision limit counts, and what keeps a chatty Runner costing a
+        /// fixed amount rather than an unbounded one.
+        /// </para>
+        /// </summary>
+        public async Task AttachToSelfAsync(
+            DbRunner runner, Guid fileId, string name, CancellationToken ct)
+        {
+            if (!await context.Files.AnyAsync(f => f.Id == fileId, ct))
+            {
+                throw new ValidationException("That file is not stored", "file.missing");
+            }
+
+            var now = clock.GetUtcNow().UtcDateTime;
+
+            var current = await context.FileReferences
+                .Where(r => r.RunnerId == runner.Id && r.Name == name && r.SupersededAt == null)
+                .ToListAsync(ct);
+            foreach (var reference in current) reference.SupersededAt = now;
+
+            context.FileReferences.Add(new FileReference
+            {
+                FileId = fileId,
+                OwnerKind = FileOwnerKind.Runner,
+                RunnerId = runner.Id,
+                // Operator material: a Runner's log is diagnostics, never
+                // something a participant reads.
+                Scope = FileScope.Manager,
+                Name = name,
+            });
+
+            runner.LastSeenAt = now;
+            await context.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// Attaches the Runner's output to the attempt it is holding — its
+        /// <c>log</c>, its <c>details</c>. Uploaded through the ordinary file
+        /// endpoint first; this names it.
+        /// </summary>
+        public async Task AttachToJobAsync(
+            DbRunner runner, Guid jobId, string leaseToken, Guid fileId, string name, CancellationToken ct)
+        {
+            var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
+
+            if (!await context.Files.AnyAsync(f => f.Id == fileId, ct))
+            {
+                throw new ValidationException("That file is not stored", "file.missing");
+            }
+
+            var already = await context.FileReferences
+                .AnyAsync(r => r.EvaluationJobId == job.Id && r.Name == name, ct);
+            if (already)
+            {
+                throw new ConflictException(
+                    $"This attempt already has a file called {name}", "attempt.file.duplicate");
+            }
+
+            context.FileReferences.Add(new FileReference
+            {
+                FileId = fileId,
+                OwnerKind = FileOwnerKind.Attempt,
+                EvaluationJobId = job.Id,
+                // Participant scope on the reference; whether a participant
+                // actually reads it is the activity's attachment table, and an
+                // unlisted name is managers-only.
+                Scope = FileScope.Participant,
+                Name = name,
+            });
+
+            await context.SaveChangesAsync(ct);
+        }
+
         /// <summary>How many times a job may be handed out before it is given up on.</summary>
         public static int DeliveryCap => MaxDeliveries;
+
+        /// <summary>How long a fresh lease runs when the Runner does not ask.</summary>
+        public static TimeSpan DefaultLeaseTime => DefaultLease;
     }
 }

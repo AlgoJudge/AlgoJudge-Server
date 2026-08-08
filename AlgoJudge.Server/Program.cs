@@ -130,6 +130,11 @@ namespace AlgoJudge.Server
 
             builder.Services.AddScoped<Seeder>();
 
+            // Recovery for a Runner that died holding a job. Registered as a
+            // singleton so it can be resolved in tests and swept on demand.
+            builder.Services.AddSingleton<Workers.LeaseReaper>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.LeaseReaper>());
+
             // One shape for every failure, including the ones raised outside MVC.
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();

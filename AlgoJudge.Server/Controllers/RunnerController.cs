@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Controllers
     [ApiController]
     [Route("runner")]
     [AllowAnonymous]
-    public class RunnerController(IRunnerService runners) : ControllerBase
+    public class RunnerController(IRunnerService runners, IFileService files) : ControllerBase
     {
         /// <summary>
         /// Presents a public key. Registration is not approval: an administrator
@@ -86,6 +86,123 @@ namespace AlgoJudge.Server.Controllers
         {
             var runner = await runners.AuthenticateAsync(Token(), ct);
             return await runners.ReportAsync(runner, jobId, report, ct);
+        }
+
+        /// <summary>Liveness, and the address the Server records for this Runner.</summary>
+        [HttpPost("heartbeat")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> Heartbeat(CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            await runners.HeartbeatAsync(runner, Address(), ct);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Extends a lease. A long evaluation renews rather than being cut off —
+        /// the deadline exists so a job survives a Runner that died, not so it
+        /// interrupts one that is working.
+        /// </summary>
+        [HttpPost("jobs/{jobId:guid}/lease")]
+        [ProducesResponseType<LeaseDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        public async Task<LeaseDto> Renew(
+            Guid jobId, [FromBody] LeaseRequestDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            return await runners.RenewAsync(runner, jobId, input.LeaseToken, input.LeaseSeconds, ct);
+        }
+
+        /// <summary>Still working. Renews the lease, which is all the Server can do with the news.</summary>
+        [HttpPost("jobs/{jobId:guid}/progress")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> Progress(
+            Guid jobId, [FromBody] LeaseRequestDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            await runners.ProgressAsync(runner, jobId, input.LeaseToken, ct);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Reads a file one of this Runner's held jobs needs — the package, the
+        /// submitted source.
+        /// <para>
+        /// Its own endpoint rather than <c>/files/{id}</c>, because a Runner
+        /// carries a token and not a session, and because the answer here is
+        /// "does a job you hold reference this" — a different question from the
+        /// one the file endpoint asks.
+        /// </para>
+        /// </summary>
+        [HttpGet("files/{id:guid}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Download(Guid id, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            if (!await runners.MayReadAsync(runner, id, ct)) throw new NotFoundException("File");
+
+            var file = await files.FindAsync(id, ct) ?? throw new NotFoundException("File");
+
+            Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+            Response.Headers.ETag = $"\"{file.Sha256}\"";
+            return File(file.Content, file.MimeType, file.Name);
+        }
+
+        /// <summary>
+        /// Stores bytes a Runner produced. The checksum is recomputed here as it
+        /// is for anybody else — a Runner's own output gets the same integrity
+        /// chain as everything else in the product.
+        /// </summary>
+        [HttpPost("files")]
+        [ProducesResponseType<UploadedFileDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<ActionResult<UploadedFileDto>> Upload(
+            [FromForm] IFormFile file, [FromForm] string sha256, CancellationToken ct)
+        {
+            await runners.AuthenticateAsync(Token(), ct);
+            if (file is null || file.Length == 0)
+            {
+                throw new ValidationException("A file is required", "file.required");
+            }
+
+            await using var content = file.OpenReadStream();
+            var stored = await files.StoreAsync(content, file.FileName, file.ContentType, sha256, ct);
+            return Created($"/api/v1/runner/files/{Api.Contracts.Wire.Id(stored.Id)}", Api.Projections.Uploaded(stored));
+        }
+
+        /// <summary>Names an uploaded file on the attempt this Runner holds.</summary>
+        [HttpPost("jobs/{jobId:guid}/files")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> AttachToJob(
+            Guid jobId, [FromBody] AttachToJobDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            if (!Guid.TryParse(input.FileId, out var fileId))
+            {
+                throw new ValidationException("A file id is required", "file.required");
+            }
+            await runners.AttachToJobAsync(runner, jobId, input.LeaseToken, fileId, input.Name, ct);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Names an uploaded file on the Runner itself — its log, its `lscpu`.
+        /// Replaces the name rather than adding another.
+        /// </summary>
+        [HttpPost("files/attach")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> AttachToSelf(
+            [FromBody] AttachToSelfDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            if (!Guid.TryParse(input.FileId, out var fileId))
+            {
+                throw new ValidationException("A file id is required", "file.required");
+            }
+            await runners.AttachToSelfAsync(runner, fileId, input.Name, ct);
+            return NoContent();
         }
 
         /// <summary>The bearer token, from the header a Runner sets.</summary>
