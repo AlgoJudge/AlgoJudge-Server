@@ -87,12 +87,19 @@ namespace AlgoJudge.Server
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(60);
                 options.Lockout.AllowedForNewUsers = true;
 
-                options.User.RequireUniqueEmail = true;
+                // Enforced by OptionalEmailValidator, not by this: the framework
+                // reads it as "every account has an address AND it is unique",
+                // and the first half makes a temporary account impossible.
+                options.User.RequireUniqueEmail = false;
                 // No mail sender in v1, so requiring confirmation here would lock
                 // everybody out. Whether an instance demands it is a setting on
                 // Instance, applied at sign-in.
                 options.SignIn.RequireConfirmedEmail = false;
-            }).AddEntityFrameworkStores<ApplicationDbContext>();
+            })
+                .AddEntityFrameworkStores<ApplicationDbContext>()
+                // Replaces the built-in one, which would demand an address of
+                // every account. An address stays unique when there is one.
+                .AddUserValidator<OptionalEmailValidator>();
 
             // Injected rather than DateTime.UtcNow, so the scheduler and the
             // file collector can be tested against a clock somebody turns.
@@ -108,6 +115,11 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IResultsService, ResultsService>();
             builder.Services.AddScoped<IQuestionService, QuestionService>();
             builder.Services.AddScoped<IAccountService, AccountService>();
+            builder.Services.AddScoped<IDocumentService, DocumentService>();
+            builder.Services.AddScoped<IGrantService, GrantService>();
+            builder.Services.AddScoped<IUserService, UserService>();
+            builder.Services.AddScoped<IManagerWriteService, ManagerWriteService>();
+            builder.Services.AddScoped<IManagerReadService, ManagerReadService>();
             builder.Services.AddScoped<ISubmissionService, SubmissionService>();
             builder.Services.AddScoped<IRunnerService, RunnerService>();
             builder.Services.AddSingleton<ISeriesGate, SeriesGate>();

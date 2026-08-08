@@ -16,6 +16,16 @@ namespace AlgoJudge.Server.Services
         Task<ManagedProblemDto> CreateAsync(ProblemInputDto input, CancellationToken ct);
         Task<ManagedProblemVersionDto> PublishVersionAsync(Guid problemId, ProblemVersionInputDto input, CancellationToken ct);
         Task<ProblemDetailDto> GetForParticipantAsync(string activityIdOrSlug, string problemSlug, CancellationToken ct);
+
+        Task<ManagedProblemDto> GetAsync(Guid id, CancellationToken ct);
+        Task<ManagedProblemDto> UpdateAsync(Guid id, ProblemInputDto input, CancellationToken ct);
+        Task DeleteAsync(Guid id, CancellationToken ct);
+        Task<ManagedProblemDto> SetArchivedAsync(Guid id, bool archived, CancellationToken ct);
+        Task<ManagedProblemDto> DuplicateAsync(Guid id, CancellationToken ct);
+        Task<ManagedProblemDto> SetVisibilityAsync(Guid id, string visibility, IReadOnlyList<string>? sharedWith, CancellationToken ct);
+        Task<IReadOnlyList<ManagedProblemVersionDto>> ListVersionsAsync(Guid problemId, CancellationToken ct);
+        Task<IReadOnlyList<StatementRefDto>> ContentAsync(Guid problemId, Guid versionId, CancellationToken ct);
+        Task<(byte[] Bytes, string Name)?> PackageAsync(Guid problemId, Guid versionId, CancellationToken ct);
     }
 
     public class ProblemService(
@@ -23,7 +33,8 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IActivityService activities,
-        ISeriesGate gate
+        ISeriesGate gate,
+        TimeProvider clock
     ) : IProblemService
     {
         public async Task<PageDto<ManagedProblemDto>> ListAsync(
@@ -243,6 +254,272 @@ namespace AlgoJudge.Server.Services
                 .FirstAsync(v => v.Id == version.Id, ct);
 
             return Projections.ManagedVersion(stored, Projections.DisplayName(user), _ => null);
+        }
+
+        public async Task<ManagedProblemDto> GetAsync(Guid id, CancellationToken ct)
+        {
+            var problem = await LoadAsync(id, ct);
+            await RequireReadableAsync(problem, ct);
+            return await ManagedAsync(problem, ct);
+        }
+
+        private async Task<Problem> LoadAsync(Guid id, CancellationToken ct) =>
+            await context.Problems
+                .Include(p => p.SharedWith)
+                .FirstOrDefaultAsync(p => p.Id == id, ct)
+                ?? throw new NotFoundException("Problem");
+
+        /// <summary>
+        /// The library's one access list: the owner, whoever it is shared with,
+        /// and anybody at all when it is instance-visible — or somebody holding
+        /// <c>problem:read:all</c>.
+        /// </summary>
+        private async Task RequireReadableAsync(Problem problem, CancellationToken ct)
+        {
+            if (await permissions.HasAsync(Permissions.ProblemReadAll, null, ct)) return;
+
+            var user = await currentUser.RequireAsync(ct);
+            var readable = problem.OwnerUserId == user.Id
+                || problem.Visibility == ProblemVisibility.Instance
+                || (problem.Visibility == ProblemVisibility.Shared
+                    && problem.SharedWith.Any(s => s.UserId == user.Id));
+
+            // Not 403: a problem somebody may not see must not be confirmed to
+            // exist by the shape of the refusal.
+            if (!readable) throw new NotFoundException("Problem");
+        }
+
+        public async Task<ManagedProblemDto> UpdateAsync(Guid id, ProblemInputDto input, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ProblemUpdate, null, ct);
+            var problem = await LoadAsync(id, ct);
+            await RequireReadableAsync(problem, ct);
+
+            if (input.Slug is { } raw && raw.Trim() is { Length: > 0 } slug && slug != problem.Slug)
+            {
+                if (await context.Problems.AnyAsync(p => p.Slug.ToLower() == slug.ToLower() && p.Id != id, ct))
+                {
+                    throw new ConflictException("A problem with that slug already exists", "problem.slug.taken");
+                }
+                problem.Slug = slug;
+            }
+
+            if (input.Name?.Trim() is { Length: > 0 } name) problem.Name = name;
+            // The type is not editable: every renderer and every stored package
+            // was chosen for it, and changing it would leave both pointing at a
+            // problem they cannot read.
+
+            await context.SaveChangesAsync(ct);
+            return await ManagedAsync(problem, ct);
+        }
+
+        /// <summary>
+        /// Refused while the problem is attached anywhere — a rule the database
+        /// enforces on its own through <c>DeleteBehavior.Restrict</c>, and one
+        /// this method answers with a code the Client understands.
+        /// </summary>
+        public async Task DeleteAsync(Guid id, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ProblemDelete, null, ct);
+            var problem = await LoadAsync(id, ct);
+            await RequireReadableAsync(problem, ct);
+
+            var attached = await context.SeriesProblems.CountAsync(sp => sp.ProblemId == id, ct);
+            if (attached > 0)
+            {
+                throw new ConflictException(
+                    "This problem is attached to an activity. Archive it instead of deleting it.",
+                    "problem.attached");
+            }
+
+            context.Problems.Remove(problem);
+            await context.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// Archiving retires a problem: gone from the attach picker and taking no
+        /// new versions, while every assignment already using it keeps working.
+        /// </summary>
+        public async Task<ManagedProblemDto> SetArchivedAsync(Guid id, bool archived, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ProblemArchive, null, ct);
+            var problem = await LoadAsync(id, ct);
+            await RequireReadableAsync(problem, ct);
+
+            problem.ArchivedAt = archived ? clock.GetUtcNow().UtcDateTime : null;
+            await context.SaveChangesAsync(ct);
+            return await ManagedAsync(problem, ct);
+        }
+
+        /// <summary>
+        /// Copies <b>only the newest version</b>, as version 1 of a new problem.
+        /// <para>
+        /// Duplicating the history would copy notes about changes that never
+        /// happened to this problem. What a person wants from "duplicate" is a
+        /// starting point, not somebody else's past.
+        /// </para>
+        /// </summary>
+        public async Task<ManagedProblemDto> DuplicateAsync(Guid id, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ProblemCreate, null, ct);
+            var source = await LoadAsync(id, ct);
+            await RequireReadableAsync(source, ct);
+            var user = await currentUser.RequireAsync(ct);
+
+            var slug = await FreeSlugAsync(source.Slug, ct);
+
+            var copy = new Problem
+            {
+                Slug = slug,
+                Name = source.Name + " (copy)",
+                Type = source.Type,
+                OwnerUserId = user.Id,
+                // Private, whatever the original was: a copy is a draft, and
+                // inheriting an instance-wide visibility would publish it by
+                // accident.
+                Visibility = ProblemVisibility.Private,
+            };
+            context.Problems.Add(copy);
+
+            var newest = await context.ProblemVersions
+                .Include(v => v.Files)
+                .Where(v => v.ProblemId == id)
+                .OrderByDescending(v => v.Version)
+                .FirstOrDefaultAsync(ct);
+
+            if (newest is not null)
+            {
+                var version = new ProblemVersion
+                {
+                    ProblemId = copy.Id,
+                    Version = 1,
+                    CreatedByUserId = user.Id,
+                    Note = $"Copied from {source.Slug} v{newest.Version}",
+                    Config = newest.Config,
+                };
+                context.ProblemVersions.Add(version);
+
+                // References, not copies: the bytes are immutable and shared, so
+                // duplicating a problem costs nothing in storage.
+                foreach (var file in newest.Files)
+                {
+                    context.FileReferences.Add(new FileReference
+                    {
+                        FileId = file.FileId,
+                        OwnerKind = FileOwnerKind.ProblemVersion,
+                        ProblemVersionId = version.Id,
+                        Scope = file.Scope,
+                        Name = file.Name,
+                        Language = file.Language,
+                    });
+                }
+            }
+
+            await context.SaveChangesAsync(ct);
+            return await ManagedAsync(copy, ct);
+        }
+
+        private async Task<string> FreeSlugAsync(string basis, CancellationToken ct)
+        {
+            for (var suffix = 2; suffix < 100; suffix++)
+            {
+                var candidate = $"{basis}-{suffix}";
+                if (candidate.Length > 32) candidate = candidate[^32..];
+                if (!await context.Problems.AnyAsync(p => p.Slug == candidate, ct)) return candidate;
+            }
+            throw new ConflictException("Could not find a free slug for the copy", "problem.slug.exhausted");
+        }
+
+        public async Task<ManagedProblemDto> SetVisibilityAsync(
+            Guid id, string visibility, IReadOnlyList<string>? sharedWith, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ProblemShare, null, ct);
+            var problem = await LoadAsync(id, ct);
+            await RequireReadableAsync(problem, ct);
+
+            problem.Visibility = visibility switch
+            {
+                "shared" => ProblemVisibility.Shared,
+                "instance" => ProblemVisibility.Instance,
+                _ => ProblemVisibility.Private,
+            };
+
+            var existing = await context.ProblemShares.Where(s => s.ProblemId == id).ToListAsync(ct);
+            context.ProblemShares.RemoveRange(existing);
+
+            // The list is meaningful only under `shared`. Keeping it otherwise
+            // would leave a stale answer to "who else may see this" that comes
+            // back the moment somebody flips the setting.
+            if (problem.Visibility == ProblemVisibility.Shared && sharedWith is not null)
+            {
+                foreach (var userId in sharedWith.Distinct())
+                {
+                    if (!await context.Users.AnyAsync(u => u.Id == userId, ct)) continue;
+                    context.ProblemShares.Add(new ProblemShare { ProblemId = id, UserId = userId });
+                }
+            }
+
+            await context.SaveChangesAsync(ct);
+            return await ManagedAsync(await LoadAsync(id, ct), ct);
+        }
+
+        public async Task<IReadOnlyList<ManagedProblemVersionDto>> ListVersionsAsync(
+            Guid problemId, CancellationToken ct)
+        {
+            var problem = await LoadAsync(problemId, ct);
+            await RequireReadableAsync(problem, ct);
+
+            var versions = await context.ProblemVersions
+                .AsNoTracking()
+                .Include(v => v.Files).ThenInclude(f => f.File)
+                .Include(v => v.CreatedBy)
+                .Where(v => v.ProblemId == problemId)
+                .OrderByDescending(v => v.Version)
+                .ToListAsync(ct);
+
+            return versions.Select(v => Projections.ManagedVersion(
+                v,
+                v.CreatedBy is null ? null : Projections.DisplayName(v.CreatedBy),
+                file => $"/api/v1/files/{Wire.Id(file.FileId)}")).ToList();
+        }
+
+        public async Task<IReadOnlyList<StatementRefDto>> ContentAsync(
+            Guid problemId, Guid versionId, CancellationToken ct)
+        {
+            var problem = await LoadAsync(problemId, ct);
+            await RequireReadableAsync(problem, ct);
+
+            var statements = await context.FileReferences
+                .AsNoTracking()
+                .Include(r => r.File)
+                .Where(r => r.ProblemVersionId == versionId)
+                .ToListAsync(ct);
+
+            return statements
+                .Where(r => PackageNames.IsStatement(r.Name))
+                .Select(Projections.Statement)
+                .ToList();
+        }
+
+        /// <summary>
+        /// The Runner archive. Null when the version has none — a version nobody
+        /// has finished preparing is not a failure.
+        /// </summary>
+        public async Task<(byte[] Bytes, string Name)?> PackageAsync(
+            Guid problemId, Guid versionId, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ProblemUpdate, null, ct);
+            var problem = await LoadAsync(problemId, ct);
+            await RequireReadableAsync(problem, ct);
+
+            var reference = await context.FileReferences
+                .AsNoTracking()
+                .Include(r => r.File)
+                .FirstOrDefaultAsync(
+                    r => r.ProblemVersionId == versionId && r.Name == PackageNames.Archive, ct);
+
+            if (reference?.File is null) return null;
+            return (reference.File.Content, reference.File.Name);
         }
 
         private static FileScope ParseScope(string? value) => value switch
