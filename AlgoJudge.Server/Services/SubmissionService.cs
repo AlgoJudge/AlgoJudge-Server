@@ -30,6 +30,7 @@ namespace AlgoJudge.Server.Services
         IProblemService problems,
         IFileService files,
         ISeriesGate gate,
+        IResultsService results,
         IEventHub events
     ) : ISubmissionService
     {
@@ -300,6 +301,20 @@ namespace AlgoJudge.Server.Services
             }
 
             await events.SendToUsersAsync(recipients, EventTypes.SubmissionStateChanged, payload, ct);
+
+            // And the board, for everybody entitled to it — each getting exactly
+            // what `GET /results` would have given them, because the socket is
+            // not a second path to the data.
+            foreach (var (userId, result) in await results.BroadcastAsync(submissionId, ct))
+            {
+                await events.SendToUserAsync(userId, EventTypes.RankingChanged, new RankingChangedData
+                {
+                    ActivityId = Wire.Id(activityId),
+                    Change = "result",
+                    SeriesId = Wire.Id(submission.SeriesProblem.SeriesId),
+                    Result = result,
+                }, ct);
+            }
         }
     }
 }

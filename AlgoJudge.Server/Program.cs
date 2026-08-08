@@ -105,6 +105,9 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IActivityService, ActivityService>();
             builder.Services.AddScoped<ISeriesService, SeriesService>();
             builder.Services.AddScoped<IProblemService, ProblemService>();
+            builder.Services.AddScoped<IResultsService, ResultsService>();
+            builder.Services.AddScoped<IQuestionService, QuestionService>();
+            builder.Services.AddScoped<IAccountService, AccountService>();
             builder.Services.AddScoped<ISubmissionService, SubmissionService>();
             builder.Services.AddScoped<IRunnerService, RunnerService>();
             builder.Services.AddSingleton<ISeriesGate, SeriesGate>();

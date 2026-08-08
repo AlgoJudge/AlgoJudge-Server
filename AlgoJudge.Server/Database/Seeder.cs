@@ -132,6 +132,20 @@ namespace AlgoJudge.Server.Database
                 IsSystem = false,
             });
 
+            // Somebody runs this activity, and it is not a participation. The
+            // administrator would reach it through the bypass anyway; the grant
+            // is here because an activity nobody manages is not a state worth
+            // developing against — and because it is what makes "staff are not
+            // counted among the competitors" visible in the seeded data.
+            context.Grants.Add(new Grant
+            {
+                UserId = admin.Id,
+                ActivityId = activity.Id,
+                Permissions = JsonSerializer.Serialize(Permissions.ManagerTemplate),
+                CreatedFromTemplate = "manager",
+                IsSystem = true,
+            });
+
             var series = new Series
             {
                 ActivityId = activity.Id,

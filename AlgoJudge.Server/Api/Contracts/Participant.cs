@@ -213,6 +213,141 @@ namespace AlgoJudge.Server.Api.Contracts
         public required IReadOnlyList<SubmissionFileDto> Files { get; init; }
     }
 
+    /* ── Results, from which every ranking is computed ───────────────────── */
+
+    /// <summary>
+    /// Somebody with a row on the board.
+    /// <para>
+    /// A <b>contestant</b>, not a user: an ICPC row is a team and three people
+    /// submit for it. Who typed a particular solution is the submissions
+    /// screen's business and is not disclosed here.
+    /// </para>
+    /// </summary>
+    public record ContestantDto
+    {
+        public required string Id { get; init; }
+        public required string Name { get; init; }
+    }
+
+    /// <summary>A problem as a board's column: what it is called and what it is worth.</summary>
+    public record ResultProblemDto
+    {
+        public required string Id { get; init; }
+        /// <summary>Unique across the whole activity, which is why cells key on it.</summary>
+        public required string Slug { get; init; }
+        public required string Name { get; init; }
+        public required double MaxPoints { get; init; }
+    }
+
+    /// <summary>
+    /// One round the results cover. Carried even where nobody has attempted
+    /// anything in it, because a board's columns are the problems that exist.
+    /// </summary>
+    public record ResultSeriesDto
+    {
+        public required string Id { get; init; }
+        public required string Name { get; init; }
+        /// <summary>What a penalty minute is counted from. Absent in an untimed activity.</summary>
+        public string? StartDate { get; init; }
+        /// <summary>
+        /// The board is frozen right now: outcomes after the freeze arrive
+        /// withheld. Renderers mark a frozen round's columns.
+        /// </summary>
+        public required bool Frozen { get; init; }
+        public string? RevealAt { get; init; }
+        public required IReadOnlyList<ResultProblemDto> Problems { get; init; }
+    }
+
+    /// <summary>
+    /// One submission, reduced to what a board needs.
+    /// <para>
+    /// Deliberately not <see cref="SubmissionSummaryDto"/>: the verdict text, the
+    /// language and the Runner's per-test document say more about somebody's
+    /// solution than a scoreboard has any business publishing.
+    /// </para>
+    /// </summary>
+    public record ContestantResultDto
+    {
+        public required string Id { get; init; }
+        public required string ContestantId { get; init; }
+        public required string SeriesId { get; init; }
+        public required string ProblemId { get; init; }
+        public required string ProblemSlug { get; init; }
+        public required string SubmittedAt { get; init; }
+        /// <summary>
+        /// Absent while frozen, and while nothing has judged it yet. Absent is
+        /// not zero: a board must not score what it has not been told.
+        /// </summary>
+        public double? Points { get; init; }
+        public string? State { get; init; }
+        /// <summary>
+        /// Whatever else the problem type wants a board to have. Public by
+        /// construction, bounded at 2 kB, and withheld under a freeze with
+        /// everything else about the outcome.
+        /// </summary>
+        public object? Extra { get; init; }
+        /// <summary>
+        /// Its outcome is withheld: that it happened is all that is disclosed.
+        /// Omitting the result instead would leave a board unable to tell "did
+        /// not try" from "tried, and you may not know yet".
+        /// </summary>
+        public bool? Frozen { get; init; }
+    }
+
+    /// <summary>Everything a board is computed from. The Server sends no board.</summary>
+    public record ActivityResultsDto
+    {
+        /// <summary>In the order the rounds run.</summary>
+        public required IReadOnlyList<ResultSeriesDto> Series { get; init; }
+        /// <summary>Everyone with a row, including those who have sent nothing.</summary>
+        public required IReadOnlyList<ContestantDto> Contestants { get; init; }
+        public required IReadOnlyList<ContestantResultDto> Results { get; init; }
+        /// <summary>Which contestant the reader is, where they are one.</summary>
+        public string? Me { get; init; }
+    }
+
+    /* ── Questions ───────────────────────────────────────────────────────── */
+
+    public record QuestionAnswerDto
+    {
+        public required string Body { get; init; }
+        public required string AuthorName { get; init; }
+        public required string AnsweredAt { get; init; }
+    }
+
+    public record QuestionDto
+    {
+        public required string Id { get; init; }
+        /// <summary>`question` | `announcement`.</summary>
+        public required string Kind { get; init; }
+        public required string Topic { get; init; }
+        public required string Body { get; init; }
+        public required string AuthorName { get; init; }
+        public required string CreatedAt { get; init; }
+        public string? SeriesId { get; init; }
+        public string? SeriesName { get; init; }
+        public string? ProblemId { get; init; }
+        public string? ProblemSlug { get; init; }
+        public string? ProblemName { get; init; }
+        /// <summary>A question reaches every participant only once a manager publishes it.</summary>
+        public required bool IsPublished { get; init; }
+        public required bool IsRead { get; init; }
+        public QuestionAnswerDto? Answer { get; init; }
+    }
+
+    /// <summary>
+    /// A question is asked about <b>one</b> of three things: both absent is the
+    /// activity at large, `seriesId` alone is a series, `problemId` is one
+    /// problem — and its series is filled in from it.
+    /// </summary>
+    public record AskQuestionInputDto
+    {
+        public required string Topic { get; init; }
+        public required string Body { get; init; }
+        public string? ProblemId { get; init; }
+        public string? SeriesId { get; init; }
+    }
+
     public record SubmissionDetailDto : SubmissionSummaryDto
     {
         /// <summary>Needed here because the result renderer is chosen by the type.</summary>

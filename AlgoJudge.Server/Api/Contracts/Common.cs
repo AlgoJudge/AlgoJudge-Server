@@ -122,6 +122,30 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool IsLocal { get; init; }
     }
 
+    public record ProfileInputDto
+    {
+        public string? FirstName { get; init; }
+        public string? LastName { get; init; }
+        /// <summary>Changing it is a rename: the login is what other people see.</summary>
+        public string? Username { get; init; }
+        public string? Email { get; init; }
+    }
+
+    public record ChangePasswordInputDto
+    {
+        public required string CurrentPassword { get; init; }
+        public required string NewPassword { get; init; }
+    }
+
+    /// <summary>
+    /// Deleting an account needs the password, which is why it is a POST with a
+    /// body rather than a DELETE — and why it is not really a deletion.
+    /// </summary>
+    public record DeleteAccountInputDto
+    {
+        public required string Password { get; init; }
+    }
+
     // ── Files ─────────────────────────────────────────────────────────────────
 
     public record UploadedFileDto

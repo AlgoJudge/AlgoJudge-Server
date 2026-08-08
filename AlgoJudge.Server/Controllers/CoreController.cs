@@ -32,13 +32,86 @@ namespace AlgoJudge.Server.Controllers
     [ApiController]
     [Route("account")]
     [Authorize]
-    public class AccountController(ICurrentUserService currentUser) : ControllerBase
+    public class AccountController(
+        ICurrentUserService currentUser,
+        IAccountService accounts,
+        Microsoft.AspNetCore.Identity.SignInManager<Database.Models.User> signIn
+    ) : ControllerBase
     {
         [HttpGet]
         [ProducesResponseType<SessionDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status401Unauthorized)]
         public async Task<SessionDto> Get(CancellationToken ct) =>
             Projections.Session(await currentUser.RequireAsync(ct));
+
+        [HttpPut]
+        [ProducesResponseType<SessionDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<SessionDto> Update([FromBody] ProfileInputDto input, CancellationToken ct) =>
+            accounts.UpdateProfileAsync(input, ct);
+
+        [HttpPost("password")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<IActionResult> ChangePassword(
+            [FromBody] ChangePasswordInputDto input, CancellationToken ct)
+        {
+            await accounts.ChangePasswordAsync(input.CurrentPassword, input.NewPassword, ct);
+            return NoContent();
+        }
+
+        /// <summary>Everything held about the signed-in person, as a document they can keep.</summary>
+        [HttpGet("export")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> Export(CancellationToken ct)
+        {
+            var document = await accounts.ExportAsync(ct);
+            return File(document, "application/json", "algojudge-export.json");
+        }
+
+        /// <summary>
+        /// Anonymises the account and ends the session. Immediate and
+        /// irreversible: submissions and results survive under an identifier that
+        /// no longer names anybody.
+        /// <para>
+        /// A POST, not a DELETE, because it carries the password in a body — and
+        /// because it is not a deletion.
+        /// </para>
+        /// </summary>
+        [HttpPost("delete")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<IActionResult> Delete(
+            [FromBody] DeleteAccountInputDto input, CancellationToken ct)
+        {
+            await accounts.DeleteAsync(input.Password, ct);
+            await signIn.SignOutAsync();
+            return NoContent();
+        }
+    }
+
+    /// <summary>
+    /// Signing out.
+    /// <para>
+    /// Not part of `MapIdentityApi`, which gives registration and sign-in and
+    /// nothing else — so without this, signing out only forgets the session in
+    /// one tab while the cookie stays valid everywhere.
+    /// </para>
+    /// </summary>
+    [ApiController]
+    [Route("identity")]
+    [Authorize]
+    public class SignOutController(
+        Microsoft.AspNetCore.Identity.SignInManager<Database.Models.User> signIn
+    ) : ControllerBase
+    {
+        [HttpPost("logout")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> Logout()
+        {
+            await signIn.SignOutAsync();
+            return NoContent();
+        }
     }
 
     /// <summary>The permission catalogue, and what the caller holds.</summary>

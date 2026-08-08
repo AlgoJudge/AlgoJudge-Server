@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using Xunit.Sdk;
 using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Database.Models;
+using Microsoft.EntityFrameworkCore;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
@@ -70,59 +72,130 @@ public class EndToEndTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    /// <summary>
+    /// The whole milestone, on an activity this test builds for itself.
+    /// <para>
+    /// Its own activity rather than the seeded one, for two reasons. It makes the
+    /// test independent of what every other test in the collection has submitted
+    /// — they share a database — and it exercises the half of the stated
+    /// criterion the seed would otherwise skip: <b>a manager creates an activity
+    /// and a problem</b>.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task Submitting_queues_a_job_that_a_runner_claims_and_reports_once()
+    public async Task A_manager_builds_an_activity_a_participant_submits_and_a_runner_judges_it()
     {
-        var participant = await SignInAsync(Seeder.DevParticipantLogin, Seeder.DevParticipantPassword);
+        var slug = "E2E-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var admin = await SignInAsync(Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        // ── the participant sees the seeded round and its problem ─────────────
-        var series = await participant.GetFromJsonAsync<JsonElement>("/api/v1/activities/DEV-2026/series");
-        var round = series.EnumerateArray().Single();
-        Assert.True(round.GetProperty("isOpen").GetBoolean());
+        // ── a manager builds it ──────────────────────────────────────────────
+        var activity = await Post(admin, "/api/v1/activities", new
+        {
+            slug,
+            name = "End to end",
+            type = "contest@1",
+            rankingType = "icpc",
+            timeZone = "Europe/Warsaw",
+            joinPolicy = "open",
+            languages = new[] { "python" },
+            attachmentVisibility = new[] { new { name = "source", visibility = "participant" } },
+        });
+        Assert.Equal(slug, activity.GetProperty("slug").GetString());
 
-        var problems = round.GetProperty("problems").EnumerateArray().ToList();
-        var problem = Assert.Single(problems);
-        Assert.Equal("A", problem.GetProperty("slug").GetString());
-        // Worth 50 in this round, and untouched before anybody submits.
-        Assert.Equal("untouched", problem.GetProperty("status").GetString());
+        var round = await Post(admin, $"/api/v1/activities/{slug}/series", new
+        {
+            slug = "r1",
+            name = "Round 1",
+            startDate = DateTime.UtcNow.AddHours(-1).ToString("O"),
+            endDate = DateTime.UtcNow.AddDays(1).ToString("O"),
+        });
+        var roundId = round.GetProperty("id").GetString()!;
 
-        // ── the participant submits ──────────────────────────────────────────
+        var problem = await Post(admin, "/api/v1/problems", new
+        {
+            slug = "sum-" + slug.ToLowerInvariant(),
+            name = "Sum",
+            type = "standard-io@1",
+        });
+        var problemId = problem.GetProperty("id").GetString()!;
+
+        // The statement and the package are uploaded first and published by
+        // reference — a version is not built up after the fact.
+        var statement = await UploadAsync(admin, "content.md", "# Sum\n\nAdd them.\n");
+        var package = await UploadAsync(admin, "package.zip", "pretend-archive");
+
+        var version = await Post(admin, $"/api/v1/problems/{problemId}/versions", new
+        {
+            note = "First",
+            statements = new[] { new { fileId = statement } },
+            config = new { format = "standard-io", version = 1, limits = new { timeMs = 2000, memoryKib = 262144 } },
+            package = new { fileId = package },
+        });
+        Assert.Equal(1, version.GetProperty("version").GetInt32());
+        Assert.True(version.GetProperty("hasPackage").GetBoolean());
+
+        // Attaching pins the current version and says what it is worth here.
+        var attached = await Post(admin, $"/api/v1/series/{roundId}/problems", new
+        {
+            problemId,
+            slug = "A",
+            maxPoints = 50,
+        });
+        var assignment = Assert.Single(attached.GetProperty("problems").EnumerateArray().ToList());
+        Assert.Equal(version.GetProperty("id").GetString(), assignment.GetProperty("pinnedProblemVersionId").GetString());
+
+        // The round is shut until the scheduler opens it, so this test opens it
+        // the way the scheduler will.
+        await using (var context = server.NewContext())
+        {
+            var series = await context.Series.FirstAsync(s => s.Id == Guid.Parse(roundId));
+            series.IsOpen = true;
+            series.StartAnnouncedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        // ── a participant joins and submits ──────────────────────────────────
+        var participant = await Sign.NewAccountAsync(server, "e2e-" + slug.ToLowerInvariant());
+        var joined = await participant.PostAsJsonAsync($"/api/v1/activities/{slug}/enrolment", new { });
+        await Sign.Succeeded(joined);
+
+        var series2 = await participant.GetFromJsonAsync<JsonElement>($"/api/v1/activities/{slug}/series");
+        var visible = Assert.Single(series2.EnumerateArray().ToList());
+        Assert.True(visible.GetProperty("isOpen").GetBoolean());
+        var column = Assert.Single(visible.GetProperty("problems").EnumerateArray().ToList());
+        Assert.Equal("untouched", column.GetProperty("status").GetString());
+
         const string source = "print(sum(map(int, input().split())))\n";
-        var submitted = await SubmitAsync(participant, "python", source);
+        var submitted = await SubmitToAsync(participant, slug, "python", source);
         var submissionId = submitted.GetProperty("id").GetString()!;
         Assert.Equal("queued", submitted.GetProperty("state").GetString());
         // Nothing has judged it, so there is no score — and absent is not zero.
         Assert.Equal(JsonValueKind.Null, submitted.GetProperty("score").ValueKind);
 
-        // ── a Runner registers, is approved, and claims it ───────────────────
+        // ── a Runner registers, is approved, and takes this job ─────────────
         var runner = await RegisterRunnerAsync();
-        var job = await runner.ClaimAsync();
+        var job = await runner.ClaimUntilAsync(submissionId);
 
-        Assert.Equal(submissionId, job.GetProperty("submissionId").GetString());
         Assert.Equal("standard-io@1", job.GetProperty("problemType").GetString());
         Assert.Equal(1, job.GetProperty("attempt").GetInt32());
+        Assert.Contains(
+            job.GetProperty("files").EnumerateArray(),
+            f => f.GetProperty("name").GetString() == "source");
+        // The merged configuration chain, which the Server carried without
+        // reading either layer.
+        Assert.Equal(2000, job.GetProperty("config").GetProperty("limits").GetProperty("timeMs").GetInt32());
 
-        // The submitted source travels with the job, under the name `source`.
-        var files = job.GetProperty("files").EnumerateArray().ToList();
-        Assert.Contains(files, f => f.GetProperty("name").GetString() == "source");
-
-        // The merged configuration chain, opaque to the Server.
-        Assert.Equal(1000, job.GetProperty("config").GetProperty("limits").GetProperty("timeMs").GetInt32());
-
-        // Claiming moves the submission, and the participant can see that.
         var running = await participant.GetFromJsonAsync<JsonElement>(
-            $"/api/v1/activities/DEV-2026/submissions/{submissionId}");
+            $"/api/v1/activities/{slug}/submissions/{submissionId}");
         Assert.Equal("running", running.GetProperty("state").GetString());
 
-        // ── it reports ───────────────────────────────────────────────────────
-        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+        // ── it reports, and reporting again changes nothing ─────────────────
         var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
 
         var accepted = await runner.ReportAsync(jobId, leaseToken, score: 80, verdict: "Accepted");
         Assert.False(accepted.GetProperty("duplicate").GetBoolean());
-        Assert.Equal("completed", accepted.GetProperty("state").GetString());
 
-        // ── and reporting again is the same answer, not a second result ──────
         var repeat = await runner.ReportAsync(jobId, leaseToken, score: 80, verdict: "Accepted");
         Assert.True(repeat.GetProperty("duplicate").GetBoolean());
         Assert.Equal(
@@ -131,12 +204,13 @@ public class EndToEndTests(ServerFixture server)
 
         await using (var context = server.NewContext())
         {
-            Assert.Equal(1, context.Results.Count());
+            var forThisJob = await context.Results.CountAsync(r => r.EvaluationJobId == Guid.Parse(jobId));
+            Assert.Equal(1, forThisJob);
         }
 
-        // ── the participant sees a verdict, rescaled into the round's scale ──
+        // ── and the participant sees a verdict in this round's scale ────────
         var finished = await participant.GetFromJsonAsync<JsonElement>(
-            $"/api/v1/activities/DEV-2026/submissions/{submissionId}");
+            $"/api/v1/activities/{slug}/submissions/{submissionId}");
 
         Assert.Equal("completed", finished.GetProperty("state").GetString());
         Assert.Equal("Accepted", finished.GetProperty("verdict").GetString());
@@ -303,10 +377,20 @@ public class EndToEndTests(ServerFixture server)
         var activity = await admin.GetFromJsonAsync<JsonElement>("/api/v1/manager/activities/DEV-2026");
         Assert.Equal("DEV-2026", activity.GetProperty("slug").GetString());
 
-        // The join password is manager-only, and absent under an open policy.
-        Assert.Equal("open", activity.GetProperty("joinPolicy").GetString());
-        // Staff are excluded from the participant count.
-        Assert.Equal(1, activity.GetProperty("participantCount").GetInt32());
+        // Staff are excluded from the participant count — read from the grants,
+        // never stored. Compared against the grants rather than a fixed number,
+        // because other tests in this collection enrol accounts of their own.
+        await using var context = server.NewContext();
+        var expected = await context.Grants.CountAsync(g =>
+            g.Activity!.Slug == "DEV-2026" && !g.IsSystem && g.State == GrantState.Active);
+
+        Assert.Equal(expected, activity.GetProperty("participantCount").GetInt32());
+        Assert.True(expected >= 1);
+
+        // And the manager grant the seed created is systemic, so it is not in it.
+        var systemic = await context.Grants.CountAsync(g =>
+            g.Activity!.Slug == "DEV-2026" && g.IsSystem && g.State == GrantState.Active);
+        Assert.True(systemic >= 1);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -336,13 +420,35 @@ public class EndToEndTests(ServerFixture server)
         };
     }
 
-    private static async Task<JsonElement> SubmitAsync(HttpClient client, string language, string source)
+    private static async Task<JsonElement> SubmitAsync(HttpClient client, string language, string source) =>
+        await SubmitToAsync(client, "DEV-2026", language, source);
+
+    private static async Task<JsonElement> SubmitToAsync(
+        HttpClient client, string activitySlug, string language, string source)
     {
         using var content = Multipart(language, source);
         var response = await client.PostAsync(
-            "/api/v1/activities/DEV-2026/problems/A/submissions", content);
+            $"/api/v1/activities/{activitySlug}/problems/A/submissions", content);
         await Succeeded(response);
         return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    /// <summary>Uploads bytes and answers with the stored file's id.</summary>
+    private static async Task<string> UploadAsync(HttpClient client, string name, string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        var checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+        using var content = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(bytes), "file", name },
+            { new StringContent(checksum), "sha256" },
+        };
+
+        var response = await client.PostAsync("/api/v1/files", content);
+        await Succeeded(response);
+        var stored = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return stored.GetProperty("id").GetString()!;
     }
 
     private static async Task<JsonElement> Post(HttpClient client, string path, object body)
@@ -453,6 +559,26 @@ public class EndToEndTests(ServerFixture server)
 
         public async Task<JsonElement> ClaimAsync() =>
             await TryClaimAsync() ?? throw new InvalidOperationException("Expected a job to claim");
+
+        /// <summary>
+        /// Claims until this submission's job comes up.
+        /// <para>
+        /// The queue is shared with every other test in the collection, and a
+        /// Runner takes whatever is oldest. Claiming past other people's work is
+        /// what a real Runner does; taking the first job and asserting it is ours
+        /// is what makes a suite order-dependent.
+        /// </para>
+        /// </summary>
+        public async Task<JsonElement> ClaimUntilAsync(string submissionId)
+        {
+            for (var attempt = 0; attempt < 50; attempt++)
+            {
+                var job = await TryClaimAsync();
+                if (job is null) break;
+                if (job.Value.GetProperty("submissionId").GetString() == submissionId) return job.Value;
+            }
+            throw new XunitException($"No job for submission {submissionId} came up");
+        }
 
         public async Task<JsonElement> ReportAsync(string jobId, string leaseToken, double score, string verdict)
         {

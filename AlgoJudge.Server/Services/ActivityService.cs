@@ -17,6 +17,7 @@ namespace AlgoJudge.Server.Services
         Task<PageDto<ManagedActivityDto>> ListManagedAsync(PageQuery paging, string? search, bool includeArchived, CancellationToken ct);
         Task<ManagedActivityDto> GetManagedAsync(string idOrSlug, CancellationToken ct);
         Task<ManagedActivityDto> CreateAsync(ActivityInputDto input, CancellationToken ct);
+        Task<ActivityDto> EnrolAsync(string idOrSlug, EnrolInputDto input, CancellationToken ct);
         Task<Activity> ResolveAsync(string idOrSlug, CancellationToken ct);
     }
 
@@ -296,6 +297,87 @@ namespace AlgoJudge.Server.Services
             await context.SaveChangesAsync(ct);
             return await ManagedAsync(activity, ct);
         }
+
+        /// <summary>
+        /// Self-enrolment. A manager may always enrol somebody by hand — that is
+        /// what a grant is — so this is the answer to <b>self</b>-enrolment and
+        /// nothing else.
+        /// </summary>
+        public async Task<ActivityDto> EnrolAsync(
+            string idOrSlug, EnrolInputDto input, CancellationToken ct)
+        {
+            var activity = await ResolveAsync(idOrSlug, ct);
+            var user = await currentUser.RequireAsync(ct);
+
+            if (activity.ArchivedAt is not null)
+            {
+                throw new ConflictException("An archived activity accepts no enrolment", "activity.archived");
+            }
+
+            var existing = await context.Grants
+                .FirstOrDefaultAsync(g => g.UserId == user.Id && g.ActivityId == activity.Id, ct);
+
+            if (existing is { State: GrantState.Active })
+            {
+                // Already in. Not an error — a link gets opened twice — so the
+                // activity comes back as they already see it.
+                return await ProjectAsync(activity, ct);
+            }
+
+            // An invitation is accepted rather than re-checked: the policy
+            // governs who may let themselves in, and somebody already invited
+            // was let in by a manager.
+            if (existing is { State: GrantState.Invited })
+            {
+                existing.State = GrantState.Active;
+                await context.SaveChangesAsync(ct);
+                return await ProjectAsync(activity, ct);
+            }
+
+            switch (activity.JoinPolicy)
+            {
+                case JoinPolicy.Closed:
+                    throw new ForbiddenActionException(
+                        "Only an organiser can enrol somebody here", "enrolment.closed");
+
+                case JoinPolicy.Password:
+                    // Compared in fixed time. It is a join code rather than a
+                    // credential, but it is still a secret somebody could guess
+                    // at, and a comparison that returns early tells them how far
+                    // they got.
+                    var given = System.Text.Encoding.UTF8.GetBytes(input.Password ?? "");
+                    var wanted = System.Text.Encoding.UTF8.GetBytes(activity.JoinPassword ?? "");
+                    if (wanted.Length == 0
+                        || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(given, wanted))
+                    {
+                        throw new ForbiddenActionException(
+                            "The join password is wrong", "enrolment.password");
+                    }
+                    break;
+            }
+
+            context.Grants.Add(new Grant
+            {
+                UserId = user.Id,
+                ActivityId = activity.Id,
+                Permissions = JsonSerializer.Serialize(Permissions.ParticipantTemplate),
+                CreatedFromTemplate = "participant",
+                // A participant set carries nothing a participant does not hold,
+                // so this is false — and that is what puts them in the ranking.
+                IsSystem = false,
+                State = GrantState.Active,
+            });
+            await context.SaveChangesAsync(ct);
+
+            return await ProjectAsync(activity, ct);
+        }
+
+        private async Task<ActivityDto> ProjectAsync(Activity activity, CancellationToken ct) =>
+            Projections.Activity(
+                activity,
+                Membership(await MembershipsAsync(ct), activity.Id),
+                clock.GetUtcNow().UtcDateTime,
+                await DocumentsAsync(activity.Id, ct));
 
         internal static DateTime? ParseInstant(string? value) =>
             string.IsNullOrWhiteSpace(value)

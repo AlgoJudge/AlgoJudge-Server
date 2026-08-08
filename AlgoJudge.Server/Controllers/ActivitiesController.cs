@@ -24,9 +24,78 @@ namespace AlgoJudge.Server.Controllers
         IActivityService activities,
         ISeriesService series,
         IProblemService problems,
-        ISubmissionService submissions
+        ISubmissionService submissions,
+        IResultsService results,
+        IQuestionService questions
     ) : ControllerBase
     {
+        /// <summary>
+        /// Every result the reader may see, from which a board is computed.
+        /// <para>
+        /// The Server sends <b>results, not a ranking</b>: which board they add
+        /// up to is the activity's `rankingType`, and a Server computing an ICPC
+        /// penalty would be encoding the semantics of one ranking type.
+        /// </para>
+        /// <para>
+        /// What stays here is disclosure: the window decides whether there is an
+        /// answer, `scoreVisibility` decides whose results are in it, and the
+        /// freeze withholds outcomes. `seriesId` narrows to one round.
+        /// </para>
+        /// </summary>
+        [HttpGet("{idOrSlug}/results")]
+        [ProducesResponseType<ActivityResultsDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        public Task<ActivityResultsDto> Results(
+            string idOrSlug, [FromQuery] Guid? seriesId, CancellationToken ct) =>
+            results.GetAsync(idOrSlug, seriesId, ct);
+
+        /// <summary>
+        /// Puts the signed-in reader into the activity themselves.
+        /// <para>
+        /// Answers with the activity as they now see it, so the page redraws from
+        /// what came back. A wrong or missing password is refused here — the
+        /// Client sends what the form collected and checks nothing.
+        /// </para>
+        /// </summary>
+        [HttpPost("{idOrSlug}/enrolment")]
+        [ProducesResponseType<ActivityDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        public Task<ActivityDto> Enrol(
+            string idOrSlug, [FromBody] EnrolInputDto input, CancellationToken ct) =>
+            activities.EnrolAsync(idOrSlug, input, ct);
+
+        [HttpGet("{idOrSlug}/questions")]
+        [ProducesResponseType<PageDto<QuestionDto>>(StatusCodes.Status200OK)]
+        public Task<PageDto<QuestionDto>> Questions(
+            string idOrSlug,
+            [FromQuery] int page,
+            [FromQuery] int pageSize,
+            [FromQuery] string? search,
+            [FromQuery] string? kind,
+            [FromQuery] Guid? seriesId,
+            [FromQuery] Guid? problemId,
+            CancellationToken ct) =>
+            questions.ListAsync(
+                idOrSlug, new PageQuery { Page = page, PageSize = pageSize },
+                search, kind, seriesId, problemId, ct);
+
+        [HttpPost("{idOrSlug}/questions")]
+        [ProducesResponseType<QuestionDto>(StatusCodes.Status201Created)]
+        public async Task<ActionResult<QuestionDto>> Ask(
+            string idOrSlug, [FromBody] AskQuestionInputDto input, CancellationToken ct)
+        {
+            var asked = await questions.AskAsync(idOrSlug, input, ct);
+            return Created($"/api/v1/activities/{idOrSlug}/questions/{asked.Id}", asked);
+        }
+
+        [HttpPost("{idOrSlug}/questions/{questionId:guid}/read")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> MarkRead(string idOrSlug, Guid questionId, CancellationToken ct)
+        {
+            await questions.MarkReadAsync(idOrSlug, questionId, ct);
+            return NoContent();
+        }
+
         /// <summary>
         /// The activities this reader may see.
         /// <para>
