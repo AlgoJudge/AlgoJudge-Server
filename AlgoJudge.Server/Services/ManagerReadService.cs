@@ -51,9 +51,56 @@ namespace AlgoJudge.Server.Services
         IActivityService activities,
         ISubmissionService submissions,
         IEventHub events,
+        IEventAudience audience,
         TimeProvider clock
     ) : IManagerReadService
     {
+        /// <summary>
+        /// Tells whoever watches the Runners that one changed.
+        /// <para>
+        /// Runners belong to the installation rather than to an activity, so the
+        /// audience is everybody holding <c>runner:read</c> anywhere. A Runner
+        /// going down is the clearest case for this: nobody caused it, so nobody
+        /// is looking at a screen they just acted on.
+        /// </para>
+        /// </summary>
+        private async Task AnnounceRunnerAsync(
+            ManagedRunnerDto? runner, string? deletedId, CancellationToken ct)
+        {
+            var readers = await audience.AnywhereAsync(Permissions.RunnerRead, ct);
+            if (readers.Count == 0) return;
+
+            await events.SendToUsersAsync(readers, EventTypes.RunnerChanged,
+                deletedId is null ? new { runner } : new { deletedId }, ct);
+        }
+
+        /// <summary>
+        /// The manager's view of a submission. Distinct from
+        /// <c>submissionStateChanged</c>, which is the author's own.
+        /// </summary>
+        private async Task AnnounceSubmissionAsync(
+            Guid activityId, ManagedSubmissionDetailDto submission, CancellationToken ct)
+        {
+            var readers = await audience.InActivityAsync(activityId, Permissions.SubmissionReadAll, ct);
+            if (readers.Count == 0) return;
+
+            await events.SendToUsersAsync(
+                readers, EventTypes.SubmissionChanged, new { submission }, ct);
+        }
+
+        /// <summary>
+        /// The manager's view of a question, beside the participant's own
+        /// announcement of it.
+        /// </summary>
+        private async Task AnnounceManagedQuestionAsync(
+            Guid activityId, ManagedQuestionDto? question, string? deletedId, CancellationToken ct)
+        {
+            var readers = await audience.InActivityAsync(activityId, Permissions.QuestionReadAll, ct);
+            if (readers.Count == 0) return;
+
+            await events.SendToUsersAsync(readers, EventTypes.QuestionChanged,
+                deletedId is null ? new { question } : new { deletedId }, ct);
+        }
         // ── submissions ─────────────────────────────────────────────────────
 
         public async Task<PageDto<ManagedSubmissionDto>> ListSubmissionsAsync(
@@ -339,8 +386,13 @@ namespace AlgoJudge.Server.Services
             job.LeaseExpiresAt = null;
 
             await context.SaveChangesAsync(ct);
+            // Two audiences, two facts: the author is told their submission
+            // stopped, and whoever watches the activity's submissions is told
+            // the row changed.
             await submissions.AnnounceAsync(submissionId, ct);
-            return await GetSubmissionAsync(submissionId, ct);
+            var detail = await GetSubmissionAsync(submissionId, ct);
+            await AnnounceSubmissionAsync(job.Submission!.SeriesProblem!.ActivityId, detail, ct);
+            return detail;
         }
 
         // ── questions ───────────────────────────────────────────────────────
@@ -479,7 +531,9 @@ namespace AlgoJudge.Server.Services
             question.IsPublished = published;
             await context.SaveChangesAsync(ct);
             if (published) await AnnounceQuestionAsync(question, ct);
-            return await ProjectQuestionAsync(await LoadQuestionAsync(id, ct), ct);
+            var projectedQuestion = await ProjectQuestionAsync(await LoadQuestionAsync(id, ct), ct);
+            await AnnounceManagedQuestionAsync(question.ActivityId, projectedQuestion, null, ct);
+            return projectedQuestion;
         }
 
         /// <summary>
@@ -564,8 +618,11 @@ namespace AlgoJudge.Server.Services
                 throw new ConflictException("A question cannot be deleted", "question.notAnnouncement");
             }
 
+            var activityId = question.ActivityId;
+            var removedQuestion = Wire.Id(question.Id);
             context.Questions.Remove(question);
             await context.SaveChangesAsync(ct);
+            await AnnounceManagedQuestionAsync(activityId, null, removedQuestion, ct);
         }
 
         private async Task<Question> LoadQuestionAsync(Guid id, CancellationToken ct) =>
@@ -721,7 +778,9 @@ namespace AlgoJudge.Server.Services
             runner.ApprovedByUserId = currentUser.UserId;
             await context.SaveChangesAsync(ct);
 
-            return await ProjectRunnerAsync(runner, ct);
+            var projectedRunner = await ProjectRunnerAsync(runner, ct);
+            await AnnounceRunnerAsync(projectedRunner, null, ct);
+            return projectedRunner;
         }
 
         /// <summary>
@@ -759,7 +818,9 @@ namespace AlgoJudge.Server.Services
             await context.SaveChangesAsync(ct);
             foreach (var job in held) await submissions.AnnounceAsync(job.SubmissionId, ct);
 
-            return await ProjectRunnerAsync(runner, ct);
+            var projectedRunner = await ProjectRunnerAsync(runner, ct);
+            await AnnounceRunnerAsync(projectedRunner, null, ct);
+            return projectedRunner;
         }
 
         public async Task<ManagedRunnerDto> SetTagsAsync(
@@ -774,7 +835,9 @@ namespace AlgoJudge.Server.Services
             // the Runner reporting it.
             runner.Tags = tags.Distinct().ToList();
             await context.SaveChangesAsync(ct);
-            return await ProjectRunnerAsync(runner, ct);
+            var projectedRunner = await ProjectRunnerAsync(runner, ct);
+            await AnnounceRunnerAsync(projectedRunner, null, ct);
+            return projectedRunner;
         }
 
         public async Task ForgetRunnerAsync(Guid id, CancellationToken ct)
@@ -789,8 +852,10 @@ namespace AlgoJudge.Server.Services
                 throw new ConflictException("Revoke it before forgetting it", "runner.notRevoked");
             }
 
+            var forgotten = Wire.Id(runner.Id);
             context.Runners.Remove(runner);
             await context.SaveChangesAsync(ct);
+            await AnnounceRunnerAsync(null, forgotten, ct);
         }
 
         public async Task<string> RunnerAttachmentAsync(

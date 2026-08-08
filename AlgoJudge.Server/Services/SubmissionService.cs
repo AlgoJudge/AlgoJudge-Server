@@ -31,7 +31,8 @@ namespace AlgoJudge.Server.Services
         IFileService files,
         ISeriesGate gate,
         IResultsService results,
-        IEventHub events
+        IEventHub events,
+        IEventAudience audience
     ) : ISubmissionService
     {
         public async Task<PageDto<SubmissionSummaryDto>> ListAsync(
@@ -283,24 +284,49 @@ namespace AlgoJudge.Server.Services
 
             var recipients = new HashSet<string> { submission.UserId };
 
-            // Staff of this activity see every submission move. Read from the
-            // grants, and only those that actually carry the permission — a
-            // manager whose right to read submissions was taken away is a manager
-            // this event does not reach.
-            var staff = await context.Grants.AsNoTracking()
-                .Where(g => g.ActivityId == activityId && g.IsSystem && g.State == GrantState.Active)
-                .Select(g => new { g.UserId, g.Permissions })
-                .ToListAsync(ct);
-
-            foreach (var grant in staff)
+            // Staff of this activity see every submission move. Resolved by the
+            // shared audience rather than a query of its own: this one read only
+            // the activity's `IsSystem` grants, so an administrator holding a
+            // system grant and nothing else never heard about a submission they
+            // are entitled to see.
+            foreach (var reader in await audience.InActivityAsync(
+                activityId, Permissions.SubmissionReadAll, ct))
             {
-                if (grant.Permissions.Contains(Permissions.SubmissionReadAll, StringComparison.Ordinal))
-                {
-                    recipients.Add(grant.UserId);
-                }
+                recipients.Add(reader);
             }
 
             await events.SendToUsersAsync(recipients, EventTypes.SubmissionStateChanged, payload, ct);
+
+            // And what it did to their standing on the problem, which is a
+            // different fact on a different screen: the submissions list shows
+            // the attempt, the problem list shows the best of them. Only the
+            // author — a status is one reader's own.
+            var assignment = submission.SeriesProblem;
+            var mine = await context.Submissions
+                .AsNoTracking()
+                .Where(s => s.SeriesProblemId == assignment.Id && s.UserId == submission.UserId)
+                .Include(s => s.Jobs).ThenInclude(j => j.Result)
+                .ToListAsync(ct);
+
+            // `Scoring` reads submissions, not the jobs under them: the best of
+            // what somebody sent, and how many times they sent it.
+            var best = Scoring.Best(mine);
+            var maxPoints = Scoring.MaxPoints(assignment);
+
+            await events.SendToUserAsync(submission.UserId, EventTypes.ProblemStatusChanged, new
+            {
+                activityId = Wire.Id(activityId),
+                problem = new ProblemSummaryDto
+                {
+                    Id = Wire.Id(assignment.Id),
+                    Slug = assignment.Slug,
+                    Name = assignment.Name ?? assignment.Problem?.Name ?? assignment.Slug,
+                    Status = Scoring.Status(mine, best),
+                    BestScore = Scoring.Rescale(best, maxPoints),
+                    MaxScore = mine.Count == 0 ? null : maxPoints,
+                    Attempts = mine.Count,
+                },
+            }, ct);
 
             // And the board, for everybody entitled to it — each getting exactly
             // what `GET /results` would have given them, because the socket is

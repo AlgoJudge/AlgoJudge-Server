@@ -3,6 +3,7 @@ using AlgoJudge.Server.Api;
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services.Models;
 using AlgoJudge.Server.Utils;
@@ -34,9 +35,34 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         IActivityService activities,
         ISeriesGate gate,
+        IEventHub events,
+        IEventAudience audience,
         TimeProvider clock
     ) : IProblemService
     {
+
+        /// <summary>
+        /// Tells whoever may read the library that it changed.
+        /// <para>
+        /// The audience is everybody holding <c>problem:read:all</c> <b>anywhere</b>:
+        /// the library is not an activity's, so there is no activity to narrow
+        /// to. After the save, so a screen refetching on the event reads what has
+        /// already been committed.
+        /// </para>
+        /// <para>
+        /// Silent until 2026-08-08 — `ManagerProblemsPage` listened for this and
+        /// no write ever sent one.
+        /// </para>
+        /// </summary>
+        private async Task AnnounceProblemAsync(
+            ManagedProblemDto? problem, string? deletedId, CancellationToken ct)
+        {
+            var readers = await audience.AnywhereAsync(Permissions.ProblemReadAll, ct);
+            if (readers.Count == 0) return;
+
+            await events.SendToUsersAsync(readers, EventTypes.ProblemChanged,
+                deletedId is null ? new { problem } : new { deletedId }, ct);
+        }
         public async Task<PageDto<ManagedProblemDto>> ListAsync(
             PageQuery paging, string? search, bool mineOnly, bool includeArchived, CancellationToken ct)
         {
@@ -123,7 +149,9 @@ namespace AlgoJudge.Server.Services
             };
             context.Problems.Add(problem);
             await context.SaveChangesAsync(ct);
-            return await ManagedAsync(problem, ct);
+            var announced = await ManagedAsync(problem, ct);
+            await AnnounceProblemAsync(announced, null, ct);
+            return announced;
         }
 
         /// <summary>
@@ -310,7 +338,9 @@ namespace AlgoJudge.Server.Services
             // problem they cannot read.
 
             await context.SaveChangesAsync(ct);
-            return await ManagedAsync(problem, ct);
+            var announced = await ManagedAsync(problem, ct);
+            await AnnounceProblemAsync(announced, null, ct);
+            return announced;
         }
 
         /// <summary>
@@ -332,8 +362,10 @@ namespace AlgoJudge.Server.Services
                     "problem.attached");
             }
 
+            var removed = Wire.Id(problem.Id);
             context.Problems.Remove(problem);
             await context.SaveChangesAsync(ct);
+            await AnnounceProblemAsync(null, removed, ct);
         }
 
         /// <summary>
@@ -348,7 +380,9 @@ namespace AlgoJudge.Server.Services
 
             problem.ArchivedAt = archived ? clock.GetUtcNow().UtcDateTime : null;
             await context.SaveChangesAsync(ct);
-            return await ManagedAsync(problem, ct);
+            var announced = await ManagedAsync(problem, ct);
+            await AnnounceProblemAsync(announced, null, ct);
+            return announced;
         }
 
         /// <summary>
@@ -460,7 +494,9 @@ namespace AlgoJudge.Server.Services
             }
 
             await context.SaveChangesAsync(ct);
-            return await ManagedAsync(await LoadAsync(id, ct), ct);
+            var shared = await ManagedAsync(await LoadAsync(id, ct), ct);
+            await AnnounceProblemAsync(shared, null, ct);
+            return shared;
         }
 
         public async Task<IReadOnlyList<ManagedProblemVersionDto>> ListVersionsAsync(
