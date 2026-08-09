@@ -113,6 +113,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<ISeriesService, SeriesService>();
             builder.Services.AddScoped<IProblemService, ProblemService>();
             builder.Services.AddScoped<IResultsService, ResultsService>();
+            builder.Services.AddScoped<ITrialService, TrialService>();
             builder.Services.AddScoped<IQuestionService, QuestionService>();
             builder.Services.AddScoped<IAccountService, AccountService>();
             builder.Services.AddScoped<IDocumentService, DocumentService>();
