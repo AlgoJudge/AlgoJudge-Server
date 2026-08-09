@@ -55,6 +55,18 @@ namespace AlgoJudge.Server.Authorization
         public const string ActivityDelete = "activity:delete";
         public const string ActivityEnroll = "activity:enroll";
 
+        /// <summary>
+        /// May ask for a package to be run without it being anybody's problem.
+        /// <para>
+        /// <b>Absent from the participant template on purpose.</b> A trial
+        /// spends a Runner, so opening it is a manager's decision in one
+        /// activity rather than a property of the installation — which is what
+        /// granting it in an activity already expresses, with no new column
+        /// anywhere.
+        /// </para>
+        /// </summary>
+        public const string TrialRun = "trial:run";
+
         public const string ProblemReadOwn = "problem:read:own";
         public const string ProblemReadAll = "problem:read:all";
         public const string ProblemCreate = "problem:create";
@@ -124,6 +136,27 @@ namespace AlgoJudge.Server.Authorization
             RankingRead,
         ];
 
+        /// <summary>
+        /// Keys a participant may hold **without becoming staff**.
+        /// <para>
+        /// <see cref="IsStaff"/> used to measure against
+        /// <see cref="ParticipantKeys"/> alone, which conflated two different
+        /// ideas: what the participant template grants by default, and what
+        /// makes somebody staff. They came apart the moment a permission existed
+        /// that a participant may be given without it changing who they are —
+        /// granting <c>trial:run</c> would have made every participant staff,
+        /// and staff do not appear in a ranking. **A whole activity's board
+        /// would have emptied because somebody was allowed to time their own
+        /// code.**
+        /// </para>
+        /// <para>
+        /// Staff is about seeing or changing other people's work. Spending your
+        /// own time on your own package is not that.
+        /// </para>
+        /// </summary>
+        private static readonly HashSet<string> NotStaffConferring =
+            [.. ParticipantKeys, TrialRun];
+
         private static PermissionDefinition Define(string key, string group, PermissionScope scope) =>
             new(key, group, scope, ParticipantKeys.Contains(key));
 
@@ -135,6 +168,7 @@ namespace AlgoJudge.Server.Authorization
             Define(ActivityArchive, "activity", PermissionScope.Both),
             Define(ActivityDelete, "activity", PermissionScope.Both),
             Define(ActivityEnroll, "activity", PermissionScope.Both),
+            Define(TrialRun, "activity", PermissionScope.Both),
 
             Define(ProblemReadOwn, "problem", PermissionScope.Global),
             Define(ProblemReadAll, "problem", PermissionScope.Global),
@@ -207,7 +241,7 @@ namespace AlgoJudge.Server.Authorization
         /// </para>
         /// </summary>
         public static bool IsStaff(IEnumerable<string> permissions) =>
-            permissions.Any(key => !Participant.Contains(key));
+            permissions.Any(key => !NotStaffConferring.Contains(key));
 
         /// <summary>Whether every key is one the catalogue describes.</summary>
         public static IReadOnlyList<string> Unknown(IEnumerable<string> permissions) =>
