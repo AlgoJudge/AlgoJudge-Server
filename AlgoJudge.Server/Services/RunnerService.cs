@@ -539,6 +539,16 @@ namespace AlgoJudge.Server.Services
         /// is stateless, so a job whose lease runs out is reclaimed and given to
         /// somebody else. A long evaluation renews rather than being cut off.
         /// </para>
+        /// <para>
+        /// <b>Renewing never shortens.</b> This replaced the deadline outright
+        /// until 2026-08-09, so a Runner that claimed for ten minutes and then
+        /// said "still working" asking for one brought its own deadline eight
+        /// minutes closer — and the obvious implementation, a short ping on a
+        /// short interval, left itself a permanent sixty-second margin. One
+        /// pause longer than that and the job goes to a second Runner while the
+        /// first is still computing. A call named "renew" must not be able to do
+        /// that.
+        /// </para>
         /// </summary>
         public async Task<LeaseDto> RenewAsync(
             DbRunner runner, Guid jobId, string leaseToken, int? seconds, CancellationToken ct)
@@ -549,7 +559,7 @@ namespace AlgoJudge.Server.Services
                 ? TimeSpan.FromSeconds(Math.Clamp(requested, 60, MaxLease.TotalSeconds))
                 : DefaultLease;
 
-            job.LeaseExpiresAt = clock.GetUtcNow().UtcDateTime.Add(lease);
+            job.LeaseExpiresAt = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(lease));
             runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
             await context.SaveChangesAsync(ct);
 
@@ -570,10 +580,24 @@ namespace AlgoJudge.Server.Services
             DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct)
         {
             var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
-            job.LeaseExpiresAt = clock.GetUtcNow().UtcDateTime.Add(DefaultLease);
+            // Same rule as renewing, for the same reason: saying "still working"
+            // must never bring the deadline closer.
+            job.LeaseExpiresAt = Later(
+                job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(DefaultLease));
             runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
             await context.SaveChangesAsync(ct);
         }
+
+        /// <summary>
+        /// The later of a deadline already granted and one now asked for.
+        /// <para>
+        /// A Runner that genuinely wants to give a job up early releases it;
+        /// there is no reason to express that by asking for a short renewal, and
+        /// nothing ever did.
+        /// </para>
+        /// </summary>
+        private static DateTime Later(DateTime? current, DateTime proposed) =>
+            current is { } held && held > proposed ? held : proposed;
 
         /// <summary>
         /// The job this Runner is holding under this lease, or a refusal.

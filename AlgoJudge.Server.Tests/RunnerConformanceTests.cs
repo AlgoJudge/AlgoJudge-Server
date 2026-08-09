@@ -303,6 +303,58 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
+    /// Renewing a lease never brings its deadline closer.
+    /// <para>
+    /// It used to. A Runner that claimed for ten minutes and then said "still
+    /// working" asking for one minute moved its own deadline eight minutes
+    /// earlier — so the obvious implementation, a short ping on a short
+    /// interval, left itself a permanent sixty-second margin, and one pause
+    /// longer than that handed the job to a second Runner while the first was
+    /// still computing. Found by a Rust Runner's conformance test asserting the
+    /// opposite and failing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Renewing_a_lease_never_shortens_it()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(4)\n");
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+        var granted = DateTime.Parse(
+            job.GetProperty("leaseExpiresAt").GetString()!,
+            null,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+
+        // The floor is sixty seconds and the claim above took the ten-minute
+        // default, so this asks for far less than is already held.
+        var response = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/lease",
+            new { leaseToken, leaseSeconds = 60 });
+        await Sign.Succeeded(response);
+
+        var renewed = DateTime.Parse(
+            (await response.Content.ReadFromJsonAsync<JsonElement>())
+                .GetProperty("leaseExpiresAt").GetString()!,
+            null,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+
+        // On the microsecond, not on the tick. PostgreSQL stores `timestamp` to
+        // the microsecond and .NET keeps hundred-nanosecond ticks, so a deadline
+        // that has been through the database comes back up to nine ticks earlier
+        // than the one the claim returned straight from memory — with nothing
+        // having moved. A client that compares these exactly is comparing a
+        // stored value against an unstored one.
+        Assert.True(
+            renewed >= granted.AddMicroseconds(-1),
+            $"renewing moved the deadline from {granted:O} back to {renewed:O}");
+    }
+
+    /// <summary>
     /// An infrastructure failure is not a wrong answer. Recording it as a zero
     /// would be a lie about the solution — the submission was never judged.
     /// </summary>
