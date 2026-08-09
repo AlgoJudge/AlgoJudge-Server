@@ -1,0 +1,123 @@
+name: Release
+
+# **A tag is the only thing here that publishes anything.** Pushing one is a
+# person's act; nothing that lands on `main` reaches the registry on its own.
+#
+# The convention is `v<major>.<minor>.<patch>`, and a prerelease is
+# `v1.2.3-rc.1`. The `v*` filter is what enforces the prefix — the arithmetic
+# below only strips it.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  # The one thing in this repository that writes anything outside itself.
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  # **Not cancelled.** A run interrupted between two `docker push` calls leaves
+  # a version half in the registry, which is worse than a duplicate run.
+  cancel-in-progress: false
+
+env:
+  IMAGE: algojudge-server
+
+jobs:
+  image:
+    name: Publish the container image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The ancestry check below reads history, and a shallow clone has none.
+          fetch-depth: 0
+
+      # A tag on a scratch branch is not a release. This is the cheap half of
+      # the gate; the other half is the CI run on the commit itself, which this
+      # workflow deliberately does not reproduce — a tag points at a commit, and
+      # that commit's own run is the evidence.
+      - name: The tag must be on main
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+            echo "$GITHUB_REF_NAME does not point at a commit on main" >&2
+            exit 1
+          }
+
+      - name: Work out the version and the tags
+        id: v
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+
+          # Refused rather than guessed at. `+build` metadata is legal semver
+          # and illegal in a Docker tag, so it is caught here rather than
+          # discovered by a push that fails halfway through.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "$GITHUB_REF_NAME is not v<major>.<minor>.<patch>[-prerelease]" >&2
+            exit 1
+          fi
+
+          case "$version" in
+            # **A prerelease gets its own tag and nothing else.** The point of
+            # one is that somebody has to ask for it by name; `latest` or a
+            # moving major following it would hand it to everybody who did not.
+            *-*) tags="$version" ;;
+            *)   tags="$version ${version%.*} ${version%%.*} latest" ;;
+          esac
+
+          # ghcr rejects a path with a capital letter — `invalid reference
+          # format` — and the owner here is spelled `AlgoJudge`.
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/$owner" >> "$GITHUB_OUTPUT"
+          echo "Publishing $version as: $tags"
+
+      # The build context is the repository root, as the Compose file expects.
+      #
+      # `image.source` is not decoration: it is what makes GitHub attach the
+      # package to this repository, so the package page links back to the code
+      # rather than standing on its own.
+      - name: Build
+        run: |
+          docker build \
+            -f AlgoJudge.Server/Dockerfile \
+            -t "$IMAGE:release" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=${{ steps.v.outputs.version }}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            .
+
+      # **The shallowest check of the three repositories, and it says so.** The
+      # application needs a database to start, so what is proven here is only
+      # that the image carries what it should: the published application, and
+      # the operator's tool with the mode bits `COPY --chmod` gives it. Anything
+      # deeper belongs to the CI run on the commit this tag points at.
+      - name: Check the image carries what it should
+        run: |
+          docker run --rm --entrypoint /bin/bash "$IMAGE:release" \
+            -c 'test -f /app/AlgoJudge.Server.dll'
+
+          usage=$(docker run --rm --entrypoint /usr/local/bin/aj-admin "$IMAGE:release" 2>&1 || true)
+          printf '%s\n' "$usage" | grep -q 'aj-admin maintenance' || {
+            echo "aj-admin did not print its usage:" >&2
+            printf '%s\n' "$usage" >&2
+            exit 1
+          }
+
+      - name: Log in to ghcr.io
+        run: |
+          printf '%s' '${{ github.token }}' \
+            | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Push
+        run: |
+          for tag in ${{ steps.v.outputs.tags }}; do
+            docker tag "$IMAGE:release" "${{ steps.v.outputs.registry }}/$IMAGE:$tag"
+            docker push "${{ steps.v.outputs.registry }}/$IMAGE:$tag"
+          done

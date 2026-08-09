@@ -95,6 +95,20 @@ Or an environment variable, which is what the Compose file uses:
 AJ_ConnectionStrings__DbConnectionString="Host=localhost;Database=algojudge;Username=postgres;Password=your-password"
 ```
 
+## The published image
+
+Released images are pushed to GitHub's container registry when a `v*` tag is
+pushed:
+
+```bash
+docker pull ghcr.io/algojudge/algojudge-server:1.2.3
+```
+
+`1.2.3`, `1.2`, `1` and `latest` all point at the same image. **A prerelease
+(`v1.2.3-rc.1`) publishes only its own tag** — nothing moving follows it, so
+`latest` is never a release candidate. `linux/amd64` only, which is what the
+Runner requires anyway.
+
 ## Running with Docker Compose
 
 Brings up PostgreSQL and the Server, both bound to `127.0.0.1`:
