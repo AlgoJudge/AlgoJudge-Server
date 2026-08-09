@@ -13,11 +13,21 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Scope { get; init; }
         public required string Group { get; init; }
         /// <summary>
-        /// Whether an ordinary participant holds it. Anything else is staff and
-        /// forces `isSystem` on the grant, which is what decides whether the
-        /// holder counts among the competitors.
+        /// Whether the participant template grants it by default — what the
+        /// editor starts a new participant with.
         /// </summary>
         public required bool Participant { get; init; }
+        /// <summary>
+        /// Whether a grant carrying it is systemic, and so forces `isSystem`
+        /// and leaves the participant count and the ranking.
+        /// <para>
+        /// Published rather than inferred from `participant`. The two differ
+        /// for `trial:run` — outside the default template, held without
+        /// ceasing to compete — and a Client negating the other flag draws a
+        /// switch the Server disagrees with.
+        /// </para>
+        /// </summary>
+        public required bool Systemic { get; init; }
     }
 
     public record AttachmentRuleDto

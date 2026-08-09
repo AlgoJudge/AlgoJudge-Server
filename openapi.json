@@ -7711,9 +7711,9 @@
             "format": "int32",
             "nullable": true
           },
-          "memoryMb": {
+          "memoryBytes": {
             "type": "integer",
-            "format": "int32",
+            "format": "int64",
             "nullable": true
           }
         },
@@ -8797,6 +8797,9 @@
           },
           "participant": {
             "type": "boolean"
+          },
+          "systemic": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -9029,9 +9032,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "memoryMb": {
+          "memoryBytes": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           }
         },
         "additionalProperties": false

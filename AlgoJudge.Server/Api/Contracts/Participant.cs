@@ -120,7 +120,12 @@ namespace AlgoJudge.Server.Api.Contracts
     public record ProblemLimitsDto
     {
         public required int TimeMs { get; init; }
-        public required int MemoryMb { get; init; }
+        /// <summary>
+        /// **Bytes**, as everywhere in the product since 2026-08-09. Long
+        /// rather than int: a limit above 2 GiB is expressible and an int
+        /// would silently wrap it.
+        /// </summary>
+        public required long MemoryBytes { get; init; }
     }
 
     public record ProblemSampleDto

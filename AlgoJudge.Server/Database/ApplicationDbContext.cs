@@ -19,6 +19,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<AttachmentRule> AttachmentRules { get; set; }
         public DbSet<Submission> Submissions { get; set; }
         public DbSet<EvaluationJob> EvaluationJobs { get; set; }
+        public DbSet<Trial> Trials { get; set; }
         public DbSet<Result> Results { get; set; }
         public DbSet<Runner> Runners { get; set; }
         public DbSet<Question> Questions { get; set; }
@@ -284,6 +285,30 @@ namespace AlgoJudge.Server.Database
                     .WithMany(sp => sp.Submissions)
                     .HasForeignKey(s => s.SeriesProblemId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<Trial>(e =>
+            {
+                e.ToTable("Trials");
+                // The claim query, and the reaper's, on their own table: a
+                // trial queue that is busy must not slow the queue that decides
+                // somebody's mark.
+                e.HasIndex(t => new { t.State, t.CreatedAt });
+                e.HasIndex(t => t.LeaseExpiresAt);
+                // Reporting a trial is idempotent for the same reason a result
+                // is, and by the same mechanism.
+                e.HasIndex(t => t.LeaseToken).IsUnique().HasFilter("\"LeaseToken\" IS NOT NULL");
+                e.Property(t => t.Version).IsRowVersion();
+                e.HasOne(t => t.Activity)
+                    .WithMany()
+                    .HasForeignKey(t => t.ActivityId)
+                    // A deleted activity takes its trials with it: they are
+                    // scoped to it and mean nothing outside it.
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(t => t.Runner)
+                    .WithMany()
+                    .HasForeignKey(t => t.RunnerId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<EvaluationJob>(e =>

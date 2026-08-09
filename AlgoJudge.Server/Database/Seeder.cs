@@ -192,7 +192,7 @@ namespace AlgoJudge.Server.Database
                 Version = 1,
                 CreatedByUserId = admin.Id,
                 Note = "Seeded",
-                Config = """{"format":"standard-io","version":1,"limits":{"timeMs":1000,"memoryKib":262144}}""",
+                Config = """{"format":"standard-io","version":1,"limits":{"timeMs":1000,"memoryBytes":268435456}}""",
             };
             context.ProblemVersions.Add(version);
 
