@@ -182,19 +182,31 @@ public class AccountDeletionTests(ServerFixture server)
     }
 
     /// <summary>
-    /// **Two providers vouching for one person are two accounts here**, and that
-    /// is the point of keying on issuer plus <c>sub</c>: a second directory
-    /// saying "this is jan.kowalski" must not be handed the account the first
-    /// one made. Joining them is a linking flow somebody has to design and
-    /// somebody has to consent to; it does not happen by coincidence of a name.
+    /// Two providers vouching for one person are two accounts here — <b>today</b>.
     /// <para>
-    /// The address collides — the same person really does have one address — and
-    /// the second account is provisioned <b>without</b> it rather than not at
-    /// all. Before this was handled, the second sign-in threw.
+    /// This records what the Server does, and it is deliberately <i>not</i>
+    /// called correct. The behaviour is right on its own terms: a second
+    /// directory saying "this is jan.kowalski" must not be handed the account the
+    /// first one made, which is why the key is issuer plus <c>sub</c>. But the
+    /// owner required on 2026-08-10 that <b>one person has one account whichever
+    /// door they came through</b> — a university runs OIDC against its SSO and a
+    /// direct LTI launch from its Moodle, and those send different subjects for
+    /// the same human. So this is a <b>known gap</b>, and the test exists to make
+    /// it visible rather than to defend it.
+    /// </para>
+    /// <para>
+    /// <b>When linking is built, this test is expected to change.</b> Whoever
+    /// changes it should read the open question first: the trap is that an
+    /// automatic correlation on an unverified address is account takeover.
+    /// </para>
+    /// <para>
+    /// What is not a gap: the address collides — the same person really does have
+    /// one — and the second account is provisioned <b>without</b> it rather than
+    /// not at all. Before that was handled, the second sign-in threw.
     /// </para>
     /// </summary>
     [Fact]
-    public async Task Two_providers_vouching_for_one_person_do_not_share_an_account()
+    public async Task Two_providers_vouching_for_one_person_do_not_share_an_account_yet()
     {
         var first = await NewProviderWithChannelAsync("two-ways-a");
         var second = await NewProviderWithChannelAsync("two-ways-b");
