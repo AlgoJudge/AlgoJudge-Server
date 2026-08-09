@@ -26,8 +26,7 @@ namespace AlgoJudge.Server.Controllers
         IProblemService problems,
         ISubmissionService submissions,
         IResultsService results,
-        IQuestionService questions,
-        ITrialService trials
+        IQuestionService questions
     ) : ControllerBase
     {
         /// <summary>
@@ -58,44 +57,6 @@ namespace AlgoJudge.Server.Controllers
         /// Client sends what the form collected and checks nothing.
         /// </para>
         /// </summary>
-        /// <summary>
-        /// Asks for a package to be run, attached to nothing.
-        /// <para>
-        /// **Not a submission** (D-9): it produces timings rather than a
-        /// verdict, belongs to nobody's standing and appears on no board. The
-        /// bytes are uploaded first through the file API and named here by id,
-        /// which is the same two-step every other stored file uses — and it is
-        /// what lets the checksum be verified before anything is queued.
-        /// </para>
-        /// <para>
-        /// Needs `trial:run` **in this activity**, which is absent from the
-        /// participant template: opening trials to participants is a manager's
-        /// decision in one activity rather than a property of the installation.
-        /// </para>
-        /// </summary>
-        [HttpPost("{idOrSlug}/trials")]
-        [ProducesResponseType<TrialDto>(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public Task<TrialDto> RequestTrial(
-            string idOrSlug, [FromBody] NewTrialDto input, CancellationToken ct) =>
-            trials.RequestAsync(idOrSlug, input.ProblemType, input.PackageFileId, ct);
-
-        /// <summary>
-        /// One trial, to whoever asked for it — or to somebody who reads
-        /// everybody's work here.
-        /// <para>
-        /// Answers **404 rather than 403** to anybody else, because the
-        /// existence of somebody's private measurement is itself something they
-        /// did not publish.
-        /// </para>
-        /// </summary>
-        [HttpGet("{idOrSlug}/trials/{trialId:guid}")]
-        [ProducesResponseType<TrialDto>(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public Task<TrialDto> Trial(string idOrSlug, Guid trialId, CancellationToken ct) =>
-            trials.GetAsync(idOrSlug, trialId, ct);
-
         [HttpPost("{idOrSlug}/enrolment")]
         [ProducesResponseType<ActivityDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]

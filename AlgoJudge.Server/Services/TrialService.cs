@@ -21,8 +21,8 @@ namespace AlgoJudge.Server.Services
     /// </summary>
     public interface ITrialService
     {
-        Task<TrialDto> RequestAsync(string idOrSlug, string problemType, Guid packageFileId, CancellationToken ct);
-        Task<TrialDto> GetAsync(string idOrSlug, Guid trialId, CancellationToken ct);
+        Task<TrialDto> RequestAsync(string? idOrSlug, string problemType, Guid packageFileId, CancellationToken ct);
+        Task<TrialDto> GetAsync(Guid trialId, CancellationToken ct);
         Task<ClaimedTrialDto?> ClaimAsync(DbRunner runner, int? leaseSeconds, CancellationToken ct);
         Task<TrialReportAcceptedDto> ReportAsync(DbRunner runner, Guid trialId, TrialReportInputDto report, CancellationToken ct);
         Task<TrialLeaseDto> RenewAsync(DbRunner runner, Guid trialId, string leaseToken, int? leaseSeconds, CancellationToken ct);
@@ -61,10 +61,14 @@ namespace AlgoJudge.Server.Services
         public const int MaxUnfinishedPerUser = 3;
 
         public async Task<TrialDto> RequestAsync(
-            string idOrSlug, string problemType, Guid packageFileId, CancellationToken ct)
+            string? idOrSlug, string problemType, Guid packageFileId, CancellationToken ct)
         {
-            var activity = await Resolve(idOrSlug, ct);
-            await permissions.RequireAsync(Permissions.TrialRun, activity.Id, ct);
+            // No activity means the library: a manager calibrating a problem
+            // before it belongs anywhere. The permission is then asked for at
+            // the global scope, which `trial:run` already allows — it is
+            // declared `Both`, and this is the half that had no path.
+            var activity = idOrSlug is null ? null : await Resolve(idOrSlug, ct);
+            await permissions.RequireAsync(Permissions.TrialRun, activity?.Id, ct);
 
             var userId = currentUser.UserId ?? throw new UnauthenticatedException();
 
@@ -82,22 +86,25 @@ namespace AlgoJudge.Server.Services
                 throw new NotFoundException("Package file");
             }
 
+            // Counted **per person, everywhere**, not per activity. What the
+            // ceiling protects is the machines, and a Runner does not care
+            // which activity asked: three queued trials are three queued
+            // trials whether they came from one activity or three.
             var unfinished = await context.Trials.CountAsync(
-                t => t.ActivityId == activity.Id
-                     && t.UserId == userId
+                t => t.UserId == userId
                      && (t.State == EvaluationJobState.Queued || t.State == EvaluationJobState.Running),
                 ct);
             if (unfinished >= MaxUnfinishedPerUser)
             {
                 throw new ConflictException(
-                    $"You already have {unfinished} trials waiting in this activity. "
+                    $"You already have {unfinished} trials waiting. "
                     + "Wait for one to finish before asking for another.",
                     "trial.tooMany");
             }
 
             var trial = new Trial
             {
-                ActivityId = activity.Id,
+                ActivityId = activity?.Id,
                 UserId = userId,
                 PackageFileId = packageFileId,
                 ProblemType = problemType.Trim(),
@@ -108,21 +115,21 @@ namespace AlgoJudge.Server.Services
             return ToDto(trial);
         }
 
-        public async Task<TrialDto> GetAsync(string idOrSlug, Guid trialId, CancellationToken ct)
+        public async Task<TrialDto> GetAsync(Guid trialId, CancellationToken ct)
         {
-            var activity = await Resolve(idOrSlug, ct);
             var userId = currentUser.UserId ?? throw new UnauthenticatedException();
 
             var trial = await context.Trials.AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Id == trialId && t.ActivityId == activity.Id, ct)
+                .FirstOrDefaultAsync(t => t.Id == trialId, ct)
                 ?? throw new NotFoundException("Trial");
 
             // Whoever asked for it, or somebody who reads everybody's work in
-            // this activity. A trial is a private measurement by default: it is
-            // not an attempt, and showing one person's timings to another says
-            // something about their solution they did not publish.
+            // the scope it was asked for. A trial is a private measurement by
+            // default: it is not an attempt, and showing one person's timings
+            // to another says something about their solution they did not
+            // publish — which is why this answers **404 and not 403**.
             if (trial.UserId != userId
-                && !await permissions.HasAsync(Permissions.SubmissionReadAll, activity.Id, ct))
+                && !await permissions.HasAsync(Permissions.SubmissionReadAll, trial.ActivityId, ct))
             {
                 throw new NotFoundException("Trial");
             }
@@ -379,7 +386,7 @@ namespace AlgoJudge.Server.Services
         private static TrialDto ToDto(Trial trial) => new()
         {
             Id = Wire.Id(trial.Id),
-            ActivityId = Wire.Id(trial.ActivityId),
+            ActivityId = trial.ActivityId is { } id ? Wire.Id(id) : null,
             State = Projections.Wire(trial.State),
             ProblemType = trial.ProblemType,
             CreatedAt = Wire.At(trial.CreatedAt),

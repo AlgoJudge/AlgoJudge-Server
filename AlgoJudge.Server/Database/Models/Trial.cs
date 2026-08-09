@@ -31,11 +31,22 @@ namespace AlgoJudge.Server.Database.Models
         public Guid Id { get; set; } = Uuid.New();
 
         /// <summary>
-        /// The activity whose rules allowed this. A trial is scoped to one so
-        /// that permission has somewhere to be granted, and so that an operator
-        /// can see who is spending the machine.
+        /// The activity whose rules allowed this, or **none**.
+        /// <para>
+        /// A trial belongs to a person; an activity is where the permission to
+        /// ask for one may be granted, not what the trial is part of. Absent
+        /// means it was asked for against the **library** — a manager
+        /// calibrating a problem before it belongs to any activity, permitted
+        /// by a global `trial:run`.
+        /// </para>
+        /// <para>
+        /// Nullable rather than a second table, because everything else about
+        /// the two is the same: the queue, the lease, the delivery count, the
+        /// measurement and the package that does not survive it. What differs
+        /// is only which scope was asked for permission.
+        /// </para>
         /// </summary>
-        public Guid ActivityId { get; set; }
+        public Guid? ActivityId { get; set; }
         public Activity? Activity { get; set; }
 
         /// <summary>Who asked. A trial is never anonymous.</summary>
