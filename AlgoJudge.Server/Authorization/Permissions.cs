@@ -18,11 +18,26 @@ namespace AlgoJudge.Server.Authorization
     /// <param name="Group">How the grant editor groups it.</param>
     /// <param name="Scope">Where it may be granted.</param>
     /// <param name="Participant">
-    /// Whether an ordinary participant holds it. Anything else is staff, and a
-    /// grant carrying any of it is systemic — which is what decides whether the
-    /// holder counts among the competitors.
+    /// Whether the participant template grants it by default. What the editor
+    /// starts a new participant with — <b>not</b> what decides who competes.
     /// </param>
-    public record PermissionDefinition(string Key, string Group, PermissionScope Scope, bool Participant);
+    /// <param name="Systemic">
+    /// Whether a grant carrying it is systemic, and therefore out of the
+    /// participant count and the ranking.
+    /// <para>
+    /// Two flags rather than one, because they are two questions and the answer
+    /// differs for <c>trial:run</c>: outside the default template, yet held
+    /// without ceasing to be a competitor. While the catalogue said only
+    /// <see cref="Participant"/>, the Client had to infer this one by negating
+    /// it — and inferred it wrongly the moment such a permission existed.
+    /// </para>
+    /// </param>
+    public record PermissionDefinition(
+        string Key,
+        string Group,
+        PermissionScope Scope,
+        bool Participant,
+        bool Systemic);
 
     /// <summary>
     /// The permission catalogue: the whole vocabulary, in one place, because the
@@ -157,8 +172,13 @@ namespace AlgoJudge.Server.Authorization
         private static readonly HashSet<string> NotStaffConferring =
             [.. ParticipantKeys, TrialRun];
 
+        /// <summary>
+        /// Both flags come from the same two lists <see cref="IsStaff"/> uses,
+        /// so the catalogue cannot drift from what is enforced. Asserted in
+        /// <c>StaffTests</c> rather than left to reading.
+        /// </summary>
         private static PermissionDefinition Define(string key, string group, PermissionScope scope) =>
-            new(key, group, scope, ParticipantKeys.Contains(key));
+            new(key, group, scope, ParticipantKeys.Contains(key), !NotStaffConferring.Contains(key));
 
         public static readonly IReadOnlyList<PermissionDefinition> Catalogue =
         [

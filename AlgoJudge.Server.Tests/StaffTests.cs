@@ -64,4 +64,41 @@ public class StaffTests
         Assert.Contains(Permissions.Catalogue, d => d.Key == Permissions.TrialRun);
         Assert.Empty(Permissions.Unknown([Permissions.TrialRun]));
     }
+
+    /// <summary>
+    /// The catalogue is the rule, not a description of it.
+    /// <para>
+    /// The Client draws the systemic switch from what this endpoint publishes,
+    /// and until the catalogue carried <c>systemic</c> it had to infer the
+    /// answer by negating <c>participant</c>. That inference is right for every
+    /// key that existed when it was written and wrong for `trial:run` — the
+    /// screen would grey the switch on and force it, while the Server stored it
+    /// off. Nobody would see an error; the dialog would simply state something
+    /// untrue about the ranking.
+    /// </para>
+    /// <para>
+    /// So the flag is asserted against <see cref="Permissions.IsStaff"/> itself,
+    /// key by key. A permission added to one list and not the other fails here
+    /// rather than in somebody's activity.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void What_the_catalogue_publishes_is_what_the_Server_enforces()
+    {
+        Assert.All(Permissions.Catalogue, definition =>
+            Assert.Equal(Permissions.IsStaff([definition.Key]), definition.Systemic));
+    }
+
+    /// <summary>
+    /// And the two flags are genuinely two: `trial:run` is the key that told
+    /// them apart, so it is the one worth naming.
+    /// </summary>
+    [Fact]
+    public void Outside_the_default_template_is_not_the_same_as_systemic()
+    {
+        var trial = Permissions.Catalogue.Single(d => d.Key == Permissions.TrialRun);
+
+        Assert.False(trial.Participant, "it is not granted by default");
+        Assert.False(trial.Systemic, "and holding it does not take somebody off the board");
+    }
 }

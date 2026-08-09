@@ -8797,6 +8797,9 @@
           },
           "participant": {
             "type": "boolean"
+          },
+          "systemic": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

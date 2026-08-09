@@ -139,6 +139,7 @@ namespace AlgoJudge.Server.Controllers
                 },
                 Group = d.Group,
                 Participant = d.Participant,
+                Systemic = d.Systemic,
             }).ToList();
 
         /// <summary>What the caller holds in one scope. Null activity is the system scope.</summary>
