@@ -28,6 +28,9 @@ namespace AlgoJudge.Server.Database
         public DbSet<PermissionTemplate> PermissionTemplates { get; set; }
         public DbSet<Grant> Grants { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
+        public DbSet<IdentityProvider> IdentityProviders { get; set; }
+        public DbSet<IdentityProviderMappingRule> IdentityProviderMappingRules { get; set; }
+        public DbSet<UserIdentity> UserIdentities { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -466,6 +469,65 @@ namespace AlgoJudge.Server.Database
                 e.HasIndex(s => new { s.UserId, s.EndedAt });
                 // The reaper closes sessions whose expiry has passed.
                 e.HasIndex(s => s.ExpiresAt);
+            });
+
+            builder.Entity<IdentityProvider>(e =>
+            {
+                e.ToTable("IdentityProviders");
+                e.Property(p => p.Slug).HasMaxLength(32);
+                e.Property(p => p.DisplayName).HasMaxLength(128);
+                e.Property(p => p.Issuer).HasMaxLength(512);
+                e.Property(p => p.ClientId).HasMaxLength(256);
+                e.Property(p => p.ClientSecret).HasMaxLength(1024);
+                e.Property(p => p.DeletionSecret).HasMaxLength(1024);
+                e.Property(p => p.Scopes).HasMaxLength(512);
+                e.Property(p => p.AccountUrl).HasMaxLength(512);
+                e.Property(p => p.ClaimPath).HasMaxLength(128);
+                e.Property(p => p.DefaultTemplateName).HasMaxLength(64);
+                // The slug appears in a sign-in path and in the redirect URI
+                // registered on the provider's side, so it has to be unique and
+                // it is expensive to change.
+                e.HasIndex(p => p.Slug).IsUnique();
+            });
+
+            builder.Entity<IdentityProviderMappingRule>(e =>
+            {
+                e.ToTable("IdentityProviderMappingRules");
+                e.Property(r => r.ClaimValue).HasMaxLength(256);
+                e.Property(r => r.TemplateName).HasMaxLength(64);
+                // One rule per value per provider. Two would be a question about
+                // ordering, and this model deliberately has no answer to it.
+                e.HasIndex(r => new { r.ProviderId, r.ClaimValue }).IsUnique();
+                e.HasOne(r => r.Provider)
+                    .WithMany(p => p.MappingRules)
+                    .HasForeignKey(r => r.ProviderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<UserIdentity>(e =>
+            {
+                e.ToTable("UserIdentities");
+                e.Property(i => i.Subject).HasMaxLength(256);
+                // **The federated key.** Issuer plus `sub`, and never the email
+                // address: an address is something a person changes at their
+                // provider, and a federation keyed on one hands the account to
+                // whoever inherits it. The issuer is the provider row, so the
+                // pair is unique here.
+                e.HasIndex(i => new { i.ProviderId, i.Subject }).IsUnique();
+                e.HasIndex(i => i.UserId);
+                e.HasOne(i => i.User)
+                    .WithMany()
+                    .HasForeignKey(i => i.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Restrict rather than cascade, to match the service: deleting a
+                // provider that people sign in through decides something about
+                // their accounts, so it is refused rather than allowed to ripple.
+                // The database says so too, in case anything ever writes past the
+                // service.
+                e.HasOne(i => i.Provider)
+                    .WithMany(p => p.Identities)
+                    .HasForeignKey(i => i.ProviderId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

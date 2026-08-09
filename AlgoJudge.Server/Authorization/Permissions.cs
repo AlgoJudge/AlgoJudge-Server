@@ -133,6 +133,21 @@ namespace AlgoJudge.Server.Authorization
         public const string InstanceUpdate = "instance:update";
 
         /// <summary>
+        /// Register identity providers, edit their claim mapping, enable and
+        /// disable them.
+        /// <para>
+        /// <b>The most dangerous key here after <see cref="SystemAdministrator"/>.</b>
+        /// A mapping rule decides what a token buys: holding this means deciding
+        /// which of an external directory's groups become permissions in this
+        /// installation. Two guards are what make it survivable, and both are
+        /// enforced rather than documented — <see cref="SystemAdministrator"/> is
+        /// unreachable through a mapping in every configuration, and nobody may
+        /// map onto a permission they do not themselves hold.
+        /// </para>
+        /// </summary>
+        public const string ProviderManage = "provider:manage";
+
+        /// <summary>
         /// The seven an ordinary participant holds.
         /// <para>
         /// This list is load-bearing beyond the grant editor: it is what
@@ -243,6 +258,13 @@ namespace AlgoJudge.Server.Authorization
             // part of the manager set, because running an activity is not running
             // the installation it lives in.
             Define(InstanceUpdate, "instance", PermissionScope.Global),
+
+            // Its own group rather than folded into `instance`: configuring what
+            // the installation is called and deciding which external directory
+            // may hand out permissions in it are not the same job, and a grant
+            // editor that groups them invites giving away the second while
+            // meaning the first.
+            Define(ProviderManage, "provider", PermissionScope.Global),
 
             Define(SystemAdministrator, "system", PermissionScope.Global),
         ];

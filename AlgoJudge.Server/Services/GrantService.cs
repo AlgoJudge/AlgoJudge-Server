@@ -127,6 +127,26 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
+        /// Which providers name this template — through a mapping rule or as
+        /// their default. Both count: either way, deleting it leaves a provider
+        /// pointing at nothing.
+        /// </summary>
+        private async Task<IReadOnlyList<string>> ReferencingProvidersAsync(string name, CancellationToken ct)
+        {
+            var byRule = await context.IdentityProviderMappingRules
+                .Where(r => r.TemplateName == name)
+                .Select(r => r.Provider!.Slug)
+                .ToListAsync(ct);
+
+            var byDefault = await context.IdentityProviders
+                .Where(p => p.DefaultTemplateName == name)
+                .Select(p => p.Slug)
+                .ToListAsync(ct);
+
+            return [.. byRule.Concat(byDefault).Distinct().OrderBy(s => s, StringComparer.Ordinal)];
+        }
+
+        /// <summary>
         /// Creates or replaces the grant for one user in one scope.
         /// <para>
         /// One grant per user per scope, which the database enforces. "A manager
@@ -311,6 +331,24 @@ namespace AlgoJudge.Server.Services
                     "No such permission: " + string.Join(", ", unknown), "template.permission.unknown");
             }
 
+            // A rename has to reach the mapping rules that name it, or a provider
+            // would go on referring to a template that no longer answers and
+            // quietly grant nothing at the next sign-in. This is not the same as
+            // a grant following its template — a grant holds a copy and keeps it.
+            if (template.Name != name)
+            {
+                foreach (var rule in await context.IdentityProviderMappingRules
+                    .Where(r => r.TemplateName == template.Name).ToListAsync(ct))
+                {
+                    rule.TemplateName = name;
+                }
+                foreach (var provider in await context.IdentityProviders
+                    .Where(p => p.DefaultTemplateName == template.Name).ToListAsync(ct))
+                {
+                    provider.DefaultTemplateName = name;
+                }
+            }
+
             template.Name = name;
             template.Description = input.Description;
             template.Permissions = JsonSerializer.Serialize(input.Permissions.Distinct());
@@ -335,6 +373,19 @@ namespace AlgoJudge.Server.Services
             if (template.IsBuiltIn)
             {
                 throw new ConflictException("A built-in template cannot be deleted", "template.builtIn");
+            }
+
+            // **The one place something points at a template.** A grant does not
+            // — choosing one copies its permissions and nothing points back — but
+            // an identity provider's mapping rule names it, and the contribution
+            // is re-derived from that name at every sign-in. Deleting it would
+            // leave a rule granting nothing, silently, at the next sign-in.
+            var referencing = await ReferencingProvidersAsync(template.Name, ct);
+            if (referencing.Count > 0)
+            {
+                throw new ConflictException(
+                    $"\"{template.Name}\" is mapped by: {string.Join(", ", referencing)}",
+                    "template.mapped");
             }
 
             var removedTemplate = Wire.Id(template.Id);
