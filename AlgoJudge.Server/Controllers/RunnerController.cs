@@ -24,7 +24,11 @@ namespace AlgoJudge.Server.Controllers
     [ApiController]
     [Route("runner")]
     [AllowAnonymous]
-    public class RunnerController(IRunnerService runners, IFileService files) : ControllerBase
+    public class RunnerController(
+        IRunnerService runners,
+        IFileService files,
+        ITrialService trials
+    ) : ControllerBase
     {
         /// <summary>
         /// Presents a public key. Registration is not approval: an administrator
@@ -67,6 +71,58 @@ namespace AlgoJudge.Server.Controllers
             var runner = await runners.AuthenticateAsync(Token(), ct);
             var job = await runners.ClaimAsync(runner, input?.LeaseSeconds, ct);
             return job is null ? NoContent() : Ok(job);
+        }
+
+        /// <summary>
+        /// Takes one queued **trial**, or answers 204.
+        /// <para>
+        /// A separate endpoint rather than a flag on `jobs/claim`, for the same
+        /// reason a trial has its own table (D-9): a Runner that has not been
+        /// taught about trials keeps working, and a queue of trials can never
+        /// delay the queue that decides somebody's mark.
+        /// </para>
+        /// </summary>
+        [HttpPost("trials/claim")]
+        [ProducesResponseType<ClaimedTrialDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<ClaimedTrialDto>> ClaimTrial(
+            [FromBody] ClaimRequestDto? input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            var trial = await trials.ClaimAsync(runner, input?.LeaseSeconds, ct);
+            return trial is null ? NoContent() : Ok(trial);
+        }
+
+        /// <summary>
+        /// Records what was measured, once — **and the package is deleted here**
+        /// (D-12), successfully or not.
+        /// <para>
+        /// Idempotent on the same terms as a job report: a Runner that resends
+        /// gets `duplicate: true` rather than a second record. A trial that
+        /// failed carries a reason and no measurement; the two never both.
+        /// </para>
+        /// </summary>
+        [HttpPost("trials/{trialId:guid}/report")]
+        [ProducesResponseType<TrialReportAcceptedDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<TrialReportAcceptedDto> ReportTrial(
+            Guid trialId, [FromBody] TrialReportInputDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            return await trials.ReportAsync(runner, trialId, input, ct);
+        }
+
+        /// <summary>Holds a trial's lease open while it is still running.</summary>
+        [HttpPost("trials/{trialId:guid}/lease")]
+        [ProducesResponseType<TrialLeaseDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        public async Task<TrialLeaseDto> RenewTrial(
+            Guid trialId, [FromBody] LeaseRequestDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            return await trials.RenewAsync(runner, trialId, input.LeaseToken, input.LeaseSeconds, ct);
         }
 
         /// <summary>
@@ -140,7 +196,14 @@ namespace AlgoJudge.Server.Controllers
         public async Task<IActionResult> Download(Guid id, CancellationToken ct)
         {
             var runner = await runners.AuthenticateAsync(Token(), ct);
-            if (!await runners.MayReadAsync(runner, id, ct)) throw new NotFoundException("File");
+            // Either question may say yes: a job this Runner holds references
+            // these bytes, or a trial it holds does. Both are "something you are
+            // working on right now", and neither lets a Runner probe ids.
+            if (!await runners.MayReadAsync(runner, id, ct)
+                && !await trials.MayReadAsync(runner, id, ct))
+            {
+                throw new NotFoundException("File");
+            }
 
             var file = await files.FindAsync(id, ct) ?? throw new NotFoundException("File");
 

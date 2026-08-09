@@ -39,6 +39,7 @@ namespace AlgoJudge.Server.Workers
                 try
                 {
                     await SweepAsync(stopping);
+                    await SweepTrialsAsync(stopping);
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
@@ -58,6 +59,24 @@ namespace AlgoJudge.Server.Workers
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// The same recovery, for trials.
+        /// <para>
+        /// Swept beside jobs rather than by a second worker: it is the same
+        /// deadline doing the same thing, and a trial whose lease expired with
+        /// nobody to reclaim it would sit `running` for ever — visible to
+        /// whoever asked for it, and counting against their ceiling.
+        /// </para>
+        /// </summary>
+        internal async Task<int> SweepTrialsAsync(CancellationToken ct)
+        {
+            using var scope = scopes.CreateScope();
+            var trials = scope.ServiceProvider.GetRequiredService<ITrialService>();
+            var reclaimed = await trials.ReapAsync(ct);
+            if (reclaimed > 0) logger.LogWarning("Reclaimed {Count} trials whose lease ran out", reclaimed);
+            return reclaimed;
         }
 
         internal async Task<int> SweepAsync(CancellationToken ct)

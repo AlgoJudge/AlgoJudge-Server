@@ -16,6 +16,24 @@ namespace AlgoJudge.Server.Services
         Task<DbFile?> FindAsync(Guid id, CancellationToken ct);
 
         /// <summary>
+        /// Removes bytes nothing points at. **Refuses anything referenced.**
+        /// <para>
+        /// Narrow on purpose, and this is the only place the product deletes a
+        /// stored file at all. It exists for D-12: a trial's package does not
+        /// survive the trial, because a trial is a question rather than content
+        /// and there is nothing to come back to.
+        /// </para>
+        /// <para>
+        /// A file with a <see cref="FileReference"/> is somebody's attachment,
+        /// statement or package, and deleting it would leave a row pointing at
+        /// nothing. The refusal is silent — <c>false</c> rather than an
+        /// exception — because the caller is a cleanup path and a trial whose
+        /// bytes outlive it is untidy, not broken.
+        /// </para>
+        /// </summary>
+        Task<bool> DeleteUnreferencedAsync(Guid fileId, CancellationToken ct);
+
+        /// <summary>
         /// Whether the caller may read these bytes, through <b>any</b> reference
         /// pointing at them.
         /// </summary>
@@ -74,6 +92,18 @@ namespace AlgoJudge.Server.Services
 
         public Task<DbFile?> FindAsync(Guid id, CancellationToken ct) =>
             context.Files.FirstOrDefaultAsync(f => f.Id == id, ct);
+
+        public async Task<bool> DeleteUnreferencedAsync(Guid fileId, CancellationToken ct)
+        {
+            if (await context.FileReferences.AnyAsync(r => r.FileId == fileId, ct)) return false;
+
+            var file = await context.Files.FirstOrDefaultAsync(f => f.Id == fileId, ct);
+            if (file is null) return false;
+
+            context.Files.Remove(file);
+            await context.SaveChangesAsync(ct);
+            return true;
+        }
 
         /// <summary>
         /// The read rule from `FILE_API.md`, in one place.
