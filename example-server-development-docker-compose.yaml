@@ -42,6 +42,12 @@ services:
     environment:
     - DOTNET_ENVIRONMENT=Development
     - AJ_ConnectionStrings__DbConnectionString=Host=postgres;Database=algojudge;Username=algojudge;Password=algojudge
+    # What `/admin/**` asks for on top of being called from inside the
+    # container. **Empty closes the whole group** — including the only way to
+    # set the administrator's password, which a fresh installation needs before
+    # anybody can sign in at all. See `.env.example` and `docs/specs/MAINTENANCE.md`
+    # in the workspace.
+    - AJ_Admin__Token=${AJ_ADMIN_TOKEN:-admin-token-development-only}
 
 volumes:
   algojudge_dev_db_data:

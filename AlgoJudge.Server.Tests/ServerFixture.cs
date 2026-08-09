@@ -1,5 +1,8 @@
+using System.Net;
 using AlgoJudge.Server.Database;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
@@ -75,12 +78,79 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         await context.Database.EnsureDeletedAsync();
     }
 
+    /// <summary>
+    /// The admin token this host runs with.
+    /// <para>
+    /// Set, because <c>/admin</c> is closed without one and the tests that check
+    /// the maintenance switch need it open. A test that wants it <b>closed</b>
+    /// builds its own host with <see cref="Closed"/> rather than changing this
+    /// one — the suite shares a database and a Server, and a setting one test
+    /// turned off would be a setting every later test ran under.
+    /// </para>
+    /// </summary>
+    public const string AdminToken = "admin-token-for-the-suite";
+
+    /// <summary>
+    /// A client on a host configured with <b>no</b> admin token, for the one
+    /// rule that cannot be checked any other way: an empty token closes the
+    /// whole group.
+    /// </summary>
+    public HttpClient Closed() =>
+        WithWebHostBuilder(builder => builder.UseSetting("Admin:Token", "")).CreateClient();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Development, so the host applies migrations and seeds the data the
         // end-to-end test walks over.
         builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:DbConnectionString", connectionString);
+        builder.UseSetting("Admin:Token", AdminToken);
+
+        // `TestServer` leaves `RemoteIpAddress` null, and the maintenance switch
+        // answers only to a caller on the loopback interface — so without this
+        // every test of it would see a 404 and prove nothing.
+        //
+        // Inserted at the **very front** by a startup filter, ahead of the
+        // middleware that stamps the true peer, which is the only way to stand
+        // in for a real socket.
+        builder.ConfigureServices(services =>
+            services.AddSingleton<IStartupFilter>(new CallerAddress(IPAddress.Loopback)));
+    }
+
+    /// <summary>
+    /// The address a request came from — the socket, not a header.
+    /// <para>
+    /// A test sets this to arrive from somewhere else. It exists because
+    /// <c>X-Forwarded-For</c> <b>cannot</b> stand in for it: forging that header
+    /// is the attack the switch has to survive, so a test that only set the
+    /// header would be asserting against a Server that agreed with it for the
+    /// wrong reason. There has to be a way to be genuinely somebody else.
+    /// </para>
+    /// <para>
+    /// Read only by the fixture, never by the Server, and only in the test host.
+    /// </para>
+    /// </summary>
+    public const string PeerHeader = "X-Test-Peer";
+
+    /// <summary>
+    /// Gives every request in the test host a remote address: loopback, or
+    /// whatever <see cref="PeerHeader"/> asked for.
+    /// </summary>
+    private sealed class CallerAddress(IPAddress fallback) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, step) =>
+            {
+                context.Connection.RemoteIpAddress =
+                    context.Request.Headers.TryGetValue(PeerHeader, out var asked)
+                    && IPAddress.TryParse(asked.ToString(), out var peer)
+                        ? peer
+                        : fallback;
+                await step();
+            });
+            next(app);
+        };
     }
 
     public ApplicationDbContext NewContext()

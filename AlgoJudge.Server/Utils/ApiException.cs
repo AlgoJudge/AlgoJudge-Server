@@ -89,6 +89,30 @@ namespace AlgoJudge.Server.Utils
     public class ChecksumMismatchException(string message = "The file did not match its checksum and was not stored")
         : ApiException(StatusCodes.Status422UnprocessableEntity, message, "checksum_mismatch");
 
+    /// <summary>
+    /// The Server is up and declining service.
+    /// <para>
+    /// **The first 5xx in this hierarchy, and it is not a fault.** Every other
+    /// entry here says the caller got something wrong; this one says the Server
+    /// did something deliberate. That distinction is why it carries a code the
+    /// Runner and the Client can switch on: a 503 from a proxy whose upstream
+    /// died looks identical on the wire, and only the code tells "come back in a
+    /// minute" from "something is broken".
+    /// </para>
+    /// <para>
+    /// <see cref="RetryAfterSeconds"/> becomes the header of the same name. It
+    /// is a hint, not a promise — the handler writes it so that a caller with no
+    /// backoff of its own still does something sensible.
+    /// </para>
+    /// </summary>
+    public class ServiceUnavailableException(
+        string message = "The Server is not accepting requests at the moment",
+        int retryAfterSeconds = 30)
+        : ApiException(StatusCodes.Status503ServiceUnavailable, message, "server.maintenance")
+    {
+        public int RetryAfterSeconds { get; } = retryAfterSeconds;
+    }
+
     /// <summary>The request body was larger than the ceiling that applies to it.</summary>
     public class PayloadTooLargeException(long limitBytes)
         : ApiException(StatusCodes.Status413PayloadTooLarge,

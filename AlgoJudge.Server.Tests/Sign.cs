@@ -30,6 +30,25 @@ public static class Sign
     }
 
     /// <summary>
+    /// Signs in, or answers <c>null</c> because the credentials were refused.
+    ///
+    /// <para>
+    /// Its own method rather than a flag, because failing to sign in is what
+    /// some tests are <b>asserting</b> — an old password that must stop working,
+    /// a lockout that must be in force. <see cref="InAsync"/> throws on a
+    /// refusal, which is right everywhere else and useless here.
+    /// </para>
+    /// </summary>
+    public static async Task<HttpClient?> TryInAsync(ServerFixture server, string login, string password)
+    {
+        var client = server.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/identity/login?useSessionCookies=true", new { email = login, password });
+        return response.IsSuccessStatusCode ? client : null;
+    }
+
+    /// <summary>
     /// A fresh account, created through the user manager rather than the
     /// registration endpoint — which is refused, because this instance does not
     /// accept sign-ups and that is the point of another test.

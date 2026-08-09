@@ -103,6 +103,59 @@ Brings up PostgreSQL and the Server, both bound to `127.0.0.1`:
 docker compose -f example-server-development-docker-compose.yaml up
 ```
 
+## Signing in for the first time
+
+**Set `AJ_ADMIN_TOKEN` before starting a deployment for the first time.** Copy
+`.env.example` to `.env` beside the compose file and fill it in. Skipping this
+costs an evening, and here is why.
+
+Every installation is seeded with **one account, `admin`** — no name, no address,
+because it is not a person; it is the account somebody makes people with. Its
+password is **twenty random characters that are never logged, never returned and
+never derivable**. That is deliberate: a default administrator password is a
+password an attacker also knows, and the alternative to a default is a password
+nobody knows plus a documented way to set one.
+
+That way is `POST /api/v1/admin/password`, which answers only to a caller on the
+**loopback interface** carrying the **`X-AlgoJudge-Admin-Token`** header. An
+unset or empty `Admin:Token` closes `/admin/**` entirely — so no token plus a
+password nobody knows means no way in at all.
+
+**Use `aj-admin`.** The image ships it on `PATH` inside the container, it is the
+supported way to operate this Server, and it is what CI exercises against the
+built image. Writing the HTTP request by hand is a fallback for an image older
+than the tool — `docs/specs/MAINTENANCE.md` keeps that form, along with the three
+ways it goes wrong.
+
+```bash
+docker compose exec -it algojudge aj-admin password       # prompts, no echo
+docker compose exec -T  algojudge aj-admin status
+docker compose exec -T  algojudge aj-admin maintenance on "nightly backup"
+```
+
+It reads the token from the Server's own environment — so the token is never
+typed at a shell, never enters history and never appears in `ps` — and it exits
+non-zero when the Server refuses, so it can be used in a script.
+
+| Key | Environment | Default |
+|---|---|---|
+| `Admin:Token` | `AJ_ADMIN_TOKEN` → `AJ_Admin__Token` | empty — `/admin` closed |
+
+Development needs none of this: the compose file falls back to a token named
+`admin-token-development-only`, and the Development seed puts the well-known
+password `admin-development-only` on the account. Both are in a public repository
+and neither is a secret; the Server warns on every start where that token is in
+force outside Development.
+
+`docs/specs/MAINTENANCE.md` in the workspace has the exact `docker exec` recipes
+— the shipped image has no `curl` and no `wget`, so they are written with bash's
+`/dev/tcp` — along with the maintenance switch, which lives on the same surface.
+
+**`admin` is a reserved login.** No other account may be created with it, nobody
+may rename themselves to it, and the administrator may not rename itself away:
+the password endpoint resets *the account named `admin`*, so the name is what the
+endpoint points at.
+
 ## Migrations
 
 In the Development environment the application applies pending migrations on

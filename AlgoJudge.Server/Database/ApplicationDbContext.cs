@@ -8,6 +8,7 @@ namespace AlgoJudge.Server.Database
     public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<User>(options)
     {
         public DbSet<Instance> Instance { get; set; }
+        public DbSet<MaintenanceState> Maintenance { get; set; }
         public DbSet<File> Files { get; set; }
         public DbSet<FileReference> FileReferences { get; set; }
         public DbSet<Problem> Problems { get; set; }
@@ -57,6 +58,19 @@ namespace AlgoJudge.Server.Database
                 e.ToTable(t => t.HasCheckConstraint(
                     "CK_Instance_Singleton",
                     $"\"Id\" = '{Models.Instance.SingletonId}'"));
+            });
+
+            builder.Entity<MaintenanceState>(e =>
+            {
+                e.ToTable("Maintenance");
+                // One row, for the same reason and by the same means as
+                // `Instance` above: a second row is not a state this product has
+                // an answer for, and "how far are we withdrawn" cannot have two
+                // answers at once.
+                e.ToTable(t => t.HasCheckConstraint(
+                    "CK_Maintenance_Singleton",
+                    $"\"Id\" = '{Models.MaintenanceState.SingletonId}'"));
+                e.Property(m => m.Version).IsRowVersion();
             });
 
             builder.Entity<Activity>(e =>

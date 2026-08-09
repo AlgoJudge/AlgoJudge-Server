@@ -47,6 +47,14 @@ namespace AlgoJudge.Server.Utils
 
             http.Response.StatusCode = status;
 
+            // A hint for a caller with no backoff of its own. Written here
+            // rather than at the throw site so that every path producing this
+            // status carries it.
+            if (exception is ServiceUnavailableException unavailable)
+            {
+                http.Response.Headers.RetryAfter = unavailable.RetryAfterSeconds.ToString();
+            }
+
             var details = new ProblemDetails
             {
                 Status = status,
@@ -55,7 +63,12 @@ namespace AlgoJudge.Server.Utils
                 // unexpected it is not, because it may carry a connection string
                 // or a file path — so outside Development an unhandled fault says
                 // only its status, and the detail is in the log.
-                Detail = status < StatusCodes.Status500InternalServerError
+                // **Ours is safe to show whatever its status.** The suppression
+                // below exists because an unexpected fault's message may carry a
+                // connection string or a path; a refusal we wrote says only what
+                // we chose to say — and a maintenance window that answered with
+                // a blank 503 would tell an operator nothing.
+                Detail = exception is ApiException || status < StatusCodes.Status500InternalServerError
                     ? exception.Message
                     : environment.IsDevelopment() ? exception.ToString() : null,
             };

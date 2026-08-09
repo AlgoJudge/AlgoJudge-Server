@@ -140,6 +140,30 @@ jobs:
             -d '{"email":"intruder@example.invalid","password":"twelve-characters-at-least"}')
           test "$code" = "403" || { echo "expected 403 from /identity/register, got $code" >&2; exit 1; }
 
+      # The operator's own tool, run in the image that ships it.
+      #
+      # It exists **because** the image has no curl and no wget, so the
+      # alternative to running it here is a recipe in a document that nobody
+      # executes and that rots the first time a path changes. What is checked is
+      # what an operator would type, in the order they would type it — and that
+      # the answer is a clean JSON document rather than the hexadecimal chunk
+      # lengths an HTTP/1.1 request gets back.
+      - name: The operator's tool works in the shipped image
+        run: |
+          compose="docker compose -f example-server-development-docker-compose.yaml"
+
+          $compose exec -T algojudge aj-admin status | grep -q '"level":"open"'
+          $compose exec -T algojudge aj-admin maintenance on 'ci checks the tool' \
+            | grep -q '"reason":"ci checks the tool"'
+          $compose exec -T algojudge aj-admin status | grep -qE '"level":"(draining|closed)"'
+          $compose exec -T algojudge aj-admin maintenance off | grep -q '"level":"open"'
+
+          # A wrong token is refused, and says so rather than failing silently.
+          if $compose exec -T -e AJ_Admin__Token=not-the-token algojudge aj-admin status; then
+            echo "a wrong admin token was accepted" >&2
+            exit 1
+          fi
+
       - name: Compose down
         if: always()
         run: docker compose -f example-server-development-docker-compose.yaml down -v

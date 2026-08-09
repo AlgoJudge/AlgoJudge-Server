@@ -23,6 +23,15 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
+# The operator's tool. On PATH, so `docker compose exec server aj-admin status`
+# is the whole of it.
+#
+# `--chmod` because the final stage runs as `app` and could not chmod a
+# root-owned file afterwards. It is bash, which this image already has — no
+# package is installed for it, and nothing an attacker could not already do with
+# the same shell the HEALTHCHECK below uses.
+COPY --chmod=755 AlgoJudge.Server/aj-admin /usr/local/bin/aj-admin
+
 # Whether the API is actually answering, not merely whether the process exists.
 #
 # Without this `docker compose up --wait` returns the moment the container

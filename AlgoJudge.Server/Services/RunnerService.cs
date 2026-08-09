@@ -52,6 +52,7 @@ namespace AlgoJudge.Server.Services
     public class RunnerService(
         ApplicationDbContext context,
         ISubmissionService submissions,
+        IMaintenanceService maintenance,
         TimeProvider clock,
         ILogger<RunnerService> logger
     ) : IRunnerService
@@ -276,6 +277,16 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         public async Task<ClaimedJobDto?> ClaimAsync(DbRunner runner, int? leaseSeconds, CancellationToken ct)
         {
+            // **An empty answer rather than a refusal.** A Server that is
+            // draining has work in its queue and is declining to hand it out;
+            // `204` is exactly what a Runner already does the right thing with,
+            // and a 503 here would be a second thing to teach for no gain. The
+            // work stays queued and goes out when the window ends.
+            if (await maintenance.StateAsync(ct) is { Level: not MaintenanceLevel.Open })
+            {
+                return null;
+            }
+
             var now = clock.GetUtcNow().UtcDateTime;
             var lease = leaseSeconds is { } seconds
                 ? TimeSpan.FromSeconds(Math.Clamp(seconds, 60, MaxLease.TotalSeconds))

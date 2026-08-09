@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+#
+# The operator's tool, inside the Server's own container.
+#
+#     docker compose exec server aj-admin status
+#     docker compose exec server aj-admin maintenance on "nightly backup"
+#     docker compose exec server aj-admin maintenance off
+#     docker compose exec -it server aj-admin password
+#
+# **The commands are the contract; how they reach the Server is not.**
+#
+# Today every one of them writes an HTTP request to `127.0.0.1` by hand, because
+# this image has no `curl` and no `wget` — the container's own HEALTHCHECK is
+# written the same way for the same reason. That is an implementation detail and
+# it is meant to be replaceable: the day the Server grows a `dotnet
+# AlgoJudge.Server.dll admin …` subcommand, only `request` below changes, and an
+# operator who learned these four lines keeps them. Everything outside `request`
+# is transport-agnostic on purpose.
+#
+# Which is also why this is a file in the image rather than a recipe in a
+# document: a document cannot be run, so nothing notices when it stops being
+# true. `.github/workflows/ci.yml` runs this.
+
+set -euo pipefail
+
+# **Byte counts, not character counts.** `Content-Length` is bytes, and bash's
+# `${#s}` counts *characters* under a UTF-8 locale — so a password with one
+# accented letter would announce a length one short and the Server would wait
+# for a byte that never came. This is exactly the class of mistake this script
+# exists to stop somebody making by hand at three in the morning.
+export LC_ALL=C
+
+readonly HOST=127.0.0.1
+readonly PORT=${AJ_ADMIN_PORT:-8080}
+readonly BASE=/api/v1
+
+die() {
+    printf 'aj-admin: %s\n' "$1" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'TEXT'
+Usage:
+  aj-admin status                      what the maintenance switch is set to
+  aj-admin maintenance on [reason]     stop taking new work, finish what is claimed
+  aj-admin maintenance off             serve again, immediately
+  aj-admin password                    set the administrator's password, read from stdin
+
+The password is never taken as an argument: arguments are visible to every other
+process on the machine through `ps`, and land in shell history. With a terminal
+this prompts; without one it reads the first line of stdin.
+TEXT
+    exit 2
+}
+
+# ── The transport. The part that is meant to be replaceable. ────────────────
+#
+# Writes one HTTP request over bash's /dev/tcp and prints the body, or dies with
+# something an operator can act on.
+#
+# **HTTP/1.0, and that is not laziness.** Asked in 1.1, Kestrel answers
+# `Transfer-Encoding: chunked`, and the body then arrives wrapped in hexadecimal
+# chunk lengths — `10`, `5f`, a final `0` — which a person reading the screen can
+# ignore and `jq` cannot. De-chunking in bash would be a parser nobody wants to
+# own; 1.0 has no chunked encoding, so the Server frames the answer by closing
+# the connection and the body is the body.
+request() {
+    local method=$1 path=$2 body=${3-}
+    local token=${AJ_Admin__Token-}
+
+    [ -n "$token" ] || die \
+        'AJ_Admin__Token is not set in this container, so /admin is closed.
+       Set AJ_ADMIN_TOKEN before starting the stack — see .env.example.'
+
+    # **The braces matter.** `exec` with redirections and no command applies them
+    # to the shell itself and keeps them, so `exec 3<>… 2>/dev/null` would send
+    # this script's own stderr to /dev/null for the rest of its life — every
+    # message below it silently lost, including the one about a refused token.
+    # A group applies the redirection only while it runs, and fd 3 still belongs
+    # to the shell afterwards.
+    { exec 3<>"/dev/tcp/$HOST/$PORT"; } 2>/dev/null || die \
+        "nothing is listening on $HOST:$PORT — is this running inside the Server's container?"
+
+    {
+        printf '%s %s HTTP/1.0\r\n' "$method" "$BASE$path"
+        printf 'Host: localhost\r\n'
+        printf 'X-AlgoJudge-Admin-Token: %s\r\n' "$token"
+        printf 'Connection: close\r\n'
+        if [ -n "$body" ]; then
+            printf 'Content-Type: application/json\r\n'
+            printf 'Content-Length: %s\r\n' "${#body}"
+        else
+            printf 'Content-Length: 0\r\n'
+        fi
+        printf '\r\n%s' "$body"
+    } >&3
+
+    local response status
+    response=$(cat <&3)
+    exec 3<&-
+
+    status=$(printf '%s' "$response" | head -1 | cut -d' ' -f2)
+    # Everything after the first blank line. The headers carry nothing an
+    # operator needs, and the body is `application/problem+json` when it refuses.
+    local answer
+    answer=$(printf '%s' "$response" | sed -n '/^\r\{0,1\}$/,$p' | tail -n +2)
+
+    case "$status" in
+        2*) printf '%s\n' "$answer" ;;
+        404) die \
+            'refused (404). Either the token is wrong, or this is not running inside
+       the Server container — /admin answers only on its own loopback interface,
+       and says the same thing to every request it turns away.' ;;
+        *)  printf '%s\n' "$answer" >&2
+            die "the Server answered $status" ;;
+    esac
+}
+
+# ── The commands. Transport-agnostic. ───────────────────────────────────────
+
+# Percent-encodes one query value. A reason is free text an operator types, and
+# a space or an ampersand in it would otherwise truncate the request line or
+# invent a second parameter.
+urlencode() {
+    local s=$1 out='' c
+    for ((i = 0; i < ${#s}; i++)); do
+        c=${s:i:1}
+        case $c in
+            [a-zA-Z0-9.~_-]) out+=$c ;;
+            *) out+=$(printf '%%%02X' "'$c") ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+cmd_status() {
+    request GET /admin/maintenance
+}
+
+cmd_maintenance() {
+    local which=${1-}
+    case "$which" in
+        on)
+            local reason=${2-}
+            local query="on=true"
+            [ -n "$reason" ] && query+="&reason=$(urlencode "$reason")"
+            request POST "/admin/maintenance?$query"
+            printf '\nDraining. Wait for "level":"closed" before touching the database;\n' >&2
+            printf 'until then a Runner may still be writing a result.\n' >&2
+            ;;
+        off)
+            request POST "/admin/maintenance?on=false"
+            ;;
+        *) usage ;;
+    esac
+}
+
+cmd_password() {
+    local password
+    if [ -t 0 ]; then
+        read -rsp 'New password for the administrator: ' password
+        printf '\n' >&2
+    else
+        IFS= read -r password || true
+    fi
+
+    [ -n "$password" ] || die 'no password was given'
+
+    # Refused rather than escaped. A control character cannot travel in a JSON
+    # string without an escape this script would have to invent, and a password
+    # containing one is far more likely to be a stray paste than a choice.
+    case $password in
+        *[$'\001'-$'\037']*) die 'the password contains a control character' ;;
+    esac
+
+    # Only the two characters that would end the string or the escape early.
+    # Everything else is legal JSON content, including anything non-ASCII.
+    local escaped=$password
+    escaped=${escaped//\\/\\\\}
+    escaped=${escaped//\"/\\\"}
+
+    request POST /admin/password "{\"password\":\"$escaped\"}"
+}
+
+case "${1-}" in
+    status)      shift; cmd_status "$@" ;;
+    maintenance) shift; cmd_maintenance "$@" ;;
+    password)    shift; cmd_password "$@" ;;
+    *)           usage ;;
+esac
