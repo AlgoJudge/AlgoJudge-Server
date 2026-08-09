@@ -44,10 +44,19 @@ public class TrialRunTests(ServerFixture server)
         await context.SaveChangesAsync();
     }
 
+    /// <summary>In an activity, which is where a participant's trial lives.</summary>
     private static async Task<HttpResponseMessage> RequestTrialAsync(
         HttpClient client, Guid packageFileId, string type = "standard-io@1") =>
         await client.PostAsJsonAsync(
-            "/api/v1/activities/DEV-2026/trials",
+            "/api/v1/trials",
+            new { problemType = type, packageFileId, activityIdOrSlug = "DEV-2026" },
+            Json);
+
+    /// <summary>Against the library, which is where a manager calibrates.</summary>
+    private static async Task<HttpResponseMessage> RequestLibraryTrialAsync(
+        HttpClient client, Guid packageFileId, string type = "standard-io@1") =>
+        await client.PostAsJsonAsync(
+            "/api/v1/trials",
             new { problemType = type, packageFileId },
             Json);
 
@@ -99,7 +108,7 @@ public class TrialRunTests(ServerFixture server)
             .GetProperty("duplicate").GetBoolean());
 
         var after = await admin.GetFromJsonAsync<JsonElement>(
-            $"/api/v1/activities/DEV-2026/trials/{trialId}", Json);
+            $"/api/v1/trials/{trialId}", Json);
         Assert.Equal("completed", after.GetProperty("state").GetString());
         Assert.Contains("timeMs", after.GetProperty("measurement").GetString());
 
@@ -223,8 +232,49 @@ public class TrialRunTests(ServerFixture server)
             .Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetString()!;
 
         var other = await Sign.NewAccountAsync(server, "trial-onlooker");
-        var looked = await other.GetAsync($"/api/v1/activities/DEV-2026/trials/{trialId}");
+        var looked = await other.GetAsync($"/api/v1/trials/{trialId}");
 
         Assert.Equal(HttpStatusCode.NotFound, looked.StatusCode);
+    }
+
+    /// <summary>
+    /// The case the activity-scoped path had nowhere to put: a manager
+    /// calibrating a problem in the **library**, which belongs to no activity.
+    ///
+    /// <para>
+    /// Permitted by a global `trial:run`, which the catalogue already allowed —
+    /// `TrialRun` is declared `Both` — and which had no path until the activity
+    /// became optional.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_manager_can_measure_a_problem_that_is_in_no_activity()
+    {
+        await ClearTrialsAsync();
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var fileId = await UploadAsync(admin, "package.zip", "bytes from the library");
+
+        var created = await RequestLibraryTrialAsync(admin, fileId);
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+
+        var trial = await created.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal("queued", trial.GetProperty("state").GetString());
+
+        // **No activity, and absent rather than empty.** A trial that named one
+        // it does not belong to would be a lie a screen could repeat.
+        Assert.True(
+            !trial.TryGetProperty("activityId", out var scope)
+                || scope.ValueKind == JsonValueKind.Null,
+            "a library trial names no activity");
+
+        // A Runner takes it exactly as it takes any other: nothing about the
+        // queue knows which scope asked.
+        var runner = await Build.RunnerAsync(server);
+        var claimed = await runner.Client.PostAsJsonAsync("/api/v1/runner/trials/claim", new { }, Json);
+        Assert.Equal(HttpStatusCode.OK, claimed.StatusCode);
+        Assert.Equal(
+            trial.GetProperty("id").GetString(),
+            (await claimed.Content.ReadFromJsonAsync<JsonElement>(Json))
+                .GetProperty("trialId").GetString());
     }
 }

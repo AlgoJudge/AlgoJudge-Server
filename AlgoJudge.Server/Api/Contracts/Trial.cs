@@ -12,7 +12,11 @@ namespace AlgoJudge.Server.Api.Contracts
     public record TrialDto
     {
         public required string Id { get; init; }
-        public required string ActivityId { get; init; }
+        /// <summary>
+        /// Absent when the trial was asked for against the **library** — a
+        /// manager calibrating a problem that belongs to no activity yet.
+        /// </summary>
+        public string? ActivityId { get; init; }
         /// <summary>`queued` | `running` | `completed` | `failed` | `cancelled`.</summary>
         public required string State { get; init; }
         public required string ProblemType { get; init; }
@@ -51,6 +55,12 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>Matched against a Runner's own types by equality, never parsed here.</summary>
         public required string ProblemType { get; init; }
         public required Guid PackageFileId { get; init; }
+        /// <summary>
+        /// Where permission is asked for. **Absent means the library**, and
+        /// then `trial:run` has to be held globally — which is what a manager
+        /// calibrating a problem before it is attached anywhere needs.
+        /// </summary>
+        public string? ActivityIdOrSlug { get; init; }
     }
 
     /// <summary>What a Runner is handed when it claims a trial.</summary>
