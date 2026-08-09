@@ -51,8 +51,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Built but not pushed: no registry has been chosen yet. The build context
-      # is the repository root, as the Compose file expects.
+      # Built and not pushed, which is now a choice rather than a gap: a commit
+      # proves the Dockerfile still builds, and `release.yml` publishes to
+      # `ghcr.io/algojudge/algojudge-server` when somebody pushes a `v*` tag.
+      # The build context is the repository root, as the Compose file expects.
       - name: Build image
         run: docker build -f AlgoJudge.Server/Dockerfile -t algojudge-server:ci .
 
