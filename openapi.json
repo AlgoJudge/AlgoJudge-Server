@@ -8368,6 +8368,24 @@
           "createdAt": {
             "type": "string",
             "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceProviderId": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceProviderName": {
+            "type": "string",
+            "nullable": true
+          },
+          "managed": {
+            "type": "boolean"
+          },
+          "overrideSystem": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -8425,6 +8443,10 @@
           },
           "state": {
             "type": "string",
+            "nullable": true
+          },
+          "overrideSystem": {
+            "type": "boolean",
             "nullable": true
           }
         },

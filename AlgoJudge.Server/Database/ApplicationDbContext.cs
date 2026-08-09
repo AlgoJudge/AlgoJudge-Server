@@ -433,15 +433,35 @@ namespace AlgoJudge.Server.Database
             {
                 e.ToTable("Grants");
                 e.Property(g => g.Permissions).HasColumnType("jsonb");
-                // One grant per user per scope. A null ActivityId is the system
-                // scope, and Postgres treats nulls as distinct in a unique index,
-                // so the system grant needs its own filtered index to be unique.
+                // One grant per user per activity. A null ActivityId is the
+                // system scope, and Postgres treats nulls as distinct in a unique
+                // index, so the system scope needs filtered indexes of its own.
                 e.HasIndex(g => new { g.UserId, g.ActivityId })
                     .IsUnique()
                     .HasFilter("\"ActivityId\" IS NOT NULL");
+
+                // **Two indexes at system scope, not one.** A user holds exactly
+                // one manual contribution and at most one per provider, and the
+                // permissions they hold there are the union. A single index over
+                // (UserId, SourceProviderId) would not express the first rule:
+                // nulls are distinct, so two manual rows would both be allowed
+                // and nothing would say which one an administrator was editing.
                 e.HasIndex(g => g.UserId)
                     .IsUnique()
-                    .HasFilter("\"ActivityId\" IS NULL");
+                    .HasDatabaseName("IX_Grants_UserId_Manual")
+                    .HasFilter("\"ActivityId\" IS NULL AND \"SourceProviderId\" IS NULL");
+                e.HasIndex(g => new { g.UserId, g.SourceProviderId })
+                    .IsUnique()
+                    .HasDatabaseName("IX_Grants_UserId_Provider")
+                    .HasFilter("\"ActivityId\" IS NULL AND \"SourceProviderId\" IS NOT NULL");
+
+                // Restrict rather than cascade, matching the provider service:
+                // removing a provider that people sign in through is refused
+                // while anything of theirs is still here.
+                e.HasOne(g => g.SourceProvider)
+                    .WithMany()
+                    .HasForeignKey(g => g.SourceProviderId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 // "Who is in this activity" is a query over this table, because
                 // there is no membership table beside it. `IsSystem` is in the
                 // index because the participant count excludes staff.
