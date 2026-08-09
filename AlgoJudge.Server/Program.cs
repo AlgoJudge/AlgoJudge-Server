@@ -99,7 +99,11 @@ namespace AlgoJudge.Server
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 // Replaces the built-in one, which would demand an address of
                 // every account. An address stays unique when there is one.
-                .AddUserValidator<OptionalEmailValidator>();
+                .AddUserValidator<OptionalEmailValidator>()
+                // The one login this product reserves. A validator because it is
+                // the only place that catches `MapIdentityApi`'s own /register,
+                // which is framework code and takes the login it is given.
+                .AddUserValidator<ReservedLoginValidator>();
 
             // Injected rather than DateTime.UtcNow, so the scheduler and the
             // file collector can be tested against a clock somebody turns.
@@ -114,6 +118,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IProblemService, ProblemService>();
             builder.Services.AddScoped<IResultsService, ResultsService>();
             builder.Services.AddScoped<ITrialService, TrialService>();
+            builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
             builder.Services.AddScoped<IQuestionService, QuestionService>();
             builder.Services.AddScoped<IAccountService, AccountService>();
             builder.Services.AddScoped<IDocumentService, DocumentService>();
@@ -136,6 +141,9 @@ namespace AlgoJudge.Server
 
             // Recovery for a Runner that died holding a job. Registered as a
             // singleton so it can be resolved in tests and swept on demand.
+            builder.Services.AddSingleton<Workers.MaintenanceDrainer>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.MaintenanceDrainer>());
+
             builder.Services.AddSingleton<Workers.LeaseReaper>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.LeaseReaper>());
 
@@ -189,8 +197,14 @@ namespace AlgoJudge.Server
 
             var app = builder.Build();
 
-            // First, so everything after it sees the caller's real scheme and
-            // address rather than the proxy's.
+            // **Before the rewrite**, and that ordering is the whole point: the
+            // next line replaces the remote address with what the proxy says,
+            // which is right for logs and wrong for "is this call coming from
+            // inside the container". See `Authorization/Peer.cs`.
+            app.UseTruePeerAddress();
+
+            // First after that, so everything else sees the caller's real scheme
+            // and address rather than the proxy's.
             app.UseForwardedHeaders();
 
             // Everything the Server serves lives under /api/v1. UsePathBase
@@ -276,6 +290,17 @@ namespace AlgoJudge.Server
             // to reject for its own reasons.
             app.UseIdentitySurfaceRules();
 
+            // The operator's own surface: the loopback interface **and** a
+            // token, and one 404 for everything that is neither. Before the
+            // maintenance gate, which exempts `/admin` so an installation that
+            // has closed itself can still be reopened.
+            app.UseAdminSurfaceRules();
+
+            // After authorisation, so the refusal is the last word rather than
+            // an anonymous 503 hiding a 401 — and after the exception handler,
+            // so throwing gets `application/problem+json` for free.
+            app.UseMaintenanceGate();
+
             // After authentication, so it knows who is asking, and last so it
             // records only requests that actually got somewhere.
             app.UseMiddleware<SessionTrackingMiddleware>();
@@ -294,6 +319,27 @@ namespace AlgoJudge.Server
             {
                 var seed = scope.ServiceProvider.GetRequiredService<Seeder>();
                 seed.EnsureAsync(app.Environment.IsDevelopment()).GetAwaiter().GetResult();
+            }
+
+            // Said once, at start, so an operator learns the state of the door
+            // before the night they need it rather than by getting a 404 from
+            // something they were told would work. **Never the token itself.**
+            var adminToken = app.Configuration[AdminSurface.TokenSetting];
+            var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AlgoJudge.Admin");
+            if (string.IsNullOrWhiteSpace(adminToken))
+            {
+                startup.LogWarning(
+                    "AJ_Admin__Token is not set, so /admin is closed — including the maintenance "
+                    + "switch and the only way to set the administrator's password.");
+            }
+            else if (adminToken == AdminSurface.DevelopmentToken && !app.Environment.IsDevelopment())
+            {
+                // Not merely untidy: this value is in a compose file in a public
+                // repository, so an installation running it has an admin surface
+                // whose token anybody can read.
+                startup.LogWarning(
+                    "AJ_Admin__Token is the well-known development token outside Development. "
+                    + "Anybody who can read this product's repository can throw the switch.");
             }
 
             app.Run();

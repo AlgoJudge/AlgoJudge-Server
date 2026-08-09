@@ -36,6 +36,30 @@ namespace AlgoJudge.Server.Services
                 {
                     throw new ValidationException("A login is required", "account.username.required");
                 }
+
+                // **Before `SetUserNameAsync`, and that is not a style choice.**
+                // That method writes the new name to the database itself — the
+                // EF store saves on update — so a rule enforced by an
+                // `IUserValidator` would run on the `UpdateAsync` below, after
+                // the rename had already happened, and refuse a change it had
+                // just let through. Renaming is the one account path a validator
+                // cannot guard, so it is guarded here.
+                if (string.Equals(wanted, Seeder.AdminLogin, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ConflictException(
+                        $"The login {Seeder.AdminLogin} is reserved for this installation's administrator",
+                        "account.username.reserved");
+                }
+                if (string.Equals(user.UserName, Seeder.AdminLogin, StringComparison.OrdinalIgnoreCase))
+                {
+                    // `POST /admin/password` resets the account *named* `admin`.
+                    // An administrator who renames themselves leaves it pointing
+                    // at nothing, and no session anywhere able to put it back.
+                    throw new ConflictException(
+                        $"This installation's administrator keeps the login {Seeder.AdminLogin}",
+                        "account.username.reserved");
+                }
+
                 if (await users.FindByNameAsync(wanted) is not null)
                 {
                     throw new ConflictException("That login is taken", "account.username.taken");

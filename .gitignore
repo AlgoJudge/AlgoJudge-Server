@@ -399,3 +399,8 @@ FodyWeavers.xsd
 
 #IntelliJ configuration
 .idea
+# Compose reads these for variable substitution, and they hold the admin token.
+# `.env.example` is committed and carries no value; anything else is a secret.
+.env
+.env.*
+!.env.example

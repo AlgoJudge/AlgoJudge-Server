@@ -9,6 +9,7 @@
     "announcementPublished",
     "grantChanged",
     "instanceChanged",
+    "maintenanceChanged",
     "managerSeriesChanged",
     "permissionTemplateChanged",
     "problemChanged",

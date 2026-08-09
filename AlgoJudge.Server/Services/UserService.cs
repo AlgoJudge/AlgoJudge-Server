@@ -1,5 +1,4 @@
-using System.Security.Cryptography;
-using System.Text.Json;
+﻿using System.Text.Json;
 using AlgoJudge.Server.Api;
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
@@ -36,16 +35,6 @@ namespace AlgoJudge.Server.Services
         TimeProvider clock
     ) : IUserService
     {
-        /// <summary>
-        /// The alphabet a handed-out password is drawn from.
-        /// <para>
-        /// No <c>0</c>/<c>O</c>, no <c>1</c>/<c>l</c>/<c>I</c>. These are read off
-        /// a paper slip and typed by somebody in a hurry, and a character pair
-        /// nobody can tell apart is a support request.
-        /// </para>
-        /// </summary>
-        private const string Readable = "abcdefghijkmnopqrstuvwxyz23456789";
-
         public async Task<IReadOnlyList<ManagedUserSummaryDto>> SearchAsync(string? query, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.UserReadAll, null, ct);
@@ -295,18 +284,14 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// Twelve characters from an unambiguous alphabet, drawn from a
-        /// cryptographic source rather than <c>Random</c>.
+        /// Twelve characters, from the one generator the Server has.
+        /// <para>
+        /// Handed to somebody on paper, so it is short enough to type; the seed
+        /// asks the same generator for twenty, because that one is never read by
+        /// anybody and length is free.
+        /// </para>
         /// </summary>
-        private static string NewPassword()
-        {
-            var chars = new char[12];
-            for (var i = 0; i < chars.Length; i++)
-            {
-                chars[i] = Readable[RandomNumberGenerator.GetInt32(Readable.Length)];
-            }
-            return new string(chars);
-        }
+        private static string NewPassword() => Passwords.Generate(12);
 
         public async Task<ManagedUserDto> UpdateAsync(string id, UserUpdateInputDto input, CancellationToken ct)
         {

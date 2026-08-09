@@ -2,6 +2,7 @@ using System.Text.Json;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
+using AlgoJudge.Server.Utils;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,11 +24,30 @@ namespace AlgoJudge.Server.Database
         ILogger<Seeder> logger)
     {
         /// <summary>
-        /// The development administrator. A well-known password is only ever
-        /// acceptable because this runs in Development alone — the caller passes
-        /// `false` everywhere else, and nothing below the first block runs.
+        /// The administrator every installation gets, and the one login this
+        /// product reserves. See <see cref="Authorization.ReservedLoginValidator"/>.
         /// </summary>
-        public const string DevAdminLogin = "admin";
+        public const string AdminLogin = "admin";
+
+        /// <summary>
+        /// <b>Twenty characters nobody is ever told.</b>
+        /// <para>
+        /// Not a default password: a default is a password an attacker also
+        /// knows, and a well-known administrator login with a well-known
+        /// password is the most reliable way an installation is taken over. The
+        /// alternative to a default is a password nobody knows and a documented
+        /// way to set one — <c>POST /admin/password</c>, from the machine
+        /// itself, with the operator's token.
+        /// </para>
+        /// </summary>
+        private const int AdminPasswordLength = 20;
+
+        /// <summary>
+        /// The development administrator's password. Well known, and only ever
+        /// acceptable because it is applied in Development alone — the caller
+        /// passes <c>false</c> everywhere else.
+        /// </summary>
+        public const string DevAdminLogin = AdminLogin;
         public const string DevAdminPassword = "admin-development-only";
         public const string DevParticipantLogin = "student";
         public const string DevParticipantPassword = "student-development-only";
@@ -36,9 +56,108 @@ namespace AlgoJudge.Server.Database
         {
             await instances.EnsureAsync(ct);
             await EnsureTemplatesAsync(ct);
+            // Beside the templates and the instance row, and for the same
+            // reason: an installation without one cannot be operated at all.
+            // This used to live in the development block, which left a
+            // production database with nobody to sign in as and no way to make
+            // anybody.
+            await EnsureAdministratorAsync(ct);
 
             if (!development) return;
+            await EnsureDevelopmentAdminPasswordAsync(ct);
             await EnsureDevelopmentDataAsync(ct);
+        }
+
+        /// <summary>
+        /// The administrator account, created once and never touched again.
+        /// <para>
+        /// <b>No name and no address.</b> It is not a person; it is the account
+        /// an operator uses to make people. Inventing an identity for it would
+        /// put a name on a board and an address in a mailbox that belong to
+        /// nobody.
+        /// </para>
+        /// <para>
+        /// One grant, not a list: the administrator template bypasses the rest,
+        /// and an administrator holding individual permissions is an
+        /// administrator who can be trimmed.
+        /// </para>
+        /// </summary>
+        private async Task EnsureAdministratorAsync(CancellationToken ct)
+        {
+            if (await users.FindByNameAsync(AdminLogin) is not null) return;
+
+            var admin = new User
+            {
+                UserName = AdminLogin,
+                Email = null,
+                EmailConfirmed = false,
+                FirstName = null,
+                LastName = null,
+                ApprovedAt = DateTime.UtcNow,
+            };
+
+            var created = await users.CreateAsync(admin, Passwords.Generate(AdminPasswordLength));
+            if (!created.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "The administrator could not be created: "
+                    + string.Join("; ", created.Errors.Select(e => e.Description)));
+            }
+
+            context.Grants.Add(new Grant
+            {
+                UserId = admin.Id,
+                ActivityId = null,
+                Permissions = JsonSerializer.Serialize(Permissions.AdminTemplate),
+                CreatedFromTemplate = "admin",
+                IsSystem = true,
+            });
+            await context.SaveChangesAsync(ct);
+
+            // Said loudly, because an operator who does not read this has an
+            // installation they cannot get into. **The password is not in the
+            // message** — it is not in any message, which is the point of it.
+            logger.LogWarning(
+                "Created the {Login} account with a random password that has not been recorded anywhere. "
+                + "Set one with POST {Path} from inside the container before signing in; "
+                + "it needs AJ_Admin__Token to be configured.",
+                AdminLogin, "/api/v1/admin/password");
+        }
+
+        /// <summary>
+        /// Puts the well-known password on it, in Development only.
+        /// <para>
+        /// <b>Outside the "has this already been seeded" check on purpose.</b>
+        /// The account above is created once; this has to run on every start,
+        /// because a developer whose database predates the random password would
+        /// otherwise have an <c>admin</c> they cannot sign in as and no obvious
+        /// reason why.
+        /// </para>
+        /// </summary>
+        private async Task EnsureDevelopmentAdminPasswordAsync(CancellationToken ct)
+        {
+            var admin = await users.FindByNameAsync(AdminLogin);
+            if (admin is null) return;
+            if (await users.CheckPasswordAsync(admin, DevAdminPassword)) return;
+
+            var token = await users.GeneratePasswordResetTokenAsync(admin);
+            var reset = await users.ResetPasswordAsync(admin, token, DevAdminPassword);
+            if (!reset.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "The development administrator's password could not be set: "
+                    + string.Join("; ", reset.Errors.Select(e => e.Description)));
+            }
+
+            // Also clears whatever a failed sign-in left behind, so a developer
+            // does not start the day locked out of a well-known account.
+            admin.AccessFailedCount = 0;
+            admin.LockoutEnd = null;
+            await context.SaveChangesAsync(ct);
+
+            logger.LogWarning(
+                "Development: {Login} now has the well-known password. This runs in Development only.",
+                AdminLogin);
         }
 
         /// <summary>
@@ -82,20 +201,15 @@ namespace AlgoJudge.Server.Database
                 "Seeding development data, including accounts with well-known passwords. "
                 + "This runs in Development only.");
 
-            var admin = await EnsureUserAsync(DevAdminLogin, DevAdminPassword, "Ada", "Administrator", ct);
-            var student = await EnsureUserAsync(DevParticipantLogin, DevParticipantPassword, "Stefan", "Student", ct);
+            // The administrator and its grant are seeded above, everywhere, and
+            // its password has already been set to the well-known one. It owns
+            // the seeded material below because somebody has to.
+            var admin = await users.FindByNameAsync(AdminLogin)
+                ?? throw new InvalidOperationException(
+                    $"{AdminLogin} is seeded before this runs, and was not");
 
-            // The administrator's grant is one entry, because it bypasses the
-            // rest. An administrator with a list of individual permissions is an
-            // administrator who can be trimmed.
-            context.Grants.Add(new Grant
-            {
-                UserId = admin.Id,
-                ActivityId = null,
-                Permissions = JsonSerializer.Serialize(Permissions.AdminTemplate),
-                CreatedFromTemplate = "admin",
-                IsSystem = true,
-            });
+            // All this block adds is somebody to compete against it.
+            var student = await EnsureUserAsync(DevParticipantLogin, DevParticipantPassword, "Stefan", "Student", ct);
 
             var activity = new Activity
             {

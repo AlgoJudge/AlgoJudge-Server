@@ -35,6 +35,7 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IFileService files,
+        IMaintenanceService maintenance,
         TimeProvider clock
     ) : ITrialService
     {
@@ -139,6 +140,13 @@ namespace AlgoJudge.Server.Services
 
         public async Task<ClaimedTrialDto?> ClaimAsync(DbRunner runner, int? leaseSeconds, CancellationToken ct)
         {
+            // Drained on the same terms as the job queue, and for the same
+            // reason: `204` is the ordinary empty answer.
+            if (await maintenance.StateAsync(ct) is { Level: not MaintenanceLevel.Open })
+            {
+                return null;
+            }
+
             var now = clock.GetUtcNow().UtcDateTime;
             var lease = leaseSeconds is { } seconds
                 ? TimeSpan.FromSeconds(Math.Clamp(seconds, 60, MaxLease.TotalSeconds))

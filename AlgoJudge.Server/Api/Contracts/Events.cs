@@ -72,6 +72,17 @@ namespace AlgoJudge.Server.Api.Contracts
         public const string UserChanged = "userChanged";
         public const string RunnerChanged = "runnerChanged";
         public const string InstanceChanged = "instanceChanged";
+
+        /// <summary>
+        /// The installation has withdrawn from service, or come back.
+        /// <para>
+        /// Sent to everybody, like <see cref="InstanceChanged"/>, because it is
+        /// not about anything a permission scopes: a window applies to whoever
+        /// is looking. A screen that learns this way redraws as maintenance; one
+        /// that learns from its next failed request shows an error first.
+        /// </para>
+        /// </summary>
+        public const string MaintenanceChanged = "maintenanceChanged";
     }
 
     /// <summary>
