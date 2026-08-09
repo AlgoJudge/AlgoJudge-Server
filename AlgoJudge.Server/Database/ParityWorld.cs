@@ -340,8 +340,8 @@ namespace AlgoJudge.Server.Database
                         CreatedByUserId = admin.Id,
                         Note = number == 1 ? "Pierwsza wersja" : $"Wersja {number}",
                         // The shape `docs/specs/PACKAGE_FORMAT.md` states, decided
-                        // 2026-08-08 over the fixture's `kind`/`memoryMb` form.
-                        Config = """{"format":"standard-io","version":1,"limits":{"timeMs":1000,"memoryKib":262144}}""",
+                        // 2026-08-08 over the fixture's `kind`/`memoryBytes` form.
+                        Config = """{"format":"standard-io","version":1,"limits":{"timeMs":1000,"memoryBytes":268435456}}""",
                     };
                     context.ProblemVersions.Add(version);
                     made[number] = version;

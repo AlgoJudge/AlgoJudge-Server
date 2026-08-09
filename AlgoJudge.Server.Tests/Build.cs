@@ -65,7 +65,7 @@ public static class Build
         await PostAsync(admin, $"/api/v1/problems/{problemId}/versions", new
         {
             statements = new[] { new { fileId = statement } },
-            config = new { format = "standard-io", version = 1, limits = new { timeMs = 1000, memoryKib = 262144 } },
+            config = new { format = "standard-io", version = 1, limits = new { timeMs = 1000, memoryBytes = 268435456 } },
             package = new { fileId = package },
         });
 

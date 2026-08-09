@@ -128,7 +128,7 @@ public class EndToEndTests(ServerFixture server)
         {
             note = "First",
             statements = new[] { new { fileId = statement } },
-            config = new { format = "standard-io", version = 1, limits = new { timeMs = 2000, memoryKib = 262144 } },
+            config = new { format = "standard-io", version = 1, limits = new { timeMs = 2000, memoryBytes = 268435456 } },
             package = new { fileId = package },
         });
         Assert.Equal(1, version.GetProperty("version").GetInt32());

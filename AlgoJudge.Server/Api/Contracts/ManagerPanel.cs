@@ -173,7 +173,8 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Os { get; init; }
         public string? Cpu { get; init; }
         public int? Cores { get; init; }
-        public int? MemoryMb { get; init; }
+        /// <summary>How much memory the machine has, in **bytes**.</summary>
+        public long? MemoryBytes { get; init; }
     }
 
     public record ManagedRunnerDto
