@@ -29,9 +29,13 @@ that a request is authenticated.
 
 ## Decisions in force
 
-- **Identity stays here for the MVP.** ASP.NET Identity and password storage
-  remain. Moving identity into a separate component behind OIDC is the target,
-  deliberately deferred.
+- **Identity stays here for the MVP** — and, for administrator, local and
+  temporary accounts, permanently. ASP.NET Identity and password storage remain.
+  What arrives in phase 2 is not a move but an *addition*: several OIDC providers
+  registered at once, from the database, with a claim-to-permission mapping the
+  installation configures. Specified 2026-08-09,
+  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md`; **not yet
+  implemented**.
 - **`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
   `Result`, naming the Runner that is evaluating or has evaluated a submission.
   Because it must name a Runner while evaluation is still running, `Result` is
