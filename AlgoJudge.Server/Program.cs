@@ -146,6 +146,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IIdentityProviderService, IdentityProviderService>();
             builder.Services.AddScoped<IClaimMappingService, ClaimMappingService>();
             builder.Services.AddScoped<IFederatedSignInService, FederatedSignInService>();
+            builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
             builder.Services.AddScoped<IUserService, UserService>();
             builder.Services.AddScoped<IManagerWriteService, ManagerWriteService>();
             builder.Services.AddScoped<IManagerReadService, ManagerReadService>();
@@ -169,6 +170,8 @@ namespace AlgoJudge.Server
 
             builder.Services.AddSingleton<Workers.LeaseReaper>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.LeaseReaper>());
+            builder.Services.AddSingleton<Workers.DeletionSweeper>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.DeletionSweeper>());
 
             // Owns every open/close transition, because openness is stored.
             builder.Services.AddSingleton<Workers.SeriesScheduler>();

@@ -196,11 +196,30 @@ namespace AlgoJudge.Server.Services
 
             var login = await FreeLoginAsync(wanted, subject, ct);
 
+            // **The address is decoration; the key is issuer plus `sub`.**
+            // Addresses stay unique across accounts here, and two providers
+            // vouching for the same person — a university's SSO and
+            // `auth.algojudge.app`, say — will hand over the same one. Carrying
+            // it anyway would fail account creation outright, so the second
+            // account is provisioned without it rather than not at all.
+            //
+            // It reads as a missing field and is one; what it is not is a reason
+            // to refuse somebody a directory has already vouched for.
+            var address = First(principal, "email") ?? First(principal, ClaimTypes.Email);
+            if (address is not null && await context.Users.AnyAsync(
+                u => u.NormalizedEmail == address.ToUpperInvariant(), ct))
+            {
+                log.LogInformation(
+                    "Provisioning from {Provider} without an address: it is already on another account",
+                    provider.Slug);
+                address = null;
+            }
+
             var user = new User
             {
                 UserName = login,
-                Email = First(principal, "email") ?? First(principal, ClaimTypes.Email),
-                EmailConfirmed = string.Equals(
+                Email = address,
+                EmailConfirmed = address is not null && string.Equals(
                     First(principal, "email_verified"), "true", StringComparison.OrdinalIgnoreCase),
                 FirstName = First(principal, "given_name") ?? First(principal, ClaimTypes.GivenName),
                 LastName = First(principal, "family_name") ?? First(principal, ClaimTypes.Surname),

@@ -169,10 +169,6 @@ namespace AlgoJudge.Server.Services
             {
                 provider.ClientSecret = input.ClientSecret;
             }
-            if (!string.IsNullOrWhiteSpace(input.DeletionSecret))
-            {
-                provider.DeletionSecret = input.DeletionSecret;
-            }
 
             await ApplyAsync(provider, input, ct);
             await context.SaveChangesAsync(ct);
@@ -187,6 +183,17 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         private async Task ApplyAsync(IdentityProvider provider, IdentityProviderInputDto input, CancellationToken ct)
         {
+            // **Both paths, here rather than in the update path only.** The
+            // create path used to leave this unset, so a registration that
+            // supplied a deletion secret *and* asked for the channel was refused
+            // by the guard below for not having the secret it had just been
+            // given. Absent still means "leave the stored one alone"; on a
+            // create there is nothing to leave.
+            if (!string.IsNullOrWhiteSpace(input.DeletionSecret))
+            {
+                provider.DeletionSecret = input.DeletionSecret;
+            }
+
             var displayName = (input.DisplayName ?? "").Trim();
             if (displayName.Length == 0)
             {

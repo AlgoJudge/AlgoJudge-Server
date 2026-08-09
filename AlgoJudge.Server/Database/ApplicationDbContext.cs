@@ -32,6 +32,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<IdentityProviderMappingRule> IdentityProviderMappingRules { get; set; }
         public DbSet<UserIdentity> UserIdentities { get; set; }
         public DbSet<FederatedSignInAttempt> FederatedSignInAttempts { get; set; }
+        public DbSet<AccountDeletionRequest> AccountDeletionRequests { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -548,6 +549,34 @@ namespace AlgoJudge.Server.Database
                 e.HasOne(i => i.Provider)
                     .WithMany(p => p.Identities)
                     .HasForeignKey(i => i.ProviderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<AccountDeletionRequest>(e =>
+            {
+                e.ToTable("AccountDeletionRequests");
+                e.Property(r => r.Subject).HasMaxLength(256);
+                e.Property(r => r.RequestId).HasMaxLength(128);
+                e.Property(r => r.Detail).HasMaxLength(512);
+                // **What makes the back channel idempotent.** A webhook is
+                // retried on any hiccup; without this a second delivery opens a
+                // second window and the first one having been halted stops
+                // meaning anything.
+                e.HasIndex(r => new { r.ProviderId, r.RequestId })
+                    .IsUnique()
+                    .HasFilter("\"RequestId\" IS NOT NULL");
+                // The sweeper's only query.
+                e.HasIndex(r => new { r.State, r.ExecuteAfter });
+                e.HasOne(r => r.Provider)
+                    .WithMany()
+                    .HasForeignKey(r => r.ProviderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                // Restrict, not cascade: a user row is never hard-deleted, and a
+                // request that outlived its account is exactly the history this
+                // queue exists to keep.
+                e.HasOne(r => r.User)
+                    .WithMany()
+                    .HasForeignKey(r => r.UserId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

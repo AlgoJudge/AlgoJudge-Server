@@ -239,6 +239,74 @@
         }
       }
     },
+    "/account/deletion-requests": {
+      "post": {
+        "tags": [
+          "AccountDeletion"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HolderDeletionInputDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HolderDeletionInputDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/HolderDeletionInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/activities/{idOrSlug}/results": {
       "get": {
         "tags": [
@@ -2269,6 +2337,122 @@
                 "schema": {
                   "type": "integer",
                   "format": "int32"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-deletion-requests": {
+      "get": {
+        "tags": [
+          "DeletionQueue"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDtoPageDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDtoPageDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDtoPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-deletion-requests/{id}/halt": {
+      "post": {
+        "tags": [
+          "DeletionQueue"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
                 }
               }
             }
@@ -5499,6 +5683,85 @@
         }
       }
     },
+    "/identity/providers/{providerId}/deletion-requests": {
+      "post": {
+        "tags": [
+          "ProviderDeletion"
+        ],
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderDeletionInputDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderDeletionInputDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderDeletionInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequestDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runner/register": {
       "post": {
         "tags": [
@@ -8332,6 +8595,81 @@
         },
         "additionalProperties": false
       },
+      "DeletionRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "channel": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "userId": {
+            "type": "string",
+            "nullable": true
+          },
+          "userLogin": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "executeAfter": {
+            "type": "string",
+            "nullable": true
+          },
+          "resolvedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeletionRequestDtoPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeletionRequestDto"
+            },
+            "nullable": true
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "EnrolInputDto": {
         "type": "object",
         "properties": {
@@ -8539,6 +8877,16 @@
           },
           "maintenance": {
             "$ref": "#/components/schemas/MaintenanceDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HolderDeletionInputDto": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10494,6 +10842,24 @@
             "nullable": true
           },
           "email": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProviderDeletionInputDto": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedAt": {
             "type": "string",
             "nullable": true
           }

@@ -22,6 +22,8 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         ICurrentUserService currentUser,
         UserManager<User> users,
+        IAccountDeletionService deletion,
+        IInstanceService instances,
         TimeProvider clock
     ) : IAccountService
     {
@@ -209,6 +211,14 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         public async Task DeleteAsync(string password, CancellationToken ct)
         {
+            var instance = await instances.EnsureAsync(ct);
+            if (!instance.AccountDeletionEnabled)
+            {
+                throw new ForbiddenActionException(
+                    "This instance does not offer self-service account removal",
+                    "account.deletion.closed");
+            }
+
             var user = await currentUser.RequireAsync(ct);
 
             // This channel is the local account's, and it asks for a password an
@@ -222,38 +232,10 @@ namespace AlgoJudge.Server.Services
                 throw new ValidationException("The password is wrong", "account.password.wrong");
             }
 
-            var suffix = user.Id.Length >= 4 ? user.Id[^4..] : user.Id;
-
-            user.UserName = $"deleted-{suffix}";
-            user.NormalizedUserName = user.UserName.ToUpperInvariant();
-            user.Email = null;
-            user.NormalizedEmail = null;
-            user.EmailConfirmed = false;
-            user.FirstName = null;
-            user.LastName = null;
-            user.Note = null;
-            user.Tags = null;
-            user.PasswordHash = null;
-            user.SecurityStamp = Guid.NewGuid().ToString();
-            user.Anonymized = true;
-
-            // The text they wrote carries their name as surely as the name field
-            // does — a question signed with a class and a surname is not
-            // anonymous because the account row is.
-            var authored = await context.Questions
-                .Where(q => q.AuthorUserId == user.Id)
-                .ToListAsync(ct);
-            foreach (var question in authored)
-            {
-                question.Topic = "[deleted]";
-                question.Body = "[deleted]";
-            }
-
-            // Sessions end with the account, so nothing signed in survives it.
-            var sessions = await context.UserSessions
-                .Where(s => s.UserId == user.Id && s.EndedAt == null)
-                .ToListAsync(ct);
-            foreach (var session in sessions) session.EndedAt = clock.GetUtcNow().UtcDateTime;
+            // The emptying itself lives in one place, shared with the two
+            // channels an SSO account uses. Three copies of "what anonymising
+            // means" would be three answers the day a field is added.
+            await deletion.AnonymiseAsync(user, ct);
 
             await context.SaveChangesAsync(ct);
             await users.UpdateAsync(user);
