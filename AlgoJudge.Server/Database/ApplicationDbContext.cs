@@ -31,6 +31,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<IdentityProvider> IdentityProviders { get; set; }
         public DbSet<IdentityProviderMappingRule> IdentityProviderMappingRules { get; set; }
         public DbSet<UserIdentity> UserIdentities { get; set; }
+        public DbSet<FederatedSignInAttempt> FederatedSignInAttempts { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -548,6 +549,24 @@ namespace AlgoJudge.Server.Database
                     .WithMany(p => p.Identities)
                     .HasForeignKey(i => i.ProviderId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<FederatedSignInAttempt>(e =>
+            {
+                e.ToTable("FederatedSignInAttempts");
+                e.Property(a => a.Subject).HasMaxLength(256);
+                e.Property(a => a.Detail).HasMaxLength(256);
+                e.Property(a => a.Matched).HasColumnType("jsonb");
+                // The two questions asked of this table: "what happened to this
+                // person" and "what did this provider do to anybody's permissions".
+                e.HasIndex(a => new { a.ProviderId, a.At });
+                e.HasIndex(a => new { a.UserId, a.At });
+                // No foreign key to the user: an attempt is kept even when it
+                // matched no account, and the column is null exactly then.
+                e.HasOne(a => a.Provider)
+                    .WithMany()
+                    .HasForeignKey(a => a.ProviderId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

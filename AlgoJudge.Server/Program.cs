@@ -4,10 +4,13 @@ using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
 using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Utils;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace AlgoJudge.Server
 {
@@ -105,6 +108,23 @@ namespace AlgoJudge.Server
                 // which is framework code and takes the login it is given.
                 .AddUserValidator<ReservedLoginValidator>();
 
+            // The external cookie — where a provider's ticket waits between the
+            // callback and the decision to admit — is already registered:
+            // `AddIdentityApiEndpoints` ends in `AddIdentityCookies()`, which
+            // adds all four of Identity's schemes whether or not anything used
+            // them. Adding it again here would be a second registration of the
+            // same name.
+
+            // **One scheme per registered provider, resolved at run time.**
+            // Providers are rows an operator adds from the panel, so the set is
+            // not known at startup and `AddOpenIdConnect("name", …)` cannot
+            // express it. The protocol itself is still the framework's handler:
+            // state, nonce, PKCE, the code exchange and `id_token` validation are
+            // not reimplemented here.
+            builder.Services.AddSingleton<IProviderRegistry, ProviderRegistry>();
+            builder.Services.AddSingleton<IAuthenticationSchemeProvider, FederatedSchemeProvider>();
+            builder.Services.AddSingleton<IOptionsMonitor<OpenIdConnectOptions>, FederatedOidcOptions>();
+
             // Injected rather than DateTime.UtcNow, so the scheduler and the
             // file collector can be tested against a clock somebody turns.
             builder.Services.AddSingleton(TimeProvider.System);
@@ -124,6 +144,8 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IDocumentService, DocumentService>();
             builder.Services.AddScoped<IGrantService, GrantService>();
             builder.Services.AddScoped<IIdentityProviderService, IdentityProviderService>();
+            builder.Services.AddScoped<IClaimMappingService, ClaimMappingService>();
+            builder.Services.AddScoped<IFederatedSignInService, FederatedSignInService>();
             builder.Services.AddScoped<IUserService, UserService>();
             builder.Services.AddScoped<IManagerWriteService, ManagerWriteService>();
             builder.Services.AddScoped<IManagerReadService, ManagerReadService>();

@@ -125,11 +125,28 @@ namespace AlgoJudge.Server.Api
             LastName = user.LastName,
             Email = user.Email,
             EmailConfirmed = user.EmailConfirmed,
-            // Every account is local while Identity lives in the Server. It
-            // becomes meaningful when phase 2 lands and an account may be owned
-            // by a provider that will not let us rename it.
-            IsLocal = true,
+            IsLocal = IsLocal(user),
         };
+
+        /// <summary>
+        /// Whether this account is <b>this installation's</b>, and therefore
+        /// whether the person may change their own name, login, address and
+        /// password here.
+        /// <para>
+        /// <b>One rule: it is local when it has a local credential.</b> An account
+        /// provisioned by a provider carries no password, so its profile belongs
+        /// to whoever owns the identity — editing it here would either fail at
+        /// the next sign-in or quietly disagree with the directory. An account
+        /// that has both a password and a link stays local: somebody deliberately
+        /// gave it a credential of its own.
+        /// </para>
+        /// <para>
+        /// Defined once, here, because the Client greys its inputs on this and
+        /// the Server refuses on it — and two definitions of "local" would be two
+        /// answers to whose the account is.
+        /// </para>
+        /// </summary>
+        public static bool IsLocal(User user) => user.PasswordHash is not null;
 
         // ── files ─────────────────────────────────────────────────────────────
 

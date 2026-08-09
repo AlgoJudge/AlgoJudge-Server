@@ -38,7 +38,8 @@ namespace AlgoJudge.Server.Services
     /// </summary>
     public partial class IdentityProviderService(
         ApplicationDbContext context,
-        IPermissionService permissions
+        IPermissionService permissions,
+        IProviderRegistry registry
     ) : IIdentityProviderService
     {
         [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$")]
@@ -92,6 +93,9 @@ namespace AlgoJudge.Server.Services
                 : "deny",
             DefaultTemplateName = p.DefaultTemplateName,
             DeletionChannelEnabled = p.DeletionChannelEnabled,
+            // Built from the same string the OIDC options are built from, so the
+            // panel and the handler cannot disagree about it.
+            CallbackPath = Program.ApiPathBase + FederatedSchemes.CallbackPath(p.Slug),
             HasClientSecret = !string.IsNullOrEmpty(p.ClientSecret),
             HasDeletionSecret = !string.IsNullOrEmpty(p.DeletionSecret),
             MappingRules = p.MappingRules
@@ -133,6 +137,7 @@ namespace AlgoJudge.Server.Services
             await ApplyAsync(provider, input, ct);
             context.IdentityProviders.Add(provider);
             await context.SaveChangesAsync(ct);
+            registry.Invalidate();
 
             return await GetAsync(provider.Id, ct);
         }
@@ -171,6 +176,7 @@ namespace AlgoJudge.Server.Services
 
             await ApplyAsync(provider, input, ct);
             await context.SaveChangesAsync(ct);
+            registry.Invalidate();
 
             return await GetAsync(provider.Id, ct);
         }
@@ -363,6 +369,7 @@ namespace AlgoJudge.Server.Services
 
             context.IdentityProviders.Remove(provider);
             await context.SaveChangesAsync(ct);
+            registry.Invalidate();
         }
 
         private static void RequireSlug(string slug)

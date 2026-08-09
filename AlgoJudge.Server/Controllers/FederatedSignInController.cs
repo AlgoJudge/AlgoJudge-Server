@@ -1,0 +1,110 @@
+using AlgoJudge.Server.Api.Contracts;
+using AlgoJudge.Server.Authorization;
+using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Services;
+using AlgoJudge.Server.Utils;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+
+namespace AlgoJudge.Server.Controllers
+{
+    /// <summary>
+    /// Signing in through a registered provider.
+    /// <para>
+    /// Two steps and a browser: <c>challenge</c> sends the person to the
+    /// provider, and the provider sends them back to the handler's callback
+    /// path, which lands here as an external ticket. Everything security-critical
+    /// between those two points is the framework's <c>OpenIdConnectHandler</c>;
+    /// what this owns is what the ticket <b>means</b>.
+    /// </para>
+    /// <para>
+    /// <b>Anonymous, necessarily.</b> Nobody is signed in yet — that is the
+    /// point — so the guard is the provider registration itself: an unknown or
+    /// disabled slug answers 404, and a callback with no ticket is refused.
+    /// </para>
+    /// </summary>
+    [ApiController]
+    [Route("identity/providers/{slug}")]
+    [AllowAnonymous]
+    public class FederatedSignInController(
+        IProviderRegistry registry,
+        IFederatedSignInService federated,
+        SignInManager<User> signIn
+    ) : ControllerBase
+    {
+        /// <summary>
+        /// Sends the browser to the provider.
+        /// </summary>
+        /// <param name="returnUrl">
+        /// Where to land afterwards. **Local paths only** — an open redirect on a
+        /// sign-in endpoint is a phishing primitive: the link would be genuinely
+        /// ours, and the page it lands on would not be.
+        /// </param>
+        [HttpGet("challenge")]
+        [ProducesResponseType(StatusCodes.Status302Found)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        public IActionResult Challenge(string slug, [FromQuery] string? returnUrl)
+        {
+            if (registry.Find(slug) is null) throw new NotFoundException("Identity provider");
+
+            var target = Url.IsLocalUrl(returnUrl) ? returnUrl! : "/";
+
+            return Challenge(
+                new AuthenticationProperties { RedirectUri = $"/identity/providers/{slug}/signed-in?returnUrl={Uri.EscapeDataString(target)}" },
+                FederatedSchemes.For(slug));
+        }
+
+        /// <summary>
+        /// Where the handler lands once it has a validated token.
+        /// <para>
+        /// The order below is the decision, not an implementation detail:
+        /// <b>the permission change is applied before the question of admission
+        /// is answered.</b> A refused sign-in still withdraws what the provider
+        /// no longer grants — otherwise somebody removed from the directory's
+        /// staff group stays staff here for ever, by never signing in again.
+        /// </para>
+        /// </summary>
+        [HttpGet("signed-in")]
+        [ProducesResponseType(StatusCodes.Status302Found)]
+        public async Task<IActionResult> Complete(
+            string slug, [FromQuery] string? returnUrl, CancellationToken ct)
+        {
+            if (registry.Find(slug) is not { } provider) throw new NotFoundException("Identity provider");
+
+            var ticket = await HttpContext.AuthenticateAsync(IdentityConstants.ExternalScheme);
+            if (!ticket.Succeeded || ticket.Principal is null)
+            {
+                return Refused(slug, "provider.ticket.missing");
+            }
+
+            var outcome = await federated.CompleteAsync(provider.Id, ticket.Principal, ct);
+
+            // The external cookie has done its job either way, and leaving one
+            // behind would let a later request be mistaken for a fresh ticket.
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
+            if (!outcome.Admitted || outcome.User is null)
+            {
+                return Refused(slug, outcome.Reason ?? "provider.refused");
+            }
+
+            // Only now, and through Identity, so the cookie the browser ends up
+            // holding is the same one a local sign-in issues and every later
+            // request is authenticated the one way.
+            await signIn.SignInAsync(outcome.User, isPersistent: true);
+
+            var target = Url.IsLocalUrl(returnUrl) ? returnUrl! : "/";
+            return Redirect(target);
+        }
+
+        /// <summary>
+        /// A refusal is a redirect, not a status code: the browser is mid-journey
+        /// and there is nobody to read a JSON body. The reason travels as a code
+        /// the sign-in screen can turn into a sentence in the reader's language.
+        /// </summary>
+        private IActionResult Refused(string slug, string reason) =>
+            Redirect($"/login?provider={Uri.EscapeDataString(slug)}&error={Uri.EscapeDataString(reason)}");
+    }
+}

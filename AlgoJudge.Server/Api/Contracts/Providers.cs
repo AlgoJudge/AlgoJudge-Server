@@ -47,6 +47,19 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool HasClientSecret { get; init; }
         public required bool HasDeletionSecret { get; init; }
 
+        /// <summary>
+        /// The path the provider must send the browser back to, **relative to
+        /// this API's origin** — so `https://api.example.edu` plus this is what
+        /// goes into the provider's redirect-URI allowlist.
+        /// <para>
+        /// Sent rather than left to the operator to work out. It is derived from
+        /// the slug, it has to match exactly on both sides, and a registration
+        /// that gets it wrong fails at the end of somebody's first sign-in with
+        /// an error from the provider rather than from us.
+        /// </para>
+        /// </summary>
+        public required string CallbackPath { get; init; }
+
         public required IReadOnlyList<MappingRuleDto> MappingRules { get; init; }
 
         /// <summary>

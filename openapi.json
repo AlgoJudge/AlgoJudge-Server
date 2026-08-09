@@ -2276,6 +2276,84 @@
         }
       }
     },
+    "/identity/providers/{slug}/challenge": {
+      "get": {
+        "tags": [
+          "FederatedSignIn"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identity/providers/{slug}/signed-in": {
+      "get": {
+        "tags": [
+          "FederatedSignIn"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect"
+          }
+        }
+      }
+    },
     "/files": {
       "post": {
         "tags": [
@@ -8556,6 +8634,10 @@
           },
           "hasDeletionSecret": {
             "type": "boolean"
+          },
+          "callbackPath": {
+            "type": "string",
+            "nullable": true
           },
           "mappingRules": {
             "type": "array",

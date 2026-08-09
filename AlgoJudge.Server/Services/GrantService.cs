@@ -402,6 +402,22 @@ namespace AlgoJudge.Server.Services
                     "No such permission: " + string.Join(", ", unknown), "template.permission.unknown");
             }
 
+            // **The other half of "unreachable through a mapping".** The provider
+            // service refuses a rule pointing at a template that carries
+            // `system:administrator`; without this, the same end is reached by
+            // writing the rule first and adding the permission afterwards.
+            if (input.Permissions.Contains(Permissions.SystemAdministrator))
+            {
+                var mapped = await ReferencingProvidersAsync(template.Name, ct);
+                if (mapped.Count > 0)
+                {
+                    throw new ForbiddenActionException(
+                        $"\"{template.Name}\" is mapped by {string.Join(", ", mapped)}, "
+                            + $"and no claim may ever grant {Permissions.SystemAdministrator}",
+                        "template.mapped.administrator");
+                }
+            }
+
             // A rename has to reach the mapping rules that name it, or a provider
             // would go on referring to a template that no longer answers and
             // quietly grant nothing at the next sign-in. This is not the same as

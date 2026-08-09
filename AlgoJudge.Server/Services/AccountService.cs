@@ -25,9 +25,28 @@ namespace AlgoJudge.Server.Services
         TimeProvider clock
     ) : IAccountService
     {
+        /// <summary>
+        /// Refuses what belongs to an identity provider.
+        /// <para>
+        /// The rule — "an SSO account may change none of its own profile fields"
+        /// — was decided on 2026-08-04 and, until phase 2, was enforced only by
+        /// the Client greying its inputs. A rule applied by a screen is a rule
+        /// anybody with a terminal can ignore, so it lives here now.
+        /// </para>
+        /// </summary>
+        private static void RequireLocal(User user, string what)
+        {
+            if (Projections.IsLocal(user)) return;
+
+            throw new ForbiddenActionException(
+                $"This account is managed by an identity provider; {what} there",
+                "account.federated");
+        }
+
         public async Task<SessionDto> UpdateProfileAsync(ProfileInputDto input, CancellationToken ct)
         {
             var user = await currentUser.RequireAsync(ct);
+            RequireLocal(user, "change your details");
 
             if (input.Username is { } username && username.Trim() != user.UserName)
             {
@@ -86,6 +105,7 @@ namespace AlgoJudge.Server.Services
         public async Task ChangePasswordAsync(string current, string replacement, CancellationToken ct)
         {
             var user = await currentUser.RequireAsync(ct);
+            RequireLocal(user, "change your password");
 
             var changed = await users.ChangePasswordAsync(user, current, replacement);
             if (!changed.Succeeded)
@@ -190,6 +210,12 @@ namespace AlgoJudge.Server.Services
         public async Task DeleteAsync(string password, CancellationToken ct)
         {
             var user = await currentUser.RequireAsync(ct);
+
+            // This channel is the local account's, and it asks for a password an
+            // account owned by a provider does not have. An SSO account leaves by
+            // de-registering its link instead — a different act with a different
+            // outcome, since it may still have another way in.
+            RequireLocal(user, "remove your account");
 
             if (!await users.CheckPasswordAsync(user, password))
             {
