@@ -879,6 +879,79 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.ToTable("Submissions", (string)null);
                 });
 
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.Trial", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<int>("Deliveries")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTime?>("LeaseExpiresAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Measurement")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("PackageFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProblemType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RunnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActivityId");
+
+                    b.HasIndex("LeaseExpiresAt");
+
+                    b.HasIndex("LeaseToken")
+                        .IsUnique()
+                        .HasFilter("\"LeaseToken\" IS NOT NULL");
+
+                    b.HasIndex("RunnerId");
+
+                    b.HasIndex("State", "CreatedAt");
+
+                    b.ToTable("Trials", (string)null);
+                });
+
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.User", b =>
                 {
                     b.Property<string>("Id")
@@ -1434,6 +1507,24 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Navigation("SeriesProblem");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.Trial", b =>
+                {
+                    b.HasOne("AlgoJudge.Server.Database.Models.Activity", "Activity")
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AlgoJudge.Server.Database.Models.Runner", "Runner")
+                        .WithMany()
+                        .HasForeignKey("RunnerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Activity");
+
+                    b.Navigation("Runner");
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.UserSession", b =>
