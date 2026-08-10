@@ -1,12 +1,20 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Text.Json;
-using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Authorization;
+using AlgoJudge.Server.Controllers;
 using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
+using System.Net;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace AlgoJudge.Server.Tests;
 
@@ -351,6 +359,84 @@ public class FederatedSignInTests(ServerFixture server)
         // de-registering the link is for.
         var deletion = await person.PostAsJsonAsync("/api/v1/account/delete", new { password = "whatever" });
         Assert.Equal(HttpStatusCode.Forbidden, deletion.StatusCode);
+    }
+
+    /// <summary>
+    /// The place a provider sends somebody back to is reachable, and it is this
+    /// product's code that answers there.
+    /// <para>
+    /// <b>Found by a live sign-in on 2026-08-10, not by any test above.</b> The
+    /// challenge used to hand the handler a hand-written
+    /// <c>/identity/providers/…/signed-in</c>, which omits the path base the API
+    /// is served under. Every earlier step then worked perfectly — the person
+    /// signed in at the provider, consented, and was redirected back with a
+    /// valid token — and the journey ended on a 404, with nothing in the
+    /// sign-in log, because the action that writes that log never ran.
+    /// </para>
+    /// <para>
+    /// So this asks for the landing path the way a browser arrives at it and
+    /// insists on a refusal <b>from the controller</b>: a routing 404 and a
+    /// controller that refuses look nothing alike, and only one of them means
+    /// the address is real.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_landing_endpoint_is_served_under_the_api_path_base()
+    {
+        const string slug = "landing";
+        await NewProviderAsync(slug, rules: []);
+
+        var browser = server.CreateClient(new() { AllowAutoRedirect = false });
+        var arrived = await browser.GetAsync(
+            $"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities");
+
+        // Nobody is signed in and no external ticket exists, so the controller
+        // refuses — and a refusal is a redirect carrying a reason, because the
+        // browser is mid-journey and there is nobody to read a JSON body.
+        Assert.Equal(HttpStatusCode.Redirect, arrived.StatusCode);
+        var sentTo = arrived.Headers.Location!.ToString();
+        Assert.Contains("/login?", sentTo);
+        Assert.Contains("error=provider.ticket.missing", sentTo);
+
+        // And the same path without the base is nobody's: that is precisely the
+        // address the defect generated.
+        var nowhere = await browser.GetAsync($"/identity/providers/{slug}/signed-in");
+        Assert.Equal(HttpStatusCode.NotFound, nowhere.StatusCode);
+
+        // The half the two requests above cannot see: **what the challenge tells
+        // the provider to come back to.** It travels inside the handler's
+        // encrypted state, so no response header carries it and no round trip
+        // reveals it — which is why the literal survived every test and was
+        // caught by a person watching a browser. Asking the action directly is
+        // the only place it is observable.
+        using var scope = server.Services.CreateScope();
+        var request = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        request.Request.PathBase = "/api/v1";
+        request.Request.Host = new HostString("algojudge.test");
+        request.Request.RouteValues["controller"] = "FederatedSignIn";
+
+        // Without an endpoint on the request, `IUrlHelperFactory` hands back the
+        // pre-endpoint-routing helper, which has no router here and throws. A
+        // real request always carries one by the time an action runs.
+        request.SetEndpoint(new Endpoint(_ => Task.CompletedTask,
+            EndpointMetadataCollection.Empty, "the request under test"));
+
+        var context = new ActionContext(request, new RouteData(request.Request.RouteValues),
+            new ControllerActionDescriptor { ControllerName = "FederatedSignIn", ActionName = "Challenge" });
+
+        var controller = new FederatedSignInController(
+            scope.ServiceProvider.GetRequiredService<IProviderRegistry>(),
+            scope.ServiceProvider.GetRequiredService<IFederatedSignInService>(),
+            scope.ServiceProvider.GetRequiredService<SignInManager<User>>())
+        {
+            ControllerContext = new ControllerContext(context),
+            Url = scope.ServiceProvider.GetRequiredService<IUrlHelperFactory>().GetUrlHelper(context),
+        };
+
+        var challenge = Assert.IsType<ChallengeResult>(controller.Challenge(slug, "/activities"));
+
+        Assert.Equal($"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities",
+            challenge.Properties!.RedirectUri);
     }
 
     // ── the plumbing these tests are made of ──────────────────────────────────
