@@ -9171,6 +9171,16 @@
           },
           "showLogo": {
             "type": "boolean"
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicProviderDto"
+            },
+            "nullable": true
+          },
+          "accountDeletionEnabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -9228,6 +9238,9 @@
             "type": "boolean"
           },
           "showLogo": {
+            "type": "boolean"
+          },
+          "accountDeletionEnabled": {
             "type": "boolean"
           }
         },
@@ -10860,6 +10873,20 @@
             "nullable": true
           },
           "requestedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicProviderDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
             "type": "string",
             "nullable": true
           }

@@ -404,6 +404,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool RequireEmail { get; init; }
         public required bool RequireConfirmedEmail { get; init; }
         public required bool ShowLogo { get; init; }
+
+        /// <summary>
+        /// Whether a person may remove their own account. **Shipped on** — it is
+        /// a data-protection right before it is a feature — and settable because
+        /// a setting nothing can change is not a setting.
+        /// </summary>
+        public required bool AccountDeletionEnabled { get; init; }
     }
 
     public record InstanceLogoInputDto

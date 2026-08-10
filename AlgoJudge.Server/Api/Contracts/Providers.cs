@@ -12,6 +12,21 @@ namespace AlgoJudge.Server.Api.Contracts
     /// </para>
     /// </summary>
 
+    /// <summary>
+    /// What a signed-out screen is told about a provider: enough to draw a
+    /// button and to build the link that starts a sign-in.
+    /// <para>
+    /// Deliberately two fields. Anything more would be describing an
+    /// installation's identity configuration to anybody who can load its login
+    /// page.
+    /// </para>
+    /// </summary>
+    public record PublicProviderDto
+    {
+        public required string Slug { get; init; }
+        public required string DisplayName { get; init; }
+    }
+
     public record MappingRuleDto
     {
         /// <summary>The value at the provider's claim path, matched exactly.</summary>

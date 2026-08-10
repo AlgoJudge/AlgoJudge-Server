@@ -305,6 +305,7 @@ namespace AlgoJudge.Server.Controllers
             instance.RequireEmail = input.RequireEmail;
             instance.RequireConfirmedEmail = input.RequireConfirmedEmail;
             instance.ShowLogo = input.ShowLogo;
+            instance.AccountDeletionEnabled = input.AccountDeletionEnabled;
             await context.SaveChangesAsync(ct);
 
             return await AnnounceAsync(ct);

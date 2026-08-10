@@ -103,6 +103,26 @@ namespace AlgoJudge.Server.Api.Contracts
         public InstanceLogoDto? Logo { get; init; }
         public IReadOnlyList<LocalisedLogoDto>? LogoTranslations { get; init; }
         public required bool ShowLogo { get; init; }
+
+        /// <summary>
+        /// The identity providers this installation offers, for the buttons on
+        /// the sign-in screen.
+        /// <para>
+        /// It travels here because it has to be readable <b>before anybody has
+        /// signed in</b> — which is the whole point of a sign-in button — and
+        /// this is the one answer a signed-out screen already fetches.
+        /// </para>
+        /// <para>
+        /// <b>A name and a slug, and nothing else.</b> Everything else on a
+        /// provider registration is an operator's business: the issuer, the
+        /// client id, the claim path and the mapping are read behind
+        /// `provider:manage`, not by whoever loads the login page.
+        /// </para>
+        /// </summary>
+        public required IReadOnlyList<PublicProviderDto> Providers { get; init; }
+
+        /// <summary>Whether a person may remove their own account from here.</summary>
+        public required bool AccountDeletionEnabled { get; init; }
     }
 
     // ── Session ───────────────────────────────────────────────────────────────
