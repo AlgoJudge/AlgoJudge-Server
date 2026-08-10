@@ -62,8 +62,12 @@ After cloning, inspect the solution and project files, then document:
   submission. Because it must name a Runner while evaluation is in progress,
   `Result` is created at claim time and doubles as the job record. Atomic
   reservation, leases and idempotency still apply to it.
-- **All identifiers are string UUIDs.** The entities still use `int` keys; the
-  migration is outstanding.
+- **All identifiers are UUIDs, and the entities now hold them.** `Guid` keys
+  throughout `Database/Models`, defaulted from `Uuid.New()`; the only `string`
+  key is ASP.NET Identity's `User.Id`, which is a UUID in a string column
+  because the framework declares it that way. **This line used to say the
+  migration was outstanding** — it was done, and the note outlived it. Checked
+  2026-08-10: 41 `Guid` and 16 `Guid?` key or foreign-key properties, no `int`.
 - `Activity.Type` is the type discriminator, formatted `name@version`. No
   separate `typeId` and `typeVersion` columns.
 - `main` is the integration and default branch. `devel` no longer exists.
