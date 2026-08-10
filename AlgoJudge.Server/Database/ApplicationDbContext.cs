@@ -28,6 +28,11 @@ namespace AlgoJudge.Server.Database
         public DbSet<PermissionTemplate> PermissionTemplates { get; set; }
         public DbSet<Grant> Grants { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
+        public DbSet<IdentityProvider> IdentityProviders { get; set; }
+        public DbSet<IdentityProviderMappingRule> IdentityProviderMappingRules { get; set; }
+        public DbSet<UserIdentity> UserIdentities { get; set; }
+        public DbSet<FederatedSignInAttempt> FederatedSignInAttempts { get; set; }
+        public DbSet<AccountDeletionRequest> AccountDeletionRequests { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -430,15 +435,35 @@ namespace AlgoJudge.Server.Database
             {
                 e.ToTable("Grants");
                 e.Property(g => g.Permissions).HasColumnType("jsonb");
-                // One grant per user per scope. A null ActivityId is the system
-                // scope, and Postgres treats nulls as distinct in a unique index,
-                // so the system grant needs its own filtered index to be unique.
+                // One grant per user per activity. A null ActivityId is the
+                // system scope, and Postgres treats nulls as distinct in a unique
+                // index, so the system scope needs filtered indexes of its own.
                 e.HasIndex(g => new { g.UserId, g.ActivityId })
                     .IsUnique()
                     .HasFilter("\"ActivityId\" IS NOT NULL");
+
+                // **Two indexes at system scope, not one.** A user holds exactly
+                // one manual contribution and at most one per provider, and the
+                // permissions they hold there are the union. A single index over
+                // (UserId, SourceProviderId) would not express the first rule:
+                // nulls are distinct, so two manual rows would both be allowed
+                // and nothing would say which one an administrator was editing.
                 e.HasIndex(g => g.UserId)
                     .IsUnique()
-                    .HasFilter("\"ActivityId\" IS NULL");
+                    .HasDatabaseName("IX_Grants_UserId_Manual")
+                    .HasFilter("\"ActivityId\" IS NULL AND \"SourceProviderId\" IS NULL");
+                e.HasIndex(g => new { g.UserId, g.SourceProviderId })
+                    .IsUnique()
+                    .HasDatabaseName("IX_Grants_UserId_Provider")
+                    .HasFilter("\"ActivityId\" IS NULL AND \"SourceProviderId\" IS NOT NULL");
+
+                // Restrict rather than cascade, matching the provider service:
+                // removing a provider that people sign in through is refused
+                // while anything of theirs is still here.
+                e.HasOne(g => g.SourceProvider)
+                    .WithMany()
+                    .HasForeignKey(g => g.SourceProviderId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 // "Who is in this activity" is a query over this table, because
                 // there is no membership table beside it. `IsSystem` is in the
                 // index because the participant count excludes staff.
@@ -466,6 +491,111 @@ namespace AlgoJudge.Server.Database
                 e.HasIndex(s => new { s.UserId, s.EndedAt });
                 // The reaper closes sessions whose expiry has passed.
                 e.HasIndex(s => s.ExpiresAt);
+            });
+
+            builder.Entity<IdentityProvider>(e =>
+            {
+                e.ToTable("IdentityProviders");
+                e.Property(p => p.Slug).HasMaxLength(32);
+                e.Property(p => p.DisplayName).HasMaxLength(128);
+                e.Property(p => p.Issuer).HasMaxLength(512);
+                e.Property(p => p.ClientId).HasMaxLength(256);
+                e.Property(p => p.ClientSecret).HasMaxLength(1024);
+                e.Property(p => p.DeletionSecret).HasMaxLength(1024);
+                e.Property(p => p.Scopes).HasMaxLength(512);
+                e.Property(p => p.AccountUrl).HasMaxLength(512);
+                e.Property(p => p.ClaimPath).HasMaxLength(128);
+                e.Property(p => p.DefaultTemplateName).HasMaxLength(64);
+                // The slug appears in a sign-in path and in the redirect URI
+                // registered on the provider's side, so it has to be unique and
+                // it is expensive to change.
+                e.HasIndex(p => p.Slug).IsUnique();
+            });
+
+            builder.Entity<IdentityProviderMappingRule>(e =>
+            {
+                e.ToTable("IdentityProviderMappingRules");
+                e.Property(r => r.ClaimValue).HasMaxLength(256);
+                e.Property(r => r.TemplateName).HasMaxLength(64);
+                // One rule per value per provider. Two would be a question about
+                // ordering, and this model deliberately has no answer to it.
+                e.HasIndex(r => new { r.ProviderId, r.ClaimValue }).IsUnique();
+                e.HasOne(r => r.Provider)
+                    .WithMany(p => p.MappingRules)
+                    .HasForeignKey(r => r.ProviderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<UserIdentity>(e =>
+            {
+                e.ToTable("UserIdentities");
+                e.Property(i => i.Subject).HasMaxLength(256);
+                // **The federated key.** Issuer plus `sub`, and never the email
+                // address: an address is something a person changes at their
+                // provider, and a federation keyed on one hands the account to
+                // whoever inherits it. The issuer is the provider row, so the
+                // pair is unique here.
+                e.HasIndex(i => new { i.ProviderId, i.Subject }).IsUnique();
+                e.HasIndex(i => i.UserId);
+                e.HasOne(i => i.User)
+                    .WithMany()
+                    .HasForeignKey(i => i.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Restrict rather than cascade, to match the service: deleting a
+                // provider that people sign in through decides something about
+                // their accounts, so it is refused rather than allowed to ripple.
+                // The database says so too, in case anything ever writes past the
+                // service.
+                e.HasOne(i => i.Provider)
+                    .WithMany(p => p.Identities)
+                    .HasForeignKey(i => i.ProviderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<AccountDeletionRequest>(e =>
+            {
+                e.ToTable("AccountDeletionRequests");
+                e.Property(r => r.Subject).HasMaxLength(256);
+                e.Property(r => r.RequestId).HasMaxLength(128);
+                e.Property(r => r.Detail).HasMaxLength(512);
+                // **What makes the back channel idempotent.** A webhook is
+                // retried on any hiccup; without this a second delivery opens a
+                // second window and the first one having been halted stops
+                // meaning anything.
+                e.HasIndex(r => new { r.ProviderId, r.RequestId })
+                    .IsUnique()
+                    .HasFilter("\"RequestId\" IS NOT NULL");
+                // The sweeper's only query.
+                e.HasIndex(r => new { r.State, r.ExecuteAfter });
+                e.HasOne(r => r.Provider)
+                    .WithMany()
+                    .HasForeignKey(r => r.ProviderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                // Restrict, not cascade: a user row is never hard-deleted, and a
+                // request that outlived its account is exactly the history this
+                // queue exists to keep.
+                e.HasOne(r => r.User)
+                    .WithMany()
+                    .HasForeignKey(r => r.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<FederatedSignInAttempt>(e =>
+            {
+                e.ToTable("FederatedSignInAttempts");
+                e.Property(a => a.Subject).HasMaxLength(256);
+                e.Property(a => a.Detail).HasMaxLength(256);
+                e.Property(a => a.Matched).HasColumnType("jsonb");
+                // The two questions asked of this table: "what happened to this
+                // person" and "what did this provider do to anybody's permissions".
+                e.HasIndex(a => new { a.ProviderId, a.At });
+                e.HasIndex(a => new { a.UserId, a.At });
+                // No foreign key to the user: an attempt is kept even when it
+                // matched no account, and the column is null exactly then.
+                e.HasOne(a => a.Provider)
+                    .WithMany()
+                    .HasForeignKey(a => a.ProviderId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

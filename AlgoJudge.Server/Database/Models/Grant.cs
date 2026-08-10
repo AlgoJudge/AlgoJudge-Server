@@ -41,6 +41,57 @@ namespace AlgoJudge.Server.Database.Models
         public Activity? Activity { get; set; }
 
         /// <summary>
+        /// Where this contribution came from: <b>null is the manual one</b>, set
+        /// by a person; anything else names the identity provider that asserted
+        /// it.
+        /// <para>
+        /// At system scope a user holds one contribution per source, and their
+        /// permissions there are the <b>union</b> of all of them. This is the one
+        /// place the model is additive, and it is why the row is no longer unique
+        /// on the user alone.
+        /// </para>
+        /// <para>
+        /// A managed contribution is <b>rewritten from its provider's mapping at
+        /// every sign-in and is not editable by hand</b>. Editing one would last
+        /// until that person next signed in, which is worse than refusing:
+        /// a change that silently reverts is a change nobody can trust.
+        /// </para>
+        /// <para>
+        /// Null at activity scope, always — mapping into an activity belongs to
+        /// the LTI work, whose purpose is to mirror a course binding, and
+        /// building it before those requirements exist would build the wrong
+        /// mechanism.
+        /// </para>
+        /// </summary>
+        public Guid? SourceProviderId { get; set; }
+        public IdentityProvider? SourceProvider { get; set; }
+
+        /// <summary>
+        /// This activity grant is <b>authoritative inside its activity</b>, and
+        /// system contributions do not reach it. Meaningless at system scope.
+        /// <para>
+        /// A flag rather than the mere presence of an activity grant: a system
+        /// manager added to a course so that they can see it should not be
+        /// demoted by the act of being added. A demotion has to be somebody's
+        /// decision, and a decision needs a field.
+        /// </para>
+        /// <para>
+        /// <b>Not even <c>system:administrator</c> bypasses it</b> — but only its
+        /// holder may have set it on an administrator's grant, so an
+        /// administrator's rights still cannot be trimmed from below. It is how
+        /// "a manager everywhere, except in this contest where I compete" is
+        /// expressed, and it replaces the <c>deny</c> list that used to say it.
+        /// </para>
+        /// <para>
+        /// It can strand its holder: inside that activity they are whatever the
+        /// grant says — typically a participant, holding no <c>grant:update</c> —
+        /// so clearing it needs another manager of that activity or a system
+        /// administrator.
+        /// </para>
+        /// </summary>
+        public bool OverrideSystem { get; set; }
+
+        /// <summary>
         /// This user's own permissions, as a <c>jsonb</c> array of strings. Filled
         /// in from a <see cref="PermissionTemplate"/> and then editable: "a
         /// manager with the right to update something taken away" is this set

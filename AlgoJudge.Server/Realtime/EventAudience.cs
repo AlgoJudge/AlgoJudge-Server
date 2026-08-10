@@ -58,9 +58,58 @@ namespace AlgoJudge.Server.Realtime
 
     public class EventAudience(ApplicationDbContext context) : IEventAudience
     {
-        public Task<IReadOnlyList<string>> InActivityAsync(
-            Guid activityId, string permission, CancellationToken ct) =>
-            HoldersAsync(g => g.ActivityId == activityId || g.ActivityId == null, permission, ct);
+        public async Task<IReadOnlyList<string>> InActivityAsync(
+            Guid activityId, string permission, CancellationToken ct)
+        {
+            var holders = await HoldersAsync(
+                g => g.ActivityId == activityId || g.ActivityId == null, permission, ct);
+
+            // **The override applies here too**, and this is the easy place to
+            // forget it: an event names data, and the whole rule of this class is
+            // that it goes only to somebody a request for that data would have
+            // been answered for. Somebody who stepped down to compete in this
+            // activity would otherwise go on being told what the staff are told
+            // about it — including, in a contest, about other people's
+            // submissions.
+            var stoodDown = await StoodDownAsync(activityId, permission, ct);
+            return stoodDown.Count == 0 ? holders : [.. holders.Where(id => !stoodDown.Contains(id))];
+        }
+
+        /// <summary>
+        /// Whoever holds an override in this activity that does <b>not</b> carry
+        /// the permission. One that does carry it needs no special case: they
+        /// hold it, and the ordinary pass already found them.
+        /// </summary>
+        private async Task<HashSet<string>> StoodDownAsync(
+            Guid activityId, string permission, CancellationToken ct)
+        {
+            var overrides = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.ActivityId == activityId
+                    && g.OverrideSystem
+                    && g.State == GrantState.Active)
+                .Select(g => new { g.UserId, g.Permissions })
+                .ToListAsync(ct);
+
+            var stoodDown = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var grant in overrides)
+            {
+                List<string> keys;
+                try
+                {
+                    keys = JsonSerializer.Deserialize<List<string>>(grant.Permissions) ?? [];
+                }
+                catch (JsonException)
+                {
+                    // An override nobody can read grants nothing, which is what
+                    // `PermissionService` concludes about the same row.
+                    keys = [];
+                }
+
+                if (!keys.Contains(permission)) stoodDown.Add(grant.UserId);
+            }
+            return stoodDown;
+        }
 
         public Task<IReadOnlyList<string>> AnywhereAsync(string permission, CancellationToken ct) =>
             HoldersAsync(_ => true, permission, ct);

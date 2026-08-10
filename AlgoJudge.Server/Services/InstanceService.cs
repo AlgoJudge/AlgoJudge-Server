@@ -73,8 +73,21 @@ namespace AlgoJudge.Server.Services
             var logos = references.Where(r => r.OwnerKind == FileOwnerKind.InstanceLogo).ToList();
             var defaultLogo = logos.FirstOrDefault(r => r.Language is null);
 
+            // Only what a sign-in button needs. The projection selects two
+            // columns rather than loading the row and picking from it, so a
+            // field added to the entity later cannot arrive here by accident —
+            // and this answer is served to anybody who can reach the login page.
+            var providers = await context.IdentityProviders
+                .AsNoTracking()
+                .Where(p => p.Enabled)
+                .OrderBy(p => p.DisplayName)
+                .Select(p => new PublicProviderDto { Slug = p.Slug, DisplayName = p.DisplayName })
+                .ToListAsync(ct);
+
             return new InstanceInfoDto
             {
+                Providers = providers,
+                AccountDeletionEnabled = instance.AccountDeletionEnabled,
                 Name = instance.Name,
                 LocalRegistrationEnabled = instance.LocalRegistrationEnabled,
                 RequireEmail = instance.RequireEmail,

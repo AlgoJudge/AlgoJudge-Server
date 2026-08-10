@@ -49,6 +49,23 @@ namespace AlgoJudge.Server.Database.Models
         public bool ShowLogo { get; set; } = true;
 
         /// <summary>
+        /// Whether a person may remove their own account from the Client.
+        /// <para>
+        /// One setting for both user-facing channels — the local form and the
+        /// de-registration an SSO account uses — because they are the same
+        /// question asked of two kinds of account. The provider's back channel is
+        /// enabled per provider instead: trusting one directory to say "this
+        /// person is gone" says nothing about trusting another.
+        /// </para>
+        /// <para>
+        /// <b>Shipped on.</b> It is a data-protection right before it is a
+        /// feature, and an installation that has a reason to close it can, but
+        /// should have to choose to.
+        /// </para>
+        /// </summary>
+        public bool AccountDeletionEnabled { get; set; } = true;
+
+        /// <summary>
         /// The documents this installation publishes and its logo, as references.
         /// Publishing <b>adds</b> a revision with a <c>ValidFrom</c> rather than
         /// replacing the last one, so "which policy was in force on the third of

@@ -77,6 +77,7 @@ namespace AlgoJudge.Server.Services
                 .AsNoTracking()
                 .Include(g => g.User)
                 .Include(g => g.Activity)
+                .Include(g => g.SourceProvider)
                 .AsQueryable();
 
             if (userId is not null) query = query.Where(g => g.UserId == userId);
@@ -112,6 +113,11 @@ namespace AlgoJudge.Server.Services
             CreatedFromTemplate = grant.CreatedFromTemplate,
             State = grant.State == GrantState.Invited ? "invited" : "active",
             CreatedAt = Wire.At(grant.CreatedAt),
+            Source = grant.SourceProviderId is null ? "manual" : "provider",
+            SourceProviderId = grant.SourceProviderId is { } p ? Wire.Id(p) : null,
+            SourceProviderName = grant.SourceProvider?.DisplayName,
+            Managed = grant.SourceProviderId is not null,
+            OverrideSystem = grant.OverrideSystem,
         };
 
         private static IReadOnlyList<string> Parse(string json)
@@ -127,11 +133,60 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// Creates or replaces the grant for one user in one scope.
+        /// Whether this user holds <c>system:administrator</c> — in <b>any</b> of
+        /// their system contributions, since there may now be several.
         /// <para>
-        /// One grant per user per scope, which the database enforces. "A manager
-        /// with the right to update something taken away" is this set with that
-        /// entry removed, not a second grant layered over a first.
+        /// Asked about somebody else, so it cannot go through
+        /// <see cref="IPermissionService"/>, which answers about the caller.
+        /// </para>
+        /// </summary>
+        private async Task<bool> IsAdministratorAsync(string userId, CancellationToken ct)
+        {
+            var systemGrants = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.UserId == userId && g.ActivityId == null && g.State == GrantState.Active)
+                .Select(g => g.Permissions)
+                .ToListAsync(ct);
+
+            return systemGrants.Any(p => Parse(p).Contains(Permissions.SystemAdministrator));
+        }
+
+        /// <summary>
+        /// Which providers name this template — through a mapping rule or as
+        /// their default. Both count: either way, deleting it leaves a provider
+        /// pointing at nothing.
+        /// </summary>
+        private async Task<IReadOnlyList<string>> ReferencingProvidersAsync(string name, CancellationToken ct)
+        {
+            var byRule = await context.IdentityProviderMappingRules
+                .Where(r => r.TemplateName == name)
+                .Select(r => r.Provider!.Slug)
+                .ToListAsync(ct);
+
+            var byDefault = await context.IdentityProviders
+                .Where(p => p.DefaultTemplateName == name)
+                .Select(p => p.Slug)
+                .ToListAsync(ct);
+
+            return [.. byRule.Concat(byDefault).Distinct().OrderBy(s => s, StringComparer.Ordinal)];
+        }
+
+        /// <summary>
+        /// Creates or replaces <b>the manual contribution</b> for one user in one
+        /// scope.
+        /// <para>
+        /// One manual contribution per user per scope, which the database
+        /// enforces. "A manager with the right to update something taken away" is
+        /// this set with that entry removed, not a second grant layered over a
+        /// first.
+        /// </para>
+        /// <para>
+        /// <b>It never touches a managed contribution.</b> Those belong to a
+        /// provider's mapping and are rewritten at every sign-in, so an edit here
+        /// would last exactly until that person next signed in — and a change
+        /// that silently reverts is worse than one that is refused. The lookup
+        /// below therefore matches on a null source rather than filtering
+        /// afterwards: there is no path through this method that could find one.
         /// </para>
         /// </summary>
         public async Task<GrantDto> SetAsync(GrantInputDto input, CancellationToken ct)
@@ -176,8 +231,10 @@ namespace AlgoJudge.Server.Services
                 throw new NotFoundException("Activity");
             }
 
-            var grant = await context.Grants
-                .FirstOrDefaultAsync(g => g.UserId == input.UserId && g.ActivityId == activityId, ct);
+            var grant = await context.Grants.FirstOrDefaultAsync(
+                g => g.UserId == input.UserId
+                    && g.ActivityId == activityId
+                    && g.SourceProviderId == null, ct);
 
             if (grant is null)
             {
@@ -189,6 +246,26 @@ namespace AlgoJudge.Server.Services
                 };
                 context.Grants.Add(grant);
             }
+
+            // The override, and the one rule about who may set it.
+            //
+            // An administrator's rights are not trimmable from below — that has
+            // been true since the model was written — but an administrator who
+            // wants to compete in one contest has to be able to step down there.
+            // Both survive if the flag is **self-initiated only** for them:
+            // nobody else may set it, and anybody with `grant:update` in the
+            // activity may clear it. Clearing has to stay open, because the flag
+            // suppresses the very permissions its holder would need to undo it.
+            var wantsOverride = activityId is not null && input.OverrideSystem == true;
+            if (wantsOverride && !grant.OverrideSystem
+                && input.UserId != issuer.Id
+                && await IsAdministratorAsync(input.UserId, ct))
+            {
+                throw new ForbiddenActionException(
+                    "Only an administrator may set the override on their own grant",
+                    "grant.override.administrator");
+            }
+            grant.OverrideSystem = wantsOverride;
 
             grant.Permissions = JsonSerializer.Serialize(wanted);
             grant.CreatedFromTemplate = input.CreatedFromTemplate;
@@ -204,6 +281,7 @@ namespace AlgoJudge.Server.Services
                 .AsNoTracking()
                 .Include(g => g.User)
                 .Include(g => g.Activity)
+                .Include(g => g.SourceProvider)
                 .FirstAsync(g => g.Id == grant.Id, ct);
             var projected = Project(stored);
             await AnnounceGrantAsync(stored.ActivityId, stored.UserId, new { grant = projected }, ct);
@@ -222,6 +300,19 @@ namespace AlgoJudge.Server.Services
                 ?? throw new NotFoundException("Grant");
 
             await permissions.RequireAsync(Permissions.GrantUpdate, grant.ActivityId, ct);
+
+            // A managed contribution is the provider's, and revoking one here
+            // would last until that person next signed in. What actually takes it
+            // away is changing the mapping, unlinking the provider, or blocking
+            // the account — the coarse instruments a union leaves, and the cost
+            // recorded when the union was accepted.
+            if (grant.SourceProviderId is not null)
+            {
+                throw new ForbiddenActionException(
+                    "This contribution comes from an identity provider and is rewritten at every sign-in. "
+                        + "Change the provider's mapping instead",
+                    "grant.managed");
+            }
 
             // Read before the row goes: revoking a grant removes the very thing
             // an audience is resolved from, so afterwards the holder would not be
@@ -311,6 +402,40 @@ namespace AlgoJudge.Server.Services
                     "No such permission: " + string.Join(", ", unknown), "template.permission.unknown");
             }
 
+            // **The other half of "unreachable through a mapping".** The provider
+            // service refuses a rule pointing at a template that carries
+            // `system:administrator`; without this, the same end is reached by
+            // writing the rule first and adding the permission afterwards.
+            if (input.Permissions.Contains(Permissions.SystemAdministrator))
+            {
+                var mapped = await ReferencingProvidersAsync(template.Name, ct);
+                if (mapped.Count > 0)
+                {
+                    throw new ForbiddenActionException(
+                        $"\"{template.Name}\" is mapped by {string.Join(", ", mapped)}, "
+                            + $"and no claim may ever grant {Permissions.SystemAdministrator}",
+                        "template.mapped.administrator");
+                }
+            }
+
+            // A rename has to reach the mapping rules that name it, or a provider
+            // would go on referring to a template that no longer answers and
+            // quietly grant nothing at the next sign-in. This is not the same as
+            // a grant following its template — a grant holds a copy and keeps it.
+            if (template.Name != name)
+            {
+                foreach (var rule in await context.IdentityProviderMappingRules
+                    .Where(r => r.TemplateName == template.Name).ToListAsync(ct))
+                {
+                    rule.TemplateName = name;
+                }
+                foreach (var provider in await context.IdentityProviders
+                    .Where(p => p.DefaultTemplateName == template.Name).ToListAsync(ct))
+                {
+                    provider.DefaultTemplateName = name;
+                }
+            }
+
             template.Name = name;
             template.Description = input.Description;
             template.Permissions = JsonSerializer.Serialize(input.Permissions.Distinct());
@@ -335,6 +460,19 @@ namespace AlgoJudge.Server.Services
             if (template.IsBuiltIn)
             {
                 throw new ConflictException("A built-in template cannot be deleted", "template.builtIn");
+            }
+
+            // **The one place something points at a template.** A grant does not
+            // — choosing one copies its permissions and nothing points back — but
+            // an identity provider's mapping rule names it, and the contribution
+            // is re-derived from that name at every sign-in. Deleting it would
+            // leave a rule granting nothing, silently, at the next sign-in.
+            var referencing = await ReferencingProvidersAsync(template.Name, ct);
+            if (referencing.Count > 0)
+            {
+                throw new ConflictException(
+                    $"\"{template.Name}\" is mapped by: {string.Join(", ", referencing)}",
+                    "template.mapped");
             }
 
             var removedTemplate = Wire.Id(template.Id);

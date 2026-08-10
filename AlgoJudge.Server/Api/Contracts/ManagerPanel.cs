@@ -46,6 +46,36 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>`invited` | `active`.</summary>
         public required string State { get; init; }
         public required string CreatedAt { get; init; }
+
+        /// <summary>
+        /// `manual` | `provider`. **Where this contribution came from.**
+        /// <para>
+        /// At system scope a person's permissions are the union of one manual
+        /// contribution and one per linked provider, so no single row is the
+        /// answer to "what may they do" — and a screen that cannot say where a
+        /// right came from is one nobody can act on.
+        /// </para>
+        /// </summary>
+        public required string Source { get; init; }
+        public string? SourceProviderId { get; init; }
+        /// <summary>The provider's display name, so a row reads without a second lookup.</summary>
+        public string? SourceProviderName { get; init; }
+
+        /// <summary>
+        /// Whether this contribution is rewritten from its provider's mapping at
+        /// every sign-in — and therefore **not editable here**. True exactly when
+        /// `source` is `provider`; sent as its own field so a screen disables a
+        /// control on a fact rather than on a string comparison.
+        /// </summary>
+        public required bool Managed { get; init; }
+
+        /// <summary>
+        /// This activity grant is authoritative inside its activity, and system
+        /// contributions do not reach it. **Setting it on somebody who holds
+        /// system permissions demotes them there**, and the screen has to say so
+        /// at the moment of the act.
+        /// </summary>
+        public required bool OverrideSystem { get; init; }
     }
 
     public record GrantInputDto
@@ -57,6 +87,18 @@ namespace AlgoJudge.Server.Api.Contracts
         public bool? IsSystem { get; init; }
         public string? CreatedFromTemplate { get; init; }
         public string? State { get; init; }
+
+        /// <summary>
+        /// Make this activity grant authoritative inside its activity. Ignored at
+        /// system scope, where there is nothing to override.
+        /// <para>
+        /// There is deliberately **no** field naming a provider: this endpoint
+        /// writes the manual contribution and only that one. A managed
+        /// contribution belongs to its provider's mapping and is rewritten at
+        /// every sign-in.
+        /// </para>
+        /// </summary>
+        public bool? OverrideSystem { get; init; }
     }
 
     // ── Users ────────────────────────────────────────────────────────────────
@@ -362,6 +404,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool RequireEmail { get; init; }
         public required bool RequireConfirmedEmail { get; init; }
         public required bool ShowLogo { get; init; }
+
+        /// <summary>
+        /// Whether a person may remove their own account. **Shipped on** — it is
+        /// a data-protection right before it is a feature — and settable because
+        /// a setting nothing can change is not a setting.
+        /// </summary>
+        public required bool AccountDeletionEnabled { get; init; }
     }
 
     public record InstanceLogoInputDto

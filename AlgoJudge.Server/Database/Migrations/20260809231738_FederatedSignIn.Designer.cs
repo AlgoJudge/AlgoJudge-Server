@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using AlgoJudge.Server.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Database.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260809231738_FederatedSignIn")]
+    partial class FederatedSignIn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,61 +25,6 @@ namespace AlgoJudge.Server.Database.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("AlgoJudge.Server.Database.Models.AccountDeletionRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Channel")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Detail")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<DateTime>("ExecuteAfter")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<string>("HaltedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("ProviderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("RequestId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTime>("RequestedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<DateTime?>("ResolvedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<int>("State")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Subject")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("ProviderId", "RequestId")
-                        .IsUnique()
-                        .HasFilter("\"RequestId\" IS NOT NULL");
-
-                    b.HasIndex("State", "ExecuteAfter");
-
-                    b.ToTable("AccountDeletionRequests", (string)null);
-                });
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.Activity", b =>
                 {
@@ -581,9 +529,6 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<bool>("AccountDeletionEnabled")
-                        .HasColumnType("boolean");
 
                     b.Property<bool>("LocalRegistrationEnabled")
                         .HasColumnType("boolean");
@@ -1503,23 +1448,6 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
-                });
-
-            modelBuilder.Entity("AlgoJudge.Server.Database.Models.AccountDeletionRequest", b =>
-                {
-                    b.HasOne("AlgoJudge.Server.Database.Models.IdentityProvider", "Provider")
-                        .WithMany()
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("AlgoJudge.Server.Database.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Provider");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.AttachmentRule", b =>

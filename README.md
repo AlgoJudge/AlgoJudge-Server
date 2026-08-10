@@ -1,45 +1,91 @@
 # AlgoJudge Server
 
-Persistent state, REST API, authorization, activities, tasks, submissions and
-results for [AlgoJudge](https://github.com/AlgoJudge).
+Persistent state, REST API, WebSocket, authorization, activities, problems,
+submissions and results for [AlgoJudge](https://github.com/AlgoJudge).
 
-The Server is deliberately simple. It stores files, metadata, access policies
-and results, and moves data between the Client and the Runners. It never
-compiles or executes submitted code, and it holds no knowledge of what a
-particular task type means.
+The Server is deliberately simple. It stores files, metadata, grants and
+results, and moves data between the Client and the Runners. It never compiles or
+executes submitted code, and it holds no knowledge of what a particular problem
+type means.
+
+The domain term is **`Problem`**, never `Task` — renamed 2026-08-03, and the code
+always used `Problem`; only the documentation lagged.
 
 ## Status
 
-Early development. The domain model exists; most of the API does not.
+> **Rewritten 2026-08-10.** Everything this section said had stopped being true:
+> it described three endpoints, one migration named `20240130140424_InitialCreate`
+> that no longer exists, and listed as "not implemented" the WebSocket, the
+> Runner registry, job reservation, file upload and result payloads — all of
+> which ship. It also said authorization only checks that a request is
+> authenticated, which is the most misleading thing a README can be wrong about.
+> The state below was read off the code and the test run on 2026-08-10.
 
-| Endpoint | State |
+`Verified fact` — `main`, inspected 2026-08-10.
+
+| Area | State |
 |---|---|
-| `GET /ping/ping` | implemented |
-| `GET /activity/list` | implemented; the `Query` paging and ordering parameters are accepted but ignored |
-| `POST /activity/create` | implemented |
-| `/identity/*` | provided by ASP.NET Identity |
+| API | **118 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity` |
+| WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
+| Authorization | a real permission model: **48 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
+| Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
+| Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees |
+| Background work | four hosted services: the maintenance drainer, the lease reaper, the series scheduler, the file collector |
+| Operations | maintenance levels `open`/`draining`/`closed`, and `aj-admin` in the image |
+| Schema | **four migrations**, the earliest `20260807222825_InitialCreate` |
+| OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
-Entities: `Activity`, `Series`, `SeriesProblem`, `Problem`, `Submission`,
-`Result`, `File`, `User`. One migration, `20240130140424_InitialCreate`.
+**Twenty-one `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:
+`Activity`, `Series`, `SeriesProblem`, `Problem`, `ProblemVersion`,
+`Submission`, `EvaluationJob`, `Trial`, `Result`, `Runner`, `Question`, `File`,
+`Grant`, `PermissionTemplate`, `Instance`, `MaintenanceState`, `UserSession`.
 
-Not implemented: WebSocket, the Runner registry, job reservation, task and
-submission endpoints, file upload and download, and result payloads — `Result`
-currently carries no verdict, score or per-test data. Authorization checks only
-that a request is authenticated.
+Every identifier is a **UUIDv7**, except `User`, which keeps Identity's string
+key. The reason for version 7 is under *Decisions in force*.
+
+`Result` carries `Score`, `MaxScore`, `Verdict`, `RunnerVersion` and an opaque
+`Extra`; the per-test table and the compiler log are **attachments**, reached by
+id like every other stored document, rather than fields on the row.
+
+### What is genuinely not here
+
+- **Identity phase 2.** No OIDC providers yet: every account is local, and
+  `SessionDto.IsLocal` is still a hard-coded `true`. Specified and accepted —
+  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` — not built.
+- **Mail.** There is no sender, so password reset and confirmation resend do not
+  exist. They are **refused rather than absent**: `MapIdentityApi` maps them
+  unconditionally and middleware answers them, because an endpoint that exists
+  and cannot work invites a screen to promise something nothing will deliver.
+- **2FA.** The endpoints `MapIdentityApi` brings are unused rather than
+  half-wired, by decision.
+- **LTI and grade export.** A later direction, deliberately outside the
+  evaluation path.
 
 ## Decisions in force
 
-- **Identity stays here for the MVP.** ASP.NET Identity and password storage
-  remain. Moving identity into a separate component behind OIDC is the target,
-  deliberately deferred.
-- **`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
-  `Result`, naming the Runner that is evaluating or has evaluated a submission.
-  Because it must name a Runner while evaluation is still running, `Result` is
-  created at claim time and doubles as the job record.
-- **All identifiers become string UUIDs.** The entities still use `int` keys;
-  that migration is outstanding.
+- **Identity stays here for the MVP** — and, for administrator, local and
+  temporary accounts, permanently. ASP.NET Identity and password storage remain.
+  What arrives in phase 2 is not a move but an *addition*: several OIDC providers
+  registered at once, from the database, with a claim-to-permission mapping the
+  installation configures. Specified 2026-08-09,
+  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md`; **not yet
+  implemented**.
+- ~~**`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
+  `Result`, which is created at claim time and doubles as the job record.~~
+  **Reversed — it is an entity.** `EvaluationJob` carries the attempt number, the
+  Runner, the state, the lease and its token, and `Result` hangs off *it* rather
+  than the other way round. Struck rather than deleted, because the reasoning
+  behind the deferral — something has to name a Runner while evaluation is still
+  running — is exactly what the job turned out to be.
+- ~~**All identifiers become string UUIDs.** The entities still use `int` keys;
+  that migration is outstanding.~~ **Done.** Every entity carries a `Guid` from
+  `Utils/Uuid.cs`, and specifically a **version 7** one: time-ordered, so inserts
+  append to the index instead of fragmenting it. The layout is written out by
+  hand because `Guid.CreateVersion7()` arrived in .NET 9 and this targets .NET 8
+  — delete it and call the framework method after an upgrade, the values are
+  compatible. `User` keeps Identity's own string key.
 - `Activity.Type` is the type discriminator, formatted `name@version`. Adding a
-  task or activity type must not require a change here.
+  problem or activity type must not require a change here.
 
 ## Requirements
 
@@ -182,12 +228,29 @@ dotnet ef database update --project AlgoJudge.Server
 ## Contributing
 
 `main` is the integration and default branch; changes arrive through pull
-requests. `dotnet build` must succeed before opening one. There is no CI and no
-test project yet, so that is the whole gate.
+requests. ~~There is no CI and no test project yet, so `dotnet build` is the
+whole gate.~~ **Both exist**, and the gate is three CI jobs:
+
+```bash
+dotnet build AlgoJudge.sln -c Release
+dotnet test  AlgoJudge.sln -c Release --no-build
+```
+
+`AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
+Testcontainers, so Docker has to be running — an in-memory provider would not
+exercise the guarantees being relied on, several of which are the database's.
+**109 tests, 24 seconds** on the machine this was last run on.
+
+CI adds two jobs beside that one: the container image is built, and the
+development stack is brought up and asserted against — that the API answers under
+`/api/v1` and *not* at the root, that the migrations created the schema, that the
+instance table really is a singleton, that the committed `openapi.json` still
+matches what is served, that registration is closed by default, and that
+`aj-admin` works inside the shipped image.
 
 Architecture rules that apply here: the Server does not compile or execute code,
 does not implement a sandbox or a checker, and must not depend on one Runner
-implementation. Adding an activity or task type must not require a change to
+implementation. Adding an activity or problem type must not require a change to
 this repository — no type-specific controller, table or conditional.
 
 ## Related repositories

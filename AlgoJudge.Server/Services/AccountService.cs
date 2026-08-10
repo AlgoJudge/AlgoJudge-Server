@@ -22,12 +22,33 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         ICurrentUserService currentUser,
         UserManager<User> users,
+        IAccountDeletionService deletion,
+        IInstanceService instances,
         TimeProvider clock
     ) : IAccountService
     {
+        /// <summary>
+        /// Refuses what belongs to an identity provider.
+        /// <para>
+        /// The rule — "an SSO account may change none of its own profile fields"
+        /// — was decided on 2026-08-04 and, until phase 2, was enforced only by
+        /// the Client greying its inputs. A rule applied by a screen is a rule
+        /// anybody with a terminal can ignore, so it lives here now.
+        /// </para>
+        /// </summary>
+        private static void RequireLocal(User user, string what)
+        {
+            if (Projections.IsLocal(user)) return;
+
+            throw new ForbiddenActionException(
+                $"This account is managed by an identity provider; {what} there",
+                "account.federated");
+        }
+
         public async Task<SessionDto> UpdateProfileAsync(ProfileInputDto input, CancellationToken ct)
         {
             var user = await currentUser.RequireAsync(ct);
+            RequireLocal(user, "change your details");
 
             if (input.Username is { } username && username.Trim() != user.UserName)
             {
@@ -86,6 +107,7 @@ namespace AlgoJudge.Server.Services
         public async Task ChangePasswordAsync(string current, string replacement, CancellationToken ct)
         {
             var user = await currentUser.RequireAsync(ct);
+            RequireLocal(user, "change your password");
 
             var changed = await users.ChangePasswordAsync(user, current, replacement);
             if (!changed.Succeeded)
@@ -189,45 +211,31 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         public async Task DeleteAsync(string password, CancellationToken ct)
         {
+            var instance = await instances.EnsureAsync(ct);
+            if (!instance.AccountDeletionEnabled)
+            {
+                throw new ForbiddenActionException(
+                    "This instance does not offer self-service account removal",
+                    "account.deletion.closed");
+            }
+
             var user = await currentUser.RequireAsync(ct);
+
+            // This channel is the local account's, and it asks for a password an
+            // account owned by a provider does not have. An SSO account leaves by
+            // de-registering its link instead — a different act with a different
+            // outcome, since it may still have another way in.
+            RequireLocal(user, "remove your account");
 
             if (!await users.CheckPasswordAsync(user, password))
             {
                 throw new ValidationException("The password is wrong", "account.password.wrong");
             }
 
-            var suffix = user.Id.Length >= 4 ? user.Id[^4..] : user.Id;
-
-            user.UserName = $"deleted-{suffix}";
-            user.NormalizedUserName = user.UserName.ToUpperInvariant();
-            user.Email = null;
-            user.NormalizedEmail = null;
-            user.EmailConfirmed = false;
-            user.FirstName = null;
-            user.LastName = null;
-            user.Note = null;
-            user.Tags = null;
-            user.PasswordHash = null;
-            user.SecurityStamp = Guid.NewGuid().ToString();
-            user.Anonymized = true;
-
-            // The text they wrote carries their name as surely as the name field
-            // does — a question signed with a class and a surname is not
-            // anonymous because the account row is.
-            var authored = await context.Questions
-                .Where(q => q.AuthorUserId == user.Id)
-                .ToListAsync(ct);
-            foreach (var question in authored)
-            {
-                question.Topic = "[deleted]";
-                question.Body = "[deleted]";
-            }
-
-            // Sessions end with the account, so nothing signed in survives it.
-            var sessions = await context.UserSessions
-                .Where(s => s.UserId == user.Id && s.EndedAt == null)
-                .ToListAsync(ct);
-            foreach (var session in sessions) session.EndedAt = clock.GetUtcNow().UtcDateTime;
+            // The emptying itself lives in one place, shared with the two
+            // channels an SSO account uses. Three copies of "what anonymising
+            // means" would be three answers the day a field is added.
+            await deletion.AnonymiseAsync(user, ct);
 
             await context.SaveChangesAsync(ct);
             await users.UpdateAsync(user);

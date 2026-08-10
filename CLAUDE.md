@@ -41,6 +41,22 @@ After cloning, inspect the solution and project files, then document:
   `/identity/*` endpoints remain, including password storage. "The Server does
   not store user passwords" is the **target**, deliberately suspended for now,
   not a rule to enforce against the current code.
+- **Identity phase 2 was specified 2026-08-09 and accepted 2026-08-10** —
+  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md`, indexed in the
+  workspace under *Identity phase 2*. Embedded Identity **stays permanently** for
+  administrator, local and temporary accounts; the Server *gains* several OIDC
+  providers registered from the database. Four things about it change code that
+  already exists here, so they are worth knowing before touching any of it:
+  - a **`UserIdentity` is unique on `(providerId, subject)`** and never keyed on
+    an email address;
+  - **system-scope permissions become a union of contributions** — one manual,
+    one per linked provider — so the unique index that allowed exactly one system
+    grant per user has to go;
+  - an activity grant gains an **override flag**, and **nothing subtracts
+    anywhere in the model**;
+  - `SessionDto.IsLocal` stops being a hard-coded `true`, and the rule "an SSO
+    account may change none of its own fields" moves out of the Client's disabled
+    inputs and into this API, where it was always described as living.
 - **`EvaluationJob` is deferred as an entity.** The Runner linkage lives on
   `Result`, which names the Runner that is evaluating or has evaluated a
   submission. Because it must name a Runner while evaluation is in progress,
