@@ -123,7 +123,22 @@ namespace AlgoJudge.Server
             // not reimplemented here.
             builder.Services.AddSingleton<IProviderRegistry, ProviderRegistry>();
             builder.Services.AddSingleton<IAuthenticationSchemeProvider, FederatedSchemeProvider>();
-            builder.Services.AddSingleton<IOptionsMonitor<OpenIdConnectOptions>, FederatedOidcOptions>();
+            builder.Services.AddSingleton<IConfigureOptions<OpenIdConnectOptions>, FederatedOidcConfigure>();
+
+            // **Without this the handler throws on the first challenge**, in
+            // `WriteNonceCookie`, with a `NullReferenceException` that names
+            // nothing useful.
+            //
+            // `AddOpenIdConnect(...)` normally registers it, and this product
+            // never calls that method — there is no scheme to name at startup,
+            // which is the whole reason the schemes are resolved from the
+            // database. What that method also does, and what is easy to miss, is
+            // register the post-configuration that gives every
+            // `OpenIdConnectOptions` its state format, its nonce cookie name and
+            // its data protector. Options built without it look complete and are
+            // not.
+            builder.Services.AddSingleton<
+                IPostConfigureOptions<OpenIdConnectOptions>, OpenIdConnectPostConfigureOptions>();
 
             // Injected rather than DateTime.UtcNow, so the scheduler and the
             // file collector can be tested against a clock somebody turns.

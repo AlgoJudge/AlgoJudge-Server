@@ -138,77 +138,116 @@ namespace AlgoJudge.Server.Authorization
             if (FederatedSchemes.SlugOf(name) is not { } slug) return null;
             if (registry.Find(slug) is not { } provider) return null;
 
-            return new AuthenticationScheme(name, provider.DisplayName, typeof(OpenIdConnectHandler));
+            return Scheme(provider);
         }
+
+        /// <summary>
+        /// **The other half of a dynamic scheme provider, and the half that is
+        /// easy to leave out.**
+        /// <para>
+        /// The authentication middleware asks this — not
+        /// <see cref="GetSchemeAsync"/> — which schemes want to look at a request
+        /// before routing. `OpenIdConnectHandler` handles its own callback path
+        /// that way, so a provider that answers only `GetSchemeAsync` will
+        /// redirect a person to the identity provider perfectly well and then
+        /// answer **404** when they come back: the callback falls through to
+        /// MVC, which has no such route.
+        /// </para>
+        /// <para>
+        /// Nothing in the framework warns about it, and every test that stops at
+        /// the redirect passes.
+        /// </para>
+        /// </summary>
+        public override async Task<IEnumerable<AuthenticationScheme>> GetRequestHandlerSchemesAsync()
+        {
+            var known = await base.GetRequestHandlerSchemesAsync();
+            return known.Concat(registry.Enabled.Select(Scheme));
+        }
+
+        private static AuthenticationScheme Scheme(ProviderRegistration provider) =>
+            new(FederatedSchemes.For(provider.Slug), provider.DisplayName, typeof(OpenIdConnectHandler));
     }
 
     /// <summary>
-    /// Builds one provider's OIDC options from its registration.
+    /// Fills in one provider's OIDC options from its registration.
     /// <para>
-    /// Nothing here is per-installation configuration: the issuer's discovery
-    /// document supplies the endpoints and the signing keys, which is the point
-    /// of registering an issuer rather than four URLs.
+    /// <b>A named <i>configure</i>, not an options monitor, and the difference
+    /// is the whole reason the first version did not work.</b> An earlier
+    /// attempt built the options with <c>IOptionsFactory.Create</c> and then
+    /// assigned <c>Authority</c>. But <c>Create</c> is what runs
+    /// <c>OpenIdConnectPostConfigureOptions</c> — the thing that turns an
+    /// authority into a configuration manager, a nonce cookie and a state
+    /// format — so every value assigned afterwards arrived too late to be seen.
+    /// The handler then failed at the challenge with "the configuration may be
+    /// missing or invalid", which names neither the scheme nor the cause.
+    /// </para>
+    /// <para>
+    /// Registered as <c>IConfigureOptions&lt;OpenIdConnectOptions&gt;</c>, it is
+    /// applied <b>before</b> post-configuration, for whichever scheme name is
+    /// being built. The framework's own monitor then needs no replacing.
+    /// </para>
+    /// <para>
+    /// Nothing here is per-installation configuration beyond the row: the
+    /// issuer's discovery document supplies the endpoints and the signing keys,
+    /// which is the point of registering an issuer rather than four URLs.
     /// </para>
     /// </summary>
-    public class FederatedOidcOptions(
-        IProviderRegistry registry,
-        IOptionsFactory<OpenIdConnectOptions> factory
-    ) : IOptionsMonitor<OpenIdConnectOptions>
+    public class FederatedOidcConfigure(IProviderRegistry registry)
+        : IConfigureNamedOptions<OpenIdConnectOptions>
     {
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, OpenIdConnectOptions> built = new();
+        public void Configure(OpenIdConnectOptions options) { }
 
-        public OpenIdConnectOptions CurrentValue => Get(Microsoft.Extensions.Options.Options.DefaultName);
-
-        public OpenIdConnectOptions Get(string? name)
+        public void Configure(string? name, OpenIdConnectOptions options)
         {
-            name ??= Microsoft.Extensions.Options.Options.DefaultName;
+            if (name is null) return;
+            if (FederatedSchemes.SlugOf(name) is not { } slug) return;
+            if (registry.Find(slug) is not { } provider) return;
 
-            if (FederatedSchemes.SlugOf(name) is not { } slug || registry.Find(slug) is not { } provider)
+            options.Authority = provider.Issuer;
+            options.ClientId = provider.ClientId;
+            options.ClientSecret = provider.ClientSecret;
+
+            // **The same rule the registration enforces**, stated twice because
+            // two different pieces of code apply it: an issuer is https, except
+            // on loopback, where a development Authentik has no certificate
+            // anybody would trust.
+            //
+            // The default is `true`, and against an http authority it fails at
+            // the challenge with a message that mentions neither TLS nor the
+            // provider — so a development stack cannot sign anybody in and says
+            // nothing about why.
+            options.RequireHttpsMetadata =
+                !(Uri.TryCreate(provider.Issuer, UriKind.Absolute, out var issuer) && issuer.IsLoopback);
+
+            options.ResponseType = "code";
+            options.UsePkce = true;
+            options.SaveTokens = false;
+
+            // The path the provider is told to send the browser back to. It
+            // carries the slug, so two providers cannot be confused for each
+            // other by a callback that arrived on a shared address.
+            options.CallbackPath = FederatedSchemes.CallbackPath(provider.Slug);
+
+            // The cookie the handler signs into while the ticket is being turned
+            // into an account. Not the application cookie: what the browser ends
+            // up holding is issued by `SignInManager` after the mapping has run
+            // and decided whether to admit at all.
+            options.SignInScheme = IdentityConstants.ExternalScheme;
+
+            options.Scope.Clear();
+            foreach (var scope in provider.Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
-                return factory.Create(name);
+                options.Scope.Add(scope);
             }
+            if (!options.Scope.Contains("openid")) options.Scope.Add("openid");
 
-            return built.GetOrAdd(name, _ =>
-            {
-                var options = factory.Create(name);
-
-                options.Authority = provider.Issuer;
-                options.ClientId = provider.ClientId;
-                options.ClientSecret = provider.ClientSecret;
-                options.ResponseType = "code";
-                options.UsePkce = true;
-                options.SaveTokens = false;
-
-                // The path the provider is told to send the browser back to. It
-                // carries the slug, so two providers cannot be confused for each
-                // other by a callback that arrived on a shared address.
-                options.CallbackPath = FederatedSchemes.CallbackPath(provider.Slug);
-
-                // The cookie the handler signs into while the ticket is being
-                // turned into an account. Not the application cookie: what the
-                // browser ends up holding is issued by `SignInManager` after the
-                // mapping has run and decided whether to admit at all.
-                options.SignInScheme = IdentityConstants.ExternalScheme;
-
-                options.Scope.Clear();
-                foreach (var scope in provider.Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    options.Scope.Add(scope);
-                }
-                if (!options.Scope.Contains("openid")) options.Scope.Add("openid");
-
-                // Kept as the provider sent them. The mapping walks a dotted path
-                // through the token, and Microsoft's default map renames several
-                // claims into WS-Federation URIs on the way in — which would make
-                // an operator's `groups` path fail to find `groups`.
-                options.MapInboundClaims = false;
-                options.TokenValidationParameters.NameClaimType = "preferred_username";
-                options.TokenValidationParameters.RoleClaimType = "roles";
-
-                return options;
-            });
+            // Kept as the provider sent them. The mapping walks a dotted path
+            // through the token, and Microsoft's default map renames several
+            // claims into WS-Federation URIs on the way in — which would make an
+            // operator's `groups` path fail to find `groups`.
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters.NameClaimType = "preferred_username";
+            options.TokenValidationParameters.RoleClaimType = "roles";
         }
-
-        public IDisposable? OnChange(Action<OpenIdConnectOptions, string?> listener) => null;
     }
 }
