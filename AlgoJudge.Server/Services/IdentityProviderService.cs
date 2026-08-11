@@ -297,8 +297,47 @@ namespace AlgoJudge.Server.Services
                 });
             }
 
-            provider.MappingRules.Clear();
-            foreach (var rule in rules) provider.MappingRules.Add(rule);
+            // **Matched up by claim value rather than emptied and refilled**, and
+            // the reason is not tidiness.
+            //
+            // `MappingRules.Clear()` followed by `Add` of fresh objects made
+            // **every update of a provider that had rules answer 500**: EF wrote
+            // `UPDATE` for the new rows instead of `INSERT`, and the update
+            // matched nothing — `DbUpdateConcurrencyException`, "expected to
+            // affect 1 row(s), but actually affected 0". Every entity here
+            // assigns its own key in its initialiser, so a rule reached through
+            // a *tracked* parent's navigation already carries a non-default `Id`
+            // and is taken for a row that exists. The create path never showed it
+            // because there the parent itself is `Add`ed and the whole graph goes
+            // in as new.
+            //
+            // Reusing the row for a claim value that is staying also means no
+            // pair is deleted and re-inserted in one `SaveChanges`, which the
+            // unique index on `(ProviderId, ClaimValue)` would otherwise be
+            // entitled to reject depending on the order EF chose. And
+            // `CreatedAt` survives an edit that did not touch that rule.
+            var existing = provider.MappingRules.ToDictionary(r => r.ClaimValue, StringComparer.Ordinal);
+
+            foreach (var rule in rules)
+            {
+                if (existing.Remove(rule.ClaimValue, out var kept))
+                {
+                    kept.TemplateName = rule.TemplateName;
+                }
+                else
+                {
+                    // Stated to the context, not only to the collection: that is
+                    // what marks it `Added` in spite of the key it arrived with.
+                    provider.MappingRules.Add(rule);
+                    context.IdentityProviderMappingRules.Add(rule);
+                }
+            }
+
+            foreach (var gone in existing.Values)
+            {
+                provider.MappingRules.Remove(gone);
+                context.IdentityProviderMappingRules.Remove(gone);
+            }
         }
 
         /// <summary>

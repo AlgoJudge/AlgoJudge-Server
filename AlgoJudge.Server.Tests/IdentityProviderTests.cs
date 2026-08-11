@@ -37,6 +37,67 @@ public class IdentityProviderTests(ServerFixture server)
     };
 
     /// <summary>
+    /// A provider that already has mapping rules can be edited.
+    ///
+    /// <para>
+    /// **Found by a testbed, not by this suite, on 2026-08-11.** Every update of
+    /// a provider carrying rules answered 500 —
+    /// `DbUpdateConcurrencyException: expected to affect 1 row(s), but actually
+    /// affected 0`. The service emptied the collection and refilled it with new
+    /// objects, and because every entity in this schema assigns its own key in
+    /// its initialiser, a rule reached through a *tracked* parent arrives with a
+    /// non-default `Id` and is taken for a row that already exists: EF wrote
+    /// `UPDATE` where it needed `INSERT`, and the update matched nothing.
+    /// </para>
+    /// <para>
+    /// The creation path never showed it, which is why the suite was quiet —
+    /// there the parent is `Add`ed and the whole graph goes in as new. So this
+    /// test edits **twice**: once to change a rule, once more to prove the
+    /// second edit is not the one that breaks.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_provider_with_rules_can_be_edited_more_than_once()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var created = await admin.PostAsJsonAsync("/api/v1/identity/providers",
+            Registration("editable", new[]
+            {
+                new { claimValue = "staff", templateName = "manager" },
+                new { claimValue = "students", templateName = "participant" },
+            }));
+        await Sign.Succeeded(created);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+
+        // One value keeps its rule, one changes template, one goes, one arrives.
+        var edited = await admin.PutAsJsonAsync($"/api/v1/identity/providers/{id}",
+            Registration("editable", new[]
+            {
+                new { claimValue = "staff", templateName = "participant" },
+                new { claimValue = "guests", templateName = "participant" },
+            }));
+        await Sign.Succeeded(edited);
+
+        var read = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/identity/providers/{id}");
+        var rules = read.GetProperty("mappingRules").EnumerateArray()
+            .ToDictionary(r => r.GetProperty("claimValue").GetString()!,
+                          r => r.GetProperty("templateName").GetString());
+
+        Assert.Equal(["guests", "staff"], rules.Keys.OrderBy(k => k));
+        Assert.Equal("participant", rules["staff"]);
+
+        // Again, with the same body: an edit that changes nothing is the one an
+        // operator makes by pressing Save twice.
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/identity/providers/{id}",
+            Registration("editable", new[]
+            {
+                new { claimValue = "staff", templateName = "participant" },
+                new { claimValue = "guests", templateName = "participant" },
+            })));
+    }
+
+    /// <summary>
     /// **The headline rule.** A secret goes in and nothing gives it back — not
     /// the creation response, not the list, not a re-read, not an update.
     /// <para>

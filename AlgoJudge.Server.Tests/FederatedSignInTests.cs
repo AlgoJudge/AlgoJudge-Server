@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http.Json;
 using System.Net;
@@ -427,7 +428,8 @@ public class FederatedSignInTests(ServerFixture server)
         var controller = new FederatedSignInController(
             scope.ServiceProvider.GetRequiredService<IProviderRegistry>(),
             scope.ServiceProvider.GetRequiredService<IFederatedSignInService>(),
-            scope.ServiceProvider.GetRequiredService<SignInManager<User>>())
+            scope.ServiceProvider.GetRequiredService<SignInManager<User>>(),
+            scope.ServiceProvider.GetRequiredService<IConfiguration>())
         {
             ControllerContext = new ControllerContext(context),
             Url = scope.ServiceProvider.GetRequiredService<IUrlHelperFactory>().GetUrlHelper(context),
@@ -437,6 +439,45 @@ public class FederatedSignInTests(ServerFixture server)
 
         Assert.Equal($"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities",
             challenge.Properties!.RedirectUri);
+    }
+
+    /// <summary>
+    /// When the application is served from another origin, the end of a sign-in
+    /// goes there — and when it is not, nothing changes.
+    ///
+    /// <para>
+    /// **Found by driving a testbed by hand on 2026-08-11.** The Client sat on
+    /// one port and the API on another, a sign-in succeeded, and the browser
+    /// landed on the *API's* `/activities` — which serves nothing. A bare
+    /// `Redirect("/activities")` resolves against whichever origin answered, and
+    /// this product plans exactly that split: `algojudge.app` for the Client and
+    /// `api.algojudge.app` for this. Every server-side test passed, because a
+    /// test client has no second origin to be wrong about.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_end_of_a_sign_in_goes_to_the_application_when_it_lives_elsewhere()
+    {
+        const string slug = "landing-elsewhere";
+        await NewProviderAsync(slug, rules: []);
+
+        var browser = server.CreateClient(new() { AllowAutoRedirect = false });
+
+        // Unset: today's behaviour, a local path, unchanged.
+        var here = await browser.GetAsync(
+            $"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities");
+        Assert.Equal(HttpStatusCode.Redirect, here.StatusCode);
+        Assert.StartsWith("/login?", here.Headers.Location!.ToString());
+
+        // Set: the same refusal, sent to the application's origin instead.
+        using var elsewhere = server.WithWebHostBuilder(b => b.UseSetting(
+            FederatedSignInController.AppBaseUrlSetting, "https://algojudge.example/"));
+        var away = await elsewhere.CreateClient(new() { AllowAutoRedirect = false })
+            .GetAsync($"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities");
+
+        Assert.Equal(HttpStatusCode.Redirect, away.StatusCode);
+        // The trailing slash of the configured base is not doubled onto the path.
+        Assert.StartsWith("https://algojudge.example/login?", away.Headers.Location!.ToString());
     }
 
     // ── the plumbing these tests are made of ──────────────────────────────────

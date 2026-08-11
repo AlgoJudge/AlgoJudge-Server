@@ -31,9 +31,42 @@ namespace AlgoJudge.Server.Controllers
     public class FederatedSignInController(
         IProviderRegistry registry,
         IFederatedSignInService federated,
-        SignInManager<User> signIn
+        SignInManager<User> signIn,
+        IConfiguration configuration
     ) : ControllerBase
     {
+        /// <summary>Where the Client is served, when that is not here.</summary>
+        public const string AppBaseUrlSetting = "App:BaseUrl";
+
+        /// <summary>
+        /// Turns a local path into the address a browser should actually be sent
+        /// to when this sign-in is over.
+        /// <para>
+        /// **The API and the application are two origins in every deployment this
+        /// product plans**: `api.algojudge.app` serves this, `algojudge.app`
+        /// serves the Client. A bare `Redirect("/activities")` resolves against
+        /// whichever origin answered — this one — so a federated sign-in ended on
+        /// the API's 404 instead of in the product. Found by driving the testbed
+        /// by hand on 2026-08-11; every server-side test passed, because a test
+        /// client has no notion of a second origin.
+        /// </para>
+        /// <para>
+        /// **The base comes from configuration and never from the request.** That
+        /// is the whole reason it is safe: `returnUrl` stays a local path checked
+        /// by <c>Url.IsLocalUrl</c>, and an open redirect on a sign-in endpoint
+        /// is a phishing primitive because the link really is ours.
+        /// </para>
+        /// <para>
+        /// Unset — a single-origin deployment, and every test — behaves exactly
+        /// as before.
+        /// </para>
+        /// </summary>
+        private string AppUrl(string localPath)
+        {
+            var appBase = (configuration[AppBaseUrlSetting] ?? "").TrimEnd('/');
+            return appBase.Length == 0 ? localPath : appBase + localPath;
+        }
+
         /// <summary>
         /// Sends the browser to the provider.
         /// </summary>
@@ -105,7 +138,7 @@ namespace AlgoJudge.Server.Controllers
             await signIn.SignInAsync(outcome.User, isPersistent: true);
 
             var target = Url.IsLocalUrl(returnUrl) ? returnUrl! : "/";
-            return Redirect(target);
+            return Redirect(AppUrl(target));
         }
 
         /// <summary>
@@ -114,6 +147,7 @@ namespace AlgoJudge.Server.Controllers
         /// the sign-in screen can turn into a sentence in the reader's language.
         /// </summary>
         private IActionResult Refused(string slug, string reason) =>
-            Redirect($"/login?provider={Uri.EscapeDataString(slug)}&error={Uri.EscapeDataString(reason)}");
+            Redirect(AppUrl(
+                $"/login?provider={Uri.EscapeDataString(slug)}&error={Uri.EscapeDataString(reason)}"));
     }
 }
