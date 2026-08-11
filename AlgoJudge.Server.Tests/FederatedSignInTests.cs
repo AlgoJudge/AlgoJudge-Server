@@ -480,6 +480,67 @@ public class FederatedSignInTests(ServerFixture server)
         Assert.StartsWith("https://algojudge.example/login?", away.Headers.Location!.ToString());
     }
 
+    /// <summary>
+    /// The account screen is told where the person can delete themselves at the
+    /// provider — and told nothing when the provider has no such page.
+    ///
+    /// <para>
+    /// The screen offers two different exits: one this installation performs,
+    /// and one that ends the identity itself at whoever owns it. The second is a
+    /// link that exists only if an operator configured it, so the interesting
+    /// case is the **absent** one — a screen that invented a URL would send
+    /// somebody who wants to leave to a 404 on a domain that is not ours.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_account_is_told_where_to_delete_itself_at_the_provider()
+    {
+        var provider = await NewProviderAsync("leaving", rules: [("lecturers", "manager")]);
+        var person = await Sign.NewAccountAsync(server, "wants-out");
+
+        // Linked the way a sign-in would link them. Written directly so the
+        // session survives: going through the sign-in service would provision a
+        // second account rather than attach to this one.
+        await using (var context = server.NewContext())
+        {
+            var user = await context.Users.FirstAsync(u => u.UserName == "wants-out");
+            context.UserIdentities.Add(new UserIdentity
+            {
+                UserId = user.Id,
+                ProviderId = provider,
+                Subject = "leaving-0001",
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Nothing configured: the field is **absent from the body**, not null in
+        // it — the API omits nulls — so a Client asking for it gets `undefined`
+        // and renders no link. That is the case worth pinning: a screen that
+        // invented a URL would send somebody who wants to leave to a 404 on a
+        // domain that is not ours.
+        var before = await person.GetFromJsonAsync<JsonElement>("/api/v1/account/links");
+        var one = Assert.Single(before.EnumerateArray());
+        Assert.Equal("leaving", one.GetProperty("providerSlug").GetString());
+        Assert.False(one.TryGetProperty("deletionUrl", out _));
+
+        // An operator sets it, and the same screen now has somewhere to point.
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/identity/providers/{provider}", new
+        {
+            slug = "leaving",
+            displayName = "University SSO",
+            issuer = "https://auth.example.invalid/application/o/algojudge",
+            clientId = "algojudge",
+            claimPath = "groups",
+            deletionUrl = "https://auth.example.invalid/if/flow/unenrolment/",
+            mappingRules = new[] { new { claimValue = "lecturers", templateName = "manager" } },
+        }));
+
+        var after = await person.GetFromJsonAsync<JsonElement>("/api/v1/account/links");
+        Assert.Equal("https://auth.example.invalid/if/flow/unenrolment/",
+            Assert.Single(after.EnumerateArray()).GetProperty("deletionUrl").GetString());
+    }
+
     // ── the plumbing these tests are made of ──────────────────────────────────
 
     private static ClaimsPrincipal Token(string subject, params (string Type, string Value)[] claims)

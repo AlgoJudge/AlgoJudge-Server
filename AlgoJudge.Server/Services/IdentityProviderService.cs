@@ -87,6 +87,7 @@ namespace AlgoJudge.Server.Services
             Scopes = p.Scopes,
             Enabled = p.Enabled,
             AccountUrl = p.AccountUrl,
+            DeletionUrl = p.DeletionUrl,
             ClaimPath = p.ClaimPath,
             UnmappedBehavior = p.UnmappedBehavior == UnmappedBehavior.DefaultTemplate
                 ? "defaultTemplate"
@@ -215,6 +216,7 @@ namespace AlgoJudge.Server.Services
                 : input.Scopes.Trim();
             provider.Enabled = input.Enabled;
             provider.AccountUrl = string.IsNullOrWhiteSpace(input.AccountUrl) ? null : input.AccountUrl.Trim();
+            provider.DeletionUrl = string.IsNullOrWhiteSpace(input.DeletionUrl) ? null : input.DeletionUrl.Trim();
 
             var claimPath = string.IsNullOrWhiteSpace(input.ClaimPath) ? "groups" : input.ClaimPath.Trim();
             RequireClaimPath(claimPath);
