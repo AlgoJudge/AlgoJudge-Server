@@ -49,6 +49,32 @@ namespace AlgoJudge.Server.Database.Models
         public bool ShowLogo { get; set; } = true;
 
         /// <summary>
+        /// Whether the sign-in screen offers the login-and-password form.
+        /// <para>
+        /// **Presentation, and the name says so.** Switching it off hides the
+        /// form; it does not close the endpoint behind it, and it cannot: an
+        /// installation whose people all arrive through a provider still has
+        /// administrators, local and temporary accounts, and they sign in with a
+        /// password. The sign-in screen keeps a way back to the form —
+        /// `?admin=true` — which is a convenience and **not a secret**. Anybody
+        /// who reads a URL can type it, and anybody who can post to the endpoint
+        /// never needed the form at all.
+        /// </para>
+        /// <para>
+        /// So this is worth having for the reason it looks like it is: an
+        /// installation where everybody signs in through their university should
+        /// not present a password box that almost nobody can use. It is not
+        /// worth having as a security control, and treating it as one would be
+        /// the same mistake as believing an unlinked flow is a disabled one.
+        /// </para>
+        /// <para>
+        /// Defaults to <c>true</c>, so an installation that never touches it
+        /// looks exactly as it did.
+        /// </para>
+        /// </summary>
+        public bool ShowLocalSignIn { get; set; } = true;
+
+        /// <summary>
         /// Whether a person may remove their own account from the Client.
         /// <para>
         /// One setting for both user-facing channels — the local form and the

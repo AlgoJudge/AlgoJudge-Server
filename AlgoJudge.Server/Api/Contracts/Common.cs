@@ -105,6 +105,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool ShowLogo { get; init; }
 
         /// <summary>
+        /// Whether the sign-in screen offers the login-and-password form.
+        /// <b>Presentation only</b> — the endpoint behind it stays open, because
+        /// administrators and temporary accounts still sign in that way.
+        /// </summary>
+        public required bool ShowLocalSignIn { get; init; }
+
+        /// <summary>
         /// The identity providers this installation offers, for the buttons on
         /// the sign-in screen.
         /// <para>

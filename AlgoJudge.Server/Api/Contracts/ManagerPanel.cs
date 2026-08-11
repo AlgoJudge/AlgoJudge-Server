@@ -404,6 +404,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool RequireEmail { get; init; }
         public required bool RequireConfirmedEmail { get; init; }
         public required bool ShowLogo { get; init; }
+        public required bool ShowLocalSignIn { get; init; }
 
         /// <summary>
         /// Whether a person may remove their own account. **Shipped on** — it is

@@ -316,6 +316,47 @@ public class EndToEndTests(ServerFixture server)
     /// that declares registration closed accepted registrations anyway — and the
     /// account could then sign in. The setting has to be a rule, not a label.
     /// </summary>
+    /// <summary>
+    /// Hiding the sign-in form does not close the door behind it.
+    ///
+    /// <para>
+    /// **The point of the test is the second half.** An installation where
+    /// everybody arrives through a provider should not present a password box
+    /// almost nobody can use — but administrators, local and temporary accounts
+    /// still sign in that way, and the sign-in screen keeps `?admin=true` to
+    /// reach the form. Anything that made this setting *refuse* a password would
+    /// lock the administrator out of their own installation, and it would do it
+    /// on an upgrade rather than on a decision.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Hiding_the_sign_in_form_leaves_password_sign_in_working()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var anonymous = server.CreateClient();
+
+        // The default an installation that never touched this has.
+        Assert.True((await anonymous.GetFromJsonAsync<JsonElement>("/api/v1/instance"))
+            .GetProperty("showLocalSignIn").GetBoolean());
+
+        await Sign.Succeeded(await admin.PutAsJsonAsync("/api/v1/instance", new
+        {
+            localRegistrationEnabled = false,
+            requireEmail = false,
+            requireConfirmedEmail = false,
+            showLogo = true,
+            showLocalSignIn = false,
+            accountDeletionEnabled = true,
+        }));
+
+        // The screen is told to hide it…
+        Assert.False((await anonymous.GetFromJsonAsync<JsonElement>("/api/v1/instance"))
+            .GetProperty("showLocalSignIn").GetBoolean());
+
+        // …and the administrator can still sign in with a password.
+        Assert.NotNull(await Sign.TryInAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword));
+    }
+
     [Fact]
     public async Task Registration_is_refused_when_the_instance_says_it_is_closed()
     {
