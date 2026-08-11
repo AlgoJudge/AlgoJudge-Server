@@ -46,6 +46,9 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Scopes { get; init; }
         public required bool Enabled { get; init; }
         public string? AccountUrl { get; init; }
+
+        /// <summary>Where a person deletes their account at the provider.</summary>
+        public string? DeletionUrl { get; init; }
         public required string ClaimPath { get; init; }
 
         /// <summary>`deny` | `defaultTemplate`.</summary>
@@ -105,6 +108,9 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Scopes { get; init; }
         public bool Enabled { get; init; } = true;
         public string? AccountUrl { get; init; }
+
+        /// <summary>Where a person deletes their account at the provider.</summary>
+        public string? DeletionUrl { get; init; }
         public string? ClaimPath { get; init; }
 
         /// <summary>`deny` | `defaultTemplate`. Absent is `deny`.</summary>

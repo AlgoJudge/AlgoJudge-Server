@@ -99,6 +99,7 @@ namespace AlgoJudge.Server.Services
                     .Select(r => new LocalisedLogoDto { Language = r.Language!, Logo = Logo(r) })
                     .ToList() is { Count: > 0 } translations ? translations : null,
                 ShowLogo = instance.ShowLogo,
+                ShowLocalSignIn = instance.ShowLocalSignIn,
             };
         }
 

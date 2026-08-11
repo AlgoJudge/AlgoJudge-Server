@@ -60,6 +60,16 @@ namespace AlgoJudge.Server.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// The ways this person can sign in, so their account screen can name
+        /// the provider and link to where it manages — and ends — the identity.
+        /// </summary>
+        [HttpGet("links")]
+        [ProducesResponseType<IReadOnlyList<AccountLinkDto>>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status401Unauthorized)]
+        public Task<IReadOnlyList<AccountLinkDto>> Links(CancellationToken ct) =>
+            accounts.LinksAsync(ct);
+
         /// <summary>Everything held about the signed-in person, as a document they can keep.</summary>
         [HttpGet("export")]
         [ProducesResponseType(StatusCodes.Status200OK)]

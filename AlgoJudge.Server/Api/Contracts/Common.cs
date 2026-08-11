@@ -105,6 +105,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool ShowLogo { get; init; }
 
         /// <summary>
+        /// Whether the sign-in screen offers the login-and-password form.
+        /// <b>Presentation only</b> — the endpoint behind it stays open, because
+        /// administrators and temporary accounts still sign in that way.
+        /// </summary>
+        public required bool ShowLocalSignIn { get; init; }
+
+        /// <summary>
         /// The identity providers this installation offers, for the buttons on
         /// the sign-in screen.
         /// <para>
@@ -140,6 +147,34 @@ namespace AlgoJudge.Server.Api.Contracts
         /// not change its own name, login, address or password here.
         /// </summary>
         public required bool IsLocal { get; init; }
+    }
+
+    /// <summary>
+    /// One way the signed-in person can sign in, as their own account screen
+    /// needs to describe it.
+    /// <para>
+    /// <b>Read by the person about themselves</b>, so it carries no `sub`, no
+    /// issuer and no client id: an opaque subject displayed on a profile page is
+    /// something somebody will eventually paste into a support ticket, and none
+    /// of it helps them decide anything.
+    /// </para>
+    /// </summary>
+    public record AccountLinkDto
+    {
+        public required string ProviderSlug { get; init; }
+        public required string DisplayName { get; init; }
+
+        /// <summary>Where they edit their details, if the provider has such a page.</summary>
+        public string? AccountUrl { get; init; }
+
+        /// <summary>
+        /// Where they delete the account <b>at the provider</b>. Absent means
+        /// this installation knows of no such page, and the screen then offers
+        /// only what it can do itself rather than inventing a link.
+        /// </summary>
+        public string? DeletionUrl { get; init; }
+
+        public required string LinkedAt { get; init; }
     }
 
     public record ProfileInputDto

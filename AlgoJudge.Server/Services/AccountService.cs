@@ -14,6 +14,7 @@ namespace AlgoJudge.Server.Services
     {
         Task<SessionDto> UpdateProfileAsync(ProfileInputDto input, CancellationToken ct);
         Task ChangePasswordAsync(string current, string replacement, CancellationToken ct);
+        Task<IReadOnlyList<AccountLinkDto>> LinksAsync(CancellationToken ct);
         Task<byte[]> ExportAsync(CancellationToken ct);
         Task DeleteAsync(string password, CancellationToken ct);
     }
@@ -130,6 +131,34 @@ namespace AlgoJudge.Server.Services
         /// and the contents of problems, which is not theirs to take.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// The ways this person can sign in, and where each of them is managed.
+        /// <para>
+        /// Its own read rather than a field on the session: the session is
+        /// fetched on every page load and this is wanted by one screen, so
+        /// joining two more tables into it would charge every reader for what
+        /// the account page asks once.
+        /// </para>
+        /// </summary>
+        public async Task<IReadOnlyList<AccountLinkDto>> LinksAsync(CancellationToken ct)
+        {
+            var user = await currentUser.RequireAsync(ct);
+
+            return await context.UserIdentities
+                .AsNoTracking()
+                .Where(i => i.UserId == user.Id)
+                .OrderBy(i => i.LinkedAt)
+                .Select(i => new AccountLinkDto
+                {
+                    ProviderSlug = i.Provider!.Slug,
+                    DisplayName = i.Provider!.DisplayName,
+                    AccountUrl = i.Provider!.AccountUrl,
+                    DeletionUrl = i.Provider!.DeletionUrl,
+                    LinkedAt = Wire.At(i.LinkedAt),
+                })
+                .ToListAsync(ct);
+        }
+
         public async Task<byte[]> ExportAsync(CancellationToken ct)
         {
             var user = await currentUser.RequireAsync(ct);

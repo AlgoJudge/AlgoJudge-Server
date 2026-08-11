@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http.Json;
 using System.Net;
@@ -427,7 +428,8 @@ public class FederatedSignInTests(ServerFixture server)
         var controller = new FederatedSignInController(
             scope.ServiceProvider.GetRequiredService<IProviderRegistry>(),
             scope.ServiceProvider.GetRequiredService<IFederatedSignInService>(),
-            scope.ServiceProvider.GetRequiredService<SignInManager<User>>())
+            scope.ServiceProvider.GetRequiredService<SignInManager<User>>(),
+            scope.ServiceProvider.GetRequiredService<IConfiguration>())
         {
             ControllerContext = new ControllerContext(context),
             Url = scope.ServiceProvider.GetRequiredService<IUrlHelperFactory>().GetUrlHelper(context),
@@ -437,6 +439,106 @@ public class FederatedSignInTests(ServerFixture server)
 
         Assert.Equal($"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities",
             challenge.Properties!.RedirectUri);
+    }
+
+    /// <summary>
+    /// When the application is served from another origin, the end of a sign-in
+    /// goes there — and when it is not, nothing changes.
+    ///
+    /// <para>
+    /// **Found by driving a testbed by hand on 2026-08-11.** The Client sat on
+    /// one port and the API on another, a sign-in succeeded, and the browser
+    /// landed on the *API's* `/activities` — which serves nothing. A bare
+    /// `Redirect("/activities")` resolves against whichever origin answered, and
+    /// this product plans exactly that split: `algojudge.app` for the Client and
+    /// `api.algojudge.app` for this. Every server-side test passed, because a
+    /// test client has no second origin to be wrong about.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_end_of_a_sign_in_goes_to_the_application_when_it_lives_elsewhere()
+    {
+        const string slug = "landing-elsewhere";
+        await NewProviderAsync(slug, rules: []);
+
+        var browser = server.CreateClient(new() { AllowAutoRedirect = false });
+
+        // Unset: today's behaviour, a local path, unchanged.
+        var here = await browser.GetAsync(
+            $"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities");
+        Assert.Equal(HttpStatusCode.Redirect, here.StatusCode);
+        Assert.StartsWith("/login?", here.Headers.Location!.ToString());
+
+        // Set: the same refusal, sent to the application's origin instead.
+        using var elsewhere = server.WithWebHostBuilder(b => b.UseSetting(
+            FederatedSignInController.AppBaseUrlSetting, "https://algojudge.example/"));
+        var away = await elsewhere.CreateClient(new() { AllowAutoRedirect = false })
+            .GetAsync($"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities");
+
+        Assert.Equal(HttpStatusCode.Redirect, away.StatusCode);
+        // The trailing slash of the configured base is not doubled onto the path.
+        Assert.StartsWith("https://algojudge.example/login?", away.Headers.Location!.ToString());
+    }
+
+    /// <summary>
+    /// The account screen is told where the person can delete themselves at the
+    /// provider — and told nothing when the provider has no such page.
+    ///
+    /// <para>
+    /// The screen offers two different exits: one this installation performs,
+    /// and one that ends the identity itself at whoever owns it. The second is a
+    /// link that exists only if an operator configured it, so the interesting
+    /// case is the **absent** one — a screen that invented a URL would send
+    /// somebody who wants to leave to a 404 on a domain that is not ours.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_account_is_told_where_to_delete_itself_at_the_provider()
+    {
+        var provider = await NewProviderAsync("leaving", rules: [("lecturers", "manager")]);
+        var person = await Sign.NewAccountAsync(server, "wants-out");
+
+        // Linked the way a sign-in would link them. Written directly so the
+        // session survives: going through the sign-in service would provision a
+        // second account rather than attach to this one.
+        await using (var context = server.NewContext())
+        {
+            var user = await context.Users.FirstAsync(u => u.UserName == "wants-out");
+            context.UserIdentities.Add(new UserIdentity
+            {
+                UserId = user.Id,
+                ProviderId = provider,
+                Subject = "leaving-0001",
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Nothing configured: the field is **absent from the body**, not null in
+        // it — the API omits nulls — so a Client asking for it gets `undefined`
+        // and renders no link. That is the case worth pinning: a screen that
+        // invented a URL would send somebody who wants to leave to a 404 on a
+        // domain that is not ours.
+        var before = await person.GetFromJsonAsync<JsonElement>("/api/v1/account/links");
+        var one = Assert.Single(before.EnumerateArray());
+        Assert.Equal("leaving", one.GetProperty("providerSlug").GetString());
+        Assert.False(one.TryGetProperty("deletionUrl", out _));
+
+        // An operator sets it, and the same screen now has somewhere to point.
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/identity/providers/{provider}", new
+        {
+            slug = "leaving",
+            displayName = "University SSO",
+            issuer = "https://auth.example.invalid/application/o/algojudge",
+            clientId = "algojudge",
+            claimPath = "groups",
+            deletionUrl = "https://auth.example.invalid/if/flow/unenrolment/",
+            mappingRules = new[] { new { claimValue = "lecturers", templateName = "manager" } },
+        }));
+
+        var after = await person.GetFromJsonAsync<JsonElement>("/api/v1/account/links");
+        Assert.Equal("https://auth.example.invalid/if/flow/unenrolment/",
+            Assert.Single(after.EnumerateArray()).GetProperty("deletionUrl").GetString());
     }
 
     // ── the plumbing these tests are made of ──────────────────────────────────

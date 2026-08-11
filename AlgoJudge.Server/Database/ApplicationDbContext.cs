@@ -504,6 +504,7 @@ namespace AlgoJudge.Server.Database
                 e.Property(p => p.DeletionSecret).HasMaxLength(1024);
                 e.Property(p => p.Scopes).HasMaxLength(512);
                 e.Property(p => p.AccountUrl).HasMaxLength(512);
+                e.Property(p => p.DeletionUrl).HasMaxLength(512);
                 e.Property(p => p.ClaimPath).HasMaxLength(128);
                 e.Property(p => p.DefaultTemplateName).HasMaxLength(64);
                 // The slug appears in a sign-in path and in the redirect URI

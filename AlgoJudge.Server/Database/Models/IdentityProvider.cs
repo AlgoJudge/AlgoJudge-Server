@@ -103,6 +103,25 @@ namespace AlgoJudge.Server.Database.Models
         public string? AccountUrl { get; set; }
 
         /// <summary>
+        /// Where a person deletes their account <b>at the provider</b>.
+        /// <para>
+        /// A different address and a different act from <see cref="AccountUrl"/>:
+        /// one is where they edit their details, this is where the identity
+        /// itself ends. Keeping them apart matters because the account screen
+        /// offers them side by side and they are not interchangeable — sending
+        /// somebody who wants to leave to a profile editor is the kind of
+        /// helpfulness that reads as a runaround.
+        /// </para>
+        /// <para>
+        /// **Configuration, not discovery**, for the same reason as the other:
+        /// OIDC standardises no such URL. Absent means the account screen offers
+        /// only what this installation can do by itself — which is honest, and
+        /// is why nothing here guesses one.
+        /// </para>
+        /// </summary>
+        public string? DeletionUrl { get; set; }
+
+        /// <summary>
         /// Where in the token the mapped value lives, as a dotted path —
         /// <c>groups</c>, <c>realm_access.roles</c>, whatever this provider
         /// emits. A path and never an expression: an expression in provider

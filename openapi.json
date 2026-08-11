@@ -176,6 +176,64 @@
         }
       }
     },
+    "/account/links": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountLinkDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountLinkDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountLinkDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/account/export": {
       "get": {
         "tags": [
@@ -7909,6 +7967,32 @@
         },
         "additionalProperties": false
       },
+      "AccountLinkDto": {
+        "type": "object",
+        "properties": {
+          "providerSlug": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "accountUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "deletionUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "linkedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ActivityDocumentRefDto": {
         "type": "object",
         "properties": {
@@ -8962,6 +9046,10 @@
             "type": "string",
             "nullable": true
           },
+          "deletionUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "claimPath": {
             "type": "string",
             "nullable": true
@@ -9036,6 +9124,10 @@
             "type": "boolean"
           },
           "accountUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "deletionUrl": {
             "type": "string",
             "nullable": true
           },
@@ -9172,6 +9264,9 @@
           "showLogo": {
             "type": "boolean"
           },
+          "showLocalSignIn": {
+            "type": "boolean"
+          },
           "providers": {
             "type": "array",
             "items": {
@@ -9238,6 +9333,9 @@
             "type": "boolean"
           },
           "showLogo": {
+            "type": "boolean"
+          },
+          "showLocalSignIn": {
             "type": "boolean"
           },
           "accountDeletionEnabled": {
