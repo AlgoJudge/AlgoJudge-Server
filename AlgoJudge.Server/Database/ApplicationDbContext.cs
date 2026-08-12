@@ -11,6 +11,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<MaintenanceState> Maintenance { get; set; }
         public DbSet<File> Files { get; set; }
         public DbSet<FileReference> FileReferences { get; set; }
+        public DbSet<StorageMigration> StorageMigrations { get; set; }
         public DbSet<Problem> Problems { get; set; }
         public DbSet<ProblemShare> ProblemShares { get; set; }
         public DbSet<ProblemVersion> ProblemVersions { get; set; }
@@ -234,6 +235,16 @@ namespace AlgoJudge.Server.Database
                 // The garbage collector asks "what was uploaded before X and is
                 // referenced by nothing" on every run.
                 e.HasIndex(f => f.CreatedAt);
+            });
+
+            builder.Entity<StorageMigration>(e =>
+            {
+                e.ToTable("StorageMigrations");
+                e.Property(m => m.TargetStoreId).HasMaxLength(32);
+                e.Property(m => m.Detail).HasMaxLength(512);
+                // "Is one running" is asked on every worker tick and by the
+                // operator surface, and the answer is almost always no.
+                e.HasIndex(m => m.State);
             });
 
             builder.Entity<FileReference>(e =>

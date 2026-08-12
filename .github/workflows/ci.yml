@@ -166,6 +166,28 @@ jobs:
             exit 1
           fi
 
+          # Where the files are, and moving them. `storage status` names the
+          # configured store, which the public health endpoint must never do —
+          # and a second migration is refused while one is under way.
+          $compose exec -T algojudge aj-admin storage status | grep -q '"isDefault":true'
+          $compose exec -T algojudge aj-admin storage migrate
+          if $compose exec -T algojudge aj-admin storage migrate; then
+            echo "a second migration was accepted while one was under way" >&2
+            exit 1
+          fi
+          $compose exec -T algojudge aj-admin storage cancel | grep -q '"state":"cancelled"'
+
+      # The public health endpoint says one word about storage and names
+      # nothing: no store, no backend, no bucket, no path.
+      - name: Health does not disclose where the files are
+        run: |
+          body=$(curl -fsS http://127.0.0.1:8080/api/v1/health)
+          echo "$body" | grep -qE '"storage":"(ok|degraded)"'             || { echo "no storage word in $body" >&2; exit 1; }
+          if echo "$body" | grep -qE 'objects|bucket|rustfs|postgres|/data'; then
+            echo "the public health answer named part of the storage: $body" >&2
+            exit 1
+          fi
+
       - name: Compose down
         if: always()
         run: docker compose -f example-server-development-docker-compose.yaml down -v

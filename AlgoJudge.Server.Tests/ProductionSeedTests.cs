@@ -32,6 +32,7 @@ namespace AlgoJudge.Server.Tests;
 /// between this product and one is a branch in the seeder.
 /// </para>
 /// </summary>
+[Collection("storage")]
 public class ProductionSeedTests : IAsyncLifetime
 {
     private PostgreSqlContainer container = null!;

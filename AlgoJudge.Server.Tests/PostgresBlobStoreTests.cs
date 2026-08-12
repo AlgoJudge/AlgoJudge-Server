@@ -14,6 +14,7 @@ namespace AlgoJudge.Server.Tests;
 /// would have to learn to ignore.
 /// </para>
 /// </summary>
+[Collection("storage")]
 public sealed class PostgresBlobStoreTests : BlobStoreContract, IAsyncLifetime
 {
     private PostgreSqlContainer container = null!;

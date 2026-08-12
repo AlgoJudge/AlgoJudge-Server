@@ -24,6 +24,7 @@ namespace AlgoJudge.Server.Tests;
 /// be right on an installation that has some.
 /// </para>
 /// </summary>
+[Collection("storage")]
 public sealed class FileStorageMigrationTests : IAsyncLifetime
 {
     /// <summary>The last migration before storage became a choice.</summary>

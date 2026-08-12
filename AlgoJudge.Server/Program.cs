@@ -155,6 +155,7 @@ namespace AlgoJudge.Server
                     services.GetRequiredService<IConfiguration>()));
 
             builder.Services.AddSingleton<Storage.IStorageHealth, Storage.StorageHealth>();
+            builder.Services.AddScoped<Storage.IStorageMigrations, Storage.StorageMigrations>();
 
             builder.Services.AddScoped<IFileService, FileService>();
             builder.Services.AddScoped<IInstanceService, InstanceService>();
@@ -205,6 +206,10 @@ namespace AlgoJudge.Server
             // Retention is a property of what references a file, not of the file.
             builder.Services.AddSingleton<Workers.FileCollector>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.FileCollector>());
+
+            // Separate from the collector: one copies, the other deletes.
+            builder.Services.AddSingleton<Workers.StorageMigrator>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.StorageMigrator>());
 
             // One shape for every failure, including the ones raised outside MVC.
             builder.Services.AddProblemDetails();

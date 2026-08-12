@@ -47,9 +47,18 @@ Usage:
   aj-admin maintenance off             serve again, immediately
   aj-admin password                    set the administrator's password, read from stdin
 
+  aj-admin storage status              which stores hold what, and whether they answer
+  aj-admin storage migrate             move every file to the store taking new writes
+  aj-admin storage cancel              call off a migration that is under way
+
 The password is never taken as an argument: arguments are visible to every other
 process on the machine through `ps`, and land in shell history. With a terminal
 this prompts; without one it reads the first line of stdin.
+
+`storage migrate` moves what is already stored; changing Storage__Default only
+decides where the next upload goes. It waits for its window and for the
+evaluation queue to empty, so nothing moves under a running contest. Take a
+backup first: `storage status` afterwards says how far it has got.
 TEXT
     exit 2
 }
@@ -156,6 +165,27 @@ cmd_maintenance() {
     esac
 }
 
+cmd_storage() {
+    local which=${1-}
+    case "$which" in
+        status)
+            request GET /admin/storage
+            ;;
+        migrate)
+            request POST /admin/storage/migration
+            printf '
+Asked for. It starts in its window and only once the evaluation
+' >&2
+            printf 'queue is empty; `aj-admin storage status` says what it is waiting for.
+' >&2
+            ;;
+        cancel)
+            request DELETE /admin/storage/migration
+            ;;
+        *) usage ;;
+    esac
+}
+
 cmd_password() {
     local password
     if [ -t 0 ]; then
@@ -185,6 +215,7 @@ cmd_password() {
 
 case "${1-}" in
     status)      shift; cmd_status "$@" ;;
+    storage)     shift; cmd_storage "$@" ;;
     maintenance) shift; cmd_maintenance "$@" ;;
     password)    shift; cmd_password "$@" ;;
     *)           usage ;;

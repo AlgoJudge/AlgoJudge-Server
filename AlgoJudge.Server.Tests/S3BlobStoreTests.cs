@@ -30,6 +30,7 @@ namespace AlgoJudge.Server.Tests;
 /// suite has no business orchestrating.
 /// </para>
 /// </summary>
+[Collection("storage")]
 public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
 {
     /// <summary>An endpoint somebody else started. Set it and no container is used.</summary>

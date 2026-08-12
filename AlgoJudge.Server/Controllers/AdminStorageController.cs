@@ -1,5 +1,6 @@
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Storage;
+using Microsoft.EntityFrameworkCore;
 using AlgoJudge.Server.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +31,11 @@ namespace AlgoJudge.Server.Controllers
     [ApiController]
     [Route("admin/storage")]
     [AllowAnonymous]
-    public class AdminStorageController(IStorageHealth storage) : ControllerBase
+    public class AdminStorageController(
+        IStorageHealth storage,
+        IStorageMigrations migrations,
+        Database.ApplicationDbContext context
+    ) : ControllerBase
     {
         [HttpGet]
         [ProducesResponseType<StorageReportDto>(StatusCodes.Status200OK)]
@@ -60,6 +65,72 @@ namespace AlgoJudge.Server.Controllers
                     IsDefault = store.IsDefault,
                 }).ToList(),
                 Unconfigured = report.Unconfigured,
+                Migration = await MigrationAsync(ct),
+            };
+        }
+
+        /// <summary>
+        /// Asks for a migration towards the store that takes new writes.
+        /// <para>
+        /// <b>This is what makes a migration deliberate (A83).</b> Changing
+        /// <c>Storage__Default</c> moves nothing by itself — it says where the
+        /// next upload goes and nothing more — so moving what is already stored
+        /// is a separate act, usually taken right after a backup. The operator's
+        /// way in is <c>aj-admin storage migrate</c>; this is its transport.
+        /// </para>
+        /// <para>
+        /// It does not wait: the worker picks it up on its next tick, when the
+        /// window is open and the evaluation queue is empty (A81).
+        /// </para>
+        /// </summary>
+        [HttpPost("migration")]
+        [ProducesResponseType<StorageMigrationDto>(StatusCodes.Status202Accepted)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<StorageMigrationDto>> StartMigration(CancellationToken ct)
+        {
+            await migrations.RequestAsync(ct);
+            return Accepted(await MigrationAsync(ct));
+        }
+
+        /// <summary>Calls off a live migration. What has already moved stays moved.</summary>
+        [HttpDelete("migration")]
+        [ProducesResponseType<StorageMigrationDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<StorageMigrationDto>> CancelMigration(CancellationToken ct)
+        {
+            if (await migrations.CancelAsync(ct) is null) throw new NotFoundException("Migration");
+            return Ok(await MigrationAsync(ct));
+        }
+
+        private async Task<StorageMigrationDto?> MigrationAsync(CancellationToken ct)
+        {
+            if (await migrations.LatestAsync(ct) is not { } migration) return null;
+
+            // Counted rather than stored: a number kept on the row would be one
+            // more thing to keep true, and this is asked only when somebody looks.
+            var remaining = await context.Files
+                .LongCountAsync(f => f.StorageId != migration.TargetStoreId, ct);
+
+            return new StorageMigrationDto
+            {
+                Id = Wire.Id(migration.Id),
+                State = migration.State switch
+                {
+                    Database.Models.StorageMigrationState.Requested => "requested",
+                    Database.Models.StorageMigrationState.Running => "running",
+                    Database.Models.StorageMigrationState.Finished => "finished",
+                    Database.Models.StorageMigrationState.Refused => "refused",
+                    _ => "cancelled",
+                },
+                TargetStoreId = migration.TargetStoreId,
+                RequestedAt = Wire.At(migration.RequestedAt)!,
+                StartedAt = Wire.At(migration.StartedAt),
+                FinishedAt = Wire.At(migration.FinishedAt),
+                FilesMoved = migration.FilesMoved,
+                BytesMoved = migration.BytesMoved,
+                FilesRemaining = remaining,
+                Detail = migration.Detail,
             };
         }
     }
