@@ -45,10 +45,26 @@ namespace AlgoJudge.Server.Workers
         public const string GraceMinutesSetting = "Storage:Migration:GraceMinutes";
 
         /// <summary>
-        /// How often it looks. Not the window — this is the tick that notices a
-        /// request, notices the window opening, and notices the queue emptying.
+        /// How often it looks while something is in flight: a migration exists,
+        /// or stale copies are waiting out their grace period. Fast enough to
+        /// lose none of a thirty-minute budget to the window opening late, and to
+        /// notice the evaluation queue emptying.
         /// </summary>
-        private static readonly TimeSpan Tick = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan Busy = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// And how often when nothing is: no migration, nothing to sweep.
+        /// <para>
+        /// <b>Most installations are here for ever.</b> A migration is a rare,
+        /// deliberate act, so a thirty-second tick would be two indexed queries
+        /// every thirty seconds, in perpetuity, to learn nothing — nearly three
+        /// thousand round trips a day for the answer "no". Five minutes costs a
+        /// migration nothing that matters: the window is an hour wide, the grace
+        /// period an hour long, and the operator asking for one is told it starts
+        /// in its window rather than at once.
+        /// </para>
+        /// </summary>
+        private static readonly TimeSpan Idle = TimeSpan.FromMinutes(5);
 
         /// <summary>
         /// Its own key, distinct from the collector's.
@@ -62,11 +78,13 @@ namespace AlgoJudge.Server.Workers
 
         protected override async Task ExecuteAsync(CancellationToken stopping)
         {
+            var next = Idle;
+
             while (!stopping.IsCancellationRequested)
             {
                 try
                 {
-                    await Task.Delay(Tick, clock, stopping);
+                    await Task.Delay(next, clock, stopping);
                 }
                 catch (OperationCanceledException)
                 {
@@ -75,17 +93,27 @@ namespace AlgoJudge.Server.Workers
 
                 try
                 {
-                    await RunOnceAsync(stopping);
+                    // The pace follows the work: a run in progress is watched
+                    // closely, and an installation that has never migrated is
+                    // barely watched at all.
+                    next = await RunOnceAsync(stopping) ? Busy : Idle;
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
                     logger.LogError(e, "The storage migration failed");
+                    next = Busy;
                 }
             }
         }
 
-        /// <summary>One tick: move what may be moved, then sweep what may be swept.</summary>
-        internal async Task RunOnceAsync(CancellationToken ct)
+        /// <summary>
+        /// One tick: move what may be moved, then sweep what may be swept.
+        /// <para>
+        /// Answers whether anything is in flight, which is what decides how soon
+        /// the next tick comes.
+        /// </para>
+        /// </summary>
+        internal async Task<bool> RunOnceAsync(CancellationToken ct)
         {
             using var scope = scopes.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -93,13 +121,13 @@ namespace AlgoJudge.Server.Workers
             // The stale copies come first, and unconditionally: they are the tail
             // of a migration that may already have finished, and holding them
             // hostage to the window would keep somebody's old volume full.
-            await SweepPreviousCopiesAsync(context, ct);
+            var pending = await SweepPreviousCopiesAsync(context, ct);
 
             var migration = await context.StorageMigrations
                 .FirstOrDefaultAsync(
                     m => m.State == StorageMigrationState.Requested
                         || m.State == StorageMigrationState.Running, ct);
-            if (migration is null) return;
+            if (migration is null) return pending;
 
             if (await WaitingForAsync(context, migration, ct) is { } waiting)
             {
@@ -110,7 +138,7 @@ namespace AlgoJudge.Server.Workers
                     migration.Detail = waiting;
                     await context.SaveChangesAsync(ct);
                 }
-                return;
+                return true;
             }
 
             var connection = context.Database.GetDbConnection();
@@ -123,7 +151,7 @@ namespace AlgoJudge.Server.Workers
                 if ((bool?)await take.ExecuteScalarAsync(ct) is not true)
                 {
                     logger.LogInformation("Another instance is migrating; skipping this tick");
-                    return;
+                    return true;
                 }
 
                 try
@@ -141,6 +169,8 @@ namespace AlgoJudge.Server.Workers
             {
                 await context.Database.CloseConnectionAsync();
             }
+
+            return true;
         }
 
         /// <summary>
@@ -403,7 +433,9 @@ namespace AlgoJudge.Server.Workers
         /// exactly when its file already says it lives somewhere else.
         /// </para>
         /// </summary>
-        private async Task SweepPreviousCopiesAsync(ApplicationDbContext context, CancellationToken ct)
+        /// <returns>Whether any stale copy is still waiting to be removed.</returns>
+        private async Task<bool> SweepPreviousCopiesAsync(
+            ApplicationDbContext context, CancellationToken ct)
         {
             var now = clock.GetUtcNow().UtcDateTime;
 
@@ -434,6 +466,10 @@ namespace AlgoJudge.Server.Workers
             }
 
             if (due.Count > 0) await context.SaveChangesAsync(ct);
+
+            // Anything left with a copy to remove — whether its grace period has
+            // passed or not — is a reason to come back soon.
+            return await context.Files.AnyAsync(f => f.PreviousCopyDeleteAfter != null, ct);
         }
     }
 }

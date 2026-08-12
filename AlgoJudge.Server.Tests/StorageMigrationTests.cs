@@ -123,7 +123,8 @@ public sealed class StorageMigrationTests : IAsyncLifetime
             .RequestAsync(CancellationToken.None);
     }
 
-    private Task TickAsync() =>
+    /// <summary>One tick, answering whether anything is still in flight.</summary>
+    private Task<bool> TickAsync() =>
         services.GetRequiredService<StorageMigrator>().RunOnceAsync(CancellationToken.None);
 
     private async Task<Database.Models.File> FileAsync(Guid id)
@@ -536,6 +537,53 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         collection.AddScoped<IStorageMigrations, StorageMigrations>();
         collection.AddSingleton<StorageMigrator>();
         return collection.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// The tick follows the work.
+    /// <para>
+    /// An installation with nothing to migrate is the common case and the
+    /// permanent one, and a thirty-second tick there is two indexed queries
+    /// every thirty seconds for ever, to learn nothing. What decides the pace is
+    /// whether anything is in flight, so that is what a run reports.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_tick_says_whether_anything_is_in_flight()
+    {
+        // Nothing asked for, nothing stored: nothing to come back for.
+        Assert.False(await TickAsync());
+
+        await StoredInSourceAsync();
+        Assert.False(await TickAsync());
+
+        // A migration is a reason to look often.
+        await RequestAsync();
+        Assert.True(await TickAsync());
+
+        // It finished, but a stale copy is still inside its grace period — which
+        // is also work, and also a reason to come back.
+        await using (var context = NewContext())
+        {
+            Assert.Equal(
+                StorageMigrationState.Finished,
+                (await context.StorageMigrations.AsNoTracking().FirstAsync()).State);
+            Assert.True(await context.Files.AnyAsync(f => f.PreviousCopyDeleteAfter != null));
+        }
+
+        Assert.True(await TickAsync());
+
+        // The grace period passes and the copy goes; now there is nothing left.
+        await using (var context = NewContext())
+        {
+            foreach (var file in await context.Files.ToListAsync())
+            {
+                file.PreviousCopyDeleteAfter = DateTime.UtcNow.AddMinutes(-1);
+            }
+            await context.SaveChangesAsync();
+        }
+
+        Assert.False(await TickAsync());
     }
 
     /// <summary>Moves one file the way the worker does, for tests that need a half-done run.</summary>
