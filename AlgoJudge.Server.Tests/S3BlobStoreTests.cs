@@ -40,16 +40,45 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     public const string SecretKeyVariable = "ALGOJUDGE_S3_SECRET_KEY";
 
     /// <summary>
-    /// Pinned, like every other image in this repository. An object store that
-    /// moves under a test suite produces a failure nobody can reproduce.
+    /// Which implementation this suite starts: <c>rustfs</c> or <c>seaweedfs</c>.
+    /// <para>
+    /// <b>Two, because the specification names two.</b> RustFS is the local
+    /// development endpoint and SeaweedFS is the reference implementation a
+    /// release is checked against (§10.3). Anything else is reached with
+    /// <see cref="EndpointVariable"/>, which starts nothing — and the encryption
+    /// item then has no data directory to look in and says so.
+    /// </para>
     /// </summary>
-    private const string DevelopmentImage = "rustfs/rustfs:1.0.0-rc.1";
+    public const string ImplementationVariable = "ALGOJUDGE_S3";
 
     private const string AccessKey = "algojudge-test";
     private const string SecretKey = "algojudge-test-only";
 
+    /// <summary>
+    /// The one identity SeaweedFS is given. Without a configuration it refuses
+    /// every signed request outright — "Signed request requires setting up
+    /// SeaweedFS S3 authentication" — so an unconfigured one is not an
+    /// anonymous endpoint but a closed door.
+    /// </summary>
+    private const string SeaweedIdentities = """
+        {
+          "identities": [
+            {
+              "name": "algojudge",
+              "credentials": [
+                { "accessKey": "algojudge-test", "secretKey": "algojudge-test-only" }
+              ],
+              "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+            }
+          ]
+        }
+        """;
+
     private IContainer? container;
     private S3BlobStore store = null!;
+
+    /// <summary>Where the running implementation keeps its bytes, for the one test that looks.</summary>
+    private string dataDirectory = "/data";
 
     protected override IBlobStore Store => store;
 
@@ -61,25 +90,17 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
 
         if (string.IsNullOrWhiteSpace(endpoint))
         {
-            container = new ContainerBuilder()
-                .WithImage(DevelopmentImage)
-                .WithEnvironment("RUSTFS_ACCESS_KEY", AccessKey)
-                .WithEnvironment("RUSTFS_SECRET_KEY", SecretKey)
-                // **Why the encryption item can run at all.** RustFS implements
-                // SSE-S3 and refuses to enable it without a master key, which is
-                // a configuration answer rather than the "not supported" the
-                // plan feared. Thirty-two bytes of nothing in particular: this
-                // key exists to make one assertion possible and guards no data
-                // that outlives the test.
-                .WithEnvironment(
-                    "RUSTFS_SSE_S3_MASTER_KEY",
-                    Convert.ToBase64String(Enumerable.Repeat((byte)0x2A, 32).ToArray()))
-                .WithPortBinding(9000, assignRandomHostPort: true)
-                .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(9000))
+            var implementation =
+                Environment.GetEnvironmentVariable(ImplementationVariable)?.Trim().ToLowerInvariant();
+
+            var port = implementation == "seaweedfs" ? 8333 : 9000;
+            container = (implementation == "seaweedfs" ? Seaweed() : Rustfs())
+                .WithPortBinding(port, assignRandomHostPort: true)
+                .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(port))
                 .Build();
 
             await container.StartAsync();
-            endpoint = $"http://{container.Hostname}:{container.GetMappedPublicPort(9000)}";
+            endpoint = $"http://{container.Hostname}:{container.GetMappedPublicPort(port)}";
         }
 
         serviceUrl = endpoint;
@@ -113,6 +134,45 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         store.Dispose();
         if (container is not null) await container.DisposeAsync();
+    }
+
+    /// <summary>
+    /// The local development endpoint. Pinned, like every other image here: one
+    /// that moves under a suite produces a failure nobody can reproduce.
+    /// </summary>
+    private ContainerBuilder Rustfs()
+    {
+        dataDirectory = "/data";
+
+        return new ContainerBuilder()
+            .WithImage("rustfs/rustfs:1.0.0-rc.1")
+            .WithEnvironment("RUSTFS_ACCESS_KEY", AccessKey)
+            .WithEnvironment("RUSTFS_SECRET_KEY", SecretKey)
+            // RustFS implements SSE-S3 and refuses to enable it without a master
+            // key. Thirty-two bytes of nothing in particular: it makes one
+            // assertion possible and guards no data that outlives the test.
+            .WithEnvironment(
+                "RUSTFS_SSE_S3_MASTER_KEY",
+                Convert.ToBase64String(Enumerable.Repeat((byte)0x2A, 32).ToArray()));
+    }
+
+    /// <summary>
+    /// The reference implementation, which a release is checked against.
+    /// <para>
+    /// Its S3 gateway needs both a flag and an identity file; started without
+    /// them it answers every signed request with a refusal rather than serving
+    /// anonymously.
+    /// </para>
+    /// </summary>
+    private ContainerBuilder Seaweed()
+    {
+        dataDirectory = "/data";
+
+        return new ContainerBuilder()
+            .WithImage("chrislusf/seaweedfs:4.41")
+            .WithResourceMapping(
+                System.Text.Encoding.UTF8.GetBytes(SeaweedIdentities), "/etc/seaweedfs/s3.json")
+            .WithCommand("server", "-s3", "-s3.config=/etc/seaweedfs/s3.json", "-dir=/data");
     }
 
     /// <summary>
@@ -182,50 +242,48 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     }
 
     /// <summary>
-    /// §13.3, the last item: where server-side encryption is on, a known string
-    /// from an object is not findable in the store's data directory.
+    /// The precondition for §13.3's last item, and a real assertion in itself:
+    /// <b>a grep of this store's data directory can see bytes nobody encrypted.</b>
     /// <para>
-    /// <b>Skipped against the development endpoint, and the reason is measured
-    /// rather than assumed.</b> On 2026-08-12 this was run against RustFS in
-    /// three shapes — a small object, a megabyte of repeated characters, and a
-    /// megabyte of random bytes in a part file of its own — and in none of them
-    /// was the plaintext findable by <c>grep -ra</c> over <c>/data</c>
-    /// <i>even with encryption switched off</i>. RustFS does not lay object
-    /// bytes down in a form this method can read, so a green result here would
-    /// have meant nothing at all: the first version of this test passed with
-    /// encryption disabled, which is how the problem was found.
-    /// </para>
-    /// <para>
-    /// So it stays, whole and skipped, rather than being deleted or left to pass
-    /// vacuously. §13.3 is a <b>release</b> check against SeaweedFS, not a
-    /// per-commit one — run it there and un-skip:
-    /// </para>
-    /// <code>
-    /// ALGOJUDGE_S3_ENDPOINT=… ALGOJUDGE_S3_ACCESS_KEY=… ALGOJUDGE_S3_SECRET_KEY=…
-    /// </code>
-    /// <para>
-    /// The control below it is what makes it worth running at all: it looks for
-    /// bytes that were never encrypted, where the method <b>must</b> succeed. If
-    /// that one cannot find them, the item above proves nothing and both need
-    /// looking at rather than one.
+    /// Without this, "the plaintext was not findable" says nothing — and that is
+    /// not hypothetical. The first version of the encryption check passed with
+    /// encryption switched off, because on RustFS the needle is never findable.
     /// </para>
     /// </summary>
-    [Fact(Skip = "Needs an endpoint that stores object bytes readably; RustFS does not. Run against SeaweedFS before a release.")]
-    public async Task Where_encryption_is_on_the_bytes_are_not_findable_on_disk()
+    [ReferenceImplementationFact]
+    public async Task Bytes_nobody_encrypted_are_findable_in_the_data_directory()
     {
         Assert.NotNull(container);
 
-        using var client = ClientFor();
-
-        // The control first: if a plain object cannot be found, nothing about an
-        // encrypted one follows from failing to find it either.
         var plain = $"algojudge-plaintext-{Guid.NewGuid():N}";
         await WriteThroughStoreAsync(plain);
+
         Assert.True(
             await FindableOnDiskAsync(plain),
             "a grep of the store's data directory could not find bytes that were never encrypted, "
             + "so it cannot show that encrypted ones are absent either");
+    }
 
+    /// <summary>
+    /// §13.3, the last item: where server-side encryption is on, a known string
+    /// from an object is not findable in the store's data directory.
+    /// <para>
+    /// It repeats the control above before asserting anything, so that a green
+    /// result cannot come from a grep that would have found nothing regardless.
+    /// </para>
+    /// </summary>
+    [EncryptionCapableFact]
+    public async Task Where_encryption_is_on_the_bytes_are_not_findable_on_disk()
+    {
+        Assert.NotNull(container);
+
+        var plain = $"algojudge-plaintext-{Guid.NewGuid():N}";
+        await WriteThroughStoreAsync(plain);
+        Assert.True(
+            await FindableOnDiskAsync(plain),
+            "the method cannot see unencrypted bytes here, so it proves nothing about encrypted ones");
+
+        using var client = ClientFor();
         await client.PutBucketEncryptionAsync(new Amazon.S3.Model.PutBucketEncryptionRequest
         {
             BucketName = Bucket,
@@ -286,7 +344,7 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     /// </summary>
     private async Task<bool> FindableOnDiskAsync(string needle)
     {
-        var found = await container!.ExecAsync(["grep", "-r", "-a", "-l", needle, "/data"]);
+        var found = await container!.ExecAsync(["grep", "-r", "-a", "-l", needle, dataDirectory]);
         return found.ExitCode == 0;
     }
 

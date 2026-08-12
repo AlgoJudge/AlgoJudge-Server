@@ -19,26 +19,28 @@ always used `Problem`; only the documentation lagged.
 > Runner registry, job reservation, file upload and result payloads — all of
 > which ship. It also said authorization only checks that a request is
 > authenticated, which is the most misleading thing a README can be wrong about.
-> The state below was read off the code and the test run on 2026-08-10.
+> The state below was read off the code and the test run on 2026-08-10, and
+> the counts were re-read on 2026-08-13 after file storage became a choice.
 
 `Verified fact` — `main`, inspected 2026-08-10.
 
 | Area | State |
 |---|---|
-| API | **118 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity` |
+| API | **132 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity` |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
 | Authorization | a real permission model: **48 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
-| Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees |
-| Background work | four hosted services: the maintenance drainer, the lease reaper, the series scheduler, the file collector |
-| Operations | maintenance levels `open`/`draining`/`closed`, and `aj-admin` in the image |
-| Schema | **four migrations**, the earliest `20260807222825_InitialCreate` |
+| Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
+| Background work | **six hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the file collector, the storage migrator |
+| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage` behind loopback and a token |
+| Schema | **13 migrations**, the earliest `20260807222825_InitialCreate` |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
-**Twenty-one `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:
+**Twenty-seven `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:
 `Activity`, `Series`, `SeriesProblem`, `Problem`, `ProblemVersion`,
 `Submission`, `EvaluationJob`, `Trial`, `Result`, `Runner`, `Question`, `File`,
-`Grant`, `PermissionTemplate`, `Instance`, `MaintenanceState`, `UserSession`.
+`Grant`, `PermissionTemplate`, `Instance`, `MaintenanceState`, `UserSession`,
+`StorageMigration`.
 
 Every identifier is a **UUIDv7**, except `User`, which keeps Identity's string
 key. The reason for version 7 is under *Decisions in force*.
@@ -192,6 +194,32 @@ store, backend, bucket or path.
 applied when the bucket is made and cannot be added convincingly afterwards, so
 that is the operator's act. The development Compose file is the one exception and
 says so where it sets the flag.
+
+### Checking a store against the reference implementation
+
+The S3 conformance suite runs against **RustFS** by default, which is the local
+development endpoint. Before a release it is run against **SeaweedFS**, which is
+the reference implementation — the suite starts either, and no test code
+changes:
+
+```bash
+ALGOJUDGE_S3=seaweedfs dotnet test AlgoJudge.sln -c Release --filter S3BlobStoreTests
+```
+
+Or against an endpoint somebody else is running, which skips the one item that
+needs to look at the store's own data directory:
+
+```bash
+ALGOJUDGE_S3_ENDPOINT=https://… ALGOJUDGE_S3_ACCESS_KEY=… ALGOJUDGE_S3_SECRET_KEY=…   dotnet test AlgoJudge.sln -c Release --filter S3BlobStoreTests
+```
+
+**One item cannot be run against either implementation available here**, and
+that is measured rather than assumed (2026-08-13): the check writes a known
+string, enables bucket-default encryption and looks for the string in the
+store's files. SeaweedFS 4.41 stores objects readably — so the method works, and
+a test proves it does — but answers `PutBucketEncryption` with an internal
+error. RustFS accepts the call and stores objects in a form no grep can read
+either way. Against an endpoint that supports both, `ALGOJUDGE_S3_SSE=1` runs it.
 
 ### Moving files from one store to another
 
