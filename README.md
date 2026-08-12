@@ -141,6 +141,84 @@ Or an environment variable, which is what the Compose file uses:
 AJ_ConnectionStrings__DbConnectionString="Host=localhost;Database=algojudge;Username=postgres;Password=your-password"
 ```
 
+## Where the files go
+
+**An installation that configures no storage does not start.** That is
+deliberate: where a product puts its files is not something to inherit from a
+default nobody read. The Server says what is missing and exits.
+
+A **store** is one configured place where bytes may live. A deployment may have
+several, including several of the same kind, and every stored file remembers
+which one holds it — for ever, which is why a store id may never be reused for
+another location.
+
+```bash
+# An object store, which is what `Storage__Default` means when nobody says.
+AJ_Storage__Stores__objects__Kind=s3
+AJ_Storage__Stores__objects__Endpoint=https://s3.example
+AJ_Storage__Stores__objects__Bucket=algojudge
+AJ_Storage__Stores__objects__AccessKey=…
+AJ_Storage__Stores__objects__SecretKey=…
+AJ_Storage__Stores__objects__Region=us-east-1        # optional
+
+# Or a volume.
+AJ_Storage__Stores__local__Kind=filesystem
+AJ_Storage__Stores__local__Path=/var/lib/algojudge/blobs
+
+# Or the database, which needs nothing else at all.
+AJ_Storage__Stores__pg__Kind=postgres
+
+AJ_Storage__Default=objects        # which one takes new writes
+```
+
+Three kinds, all supported:
+
+| Kind | What it needs | What it costs |
+|---|---|---|
+| `s3` | an endpoint, a bucket and a key pair | an object store to run or to buy |
+| `filesystem` | a path on a volume | the backup has to cover two things |
+| `postgres` | nothing | the database grows by every file |
+
+`postgres` is the configuration with no dependencies: one container, and
+`pg_dump` alone is a complete backup. It is the right answer for a small
+installation and the wrong one for a large contest.
+
+**Credentials live in the environment and nowhere else.** No endpoint sets a
+store, nothing is stored in the database, and none of it appears in a public
+answer — `GET /health` says `"storage":"ok"` or `"degraded"` and never which
+store, backend, bucket or path.
+
+**The Server never creates a bucket.** On some providers encryption at rest is
+applied when the bucket is made and cannot be added convincingly afterwards, so
+that is the operator's act. The development Compose file is the one exception and
+says so where it sets the flag.
+
+### Moving files from one store to another
+
+Changing `Storage__Default` decides where the **next** upload goes and moves
+nothing. Moving what is already stored is a separate, deliberate act — take a
+backup first:
+
+```bash
+docker compose exec server aj-admin storage status     # where the files are now
+docker compose exec server aj-admin storage migrate    # move them to the default
+docker compose exec server aj-admin storage cancel     # call it off
+```
+
+It does not begin at once. A migration waits for its window — `02:00` UTC by
+default, `AJ_Storage__Migration__StartHourUtc`, and a negative value means any
+hour — and for the evaluation queue to empty and every series to close, so
+nothing moves under a running contest. `storage status` says which of those it is
+waiting for.
+
+Each file is read, checked against its own checksum, written to the target, and
+only then does its row point at the new store. The old copy is kept for
+`AJ_Storage__Migration__GraceMinutes` (60 by default) so that a reader who
+resolved the row a moment ago still finds it. A run works for at most
+`AJ_Storage__Migration__BudgetMinutes` (30) and continues in the next window;
+killing the process loses nothing, because what has moved is recorded on the
+files themselves.
+
 ## The published image
 
 Released images are pushed to GitHub's container registry when a `v*` tag is
@@ -157,11 +235,18 @@ Runner requires anyway.
 
 ## Running with Docker Compose
 
-Brings up PostgreSQL and the Server, both bound to `127.0.0.1`:
+Brings up PostgreSQL, an S3 endpoint and the Server:
 
 ```bash
 docker compose -f example-server-development-docker-compose.yaml up
 ```
+
+PostgreSQL and the Server are bound to `127.0.0.1`. The object store — RustFS,
+pinned, the local development endpoint and nothing more — is reachable only from
+inside the Compose network: it holds development files, it has no console, and
+its credentials exist for this stack alone. The Server creates its bucket here
+because the alternative was a second image whose only job is one `mb`; that flag
+is set in this file and nowhere else.
 
 ## Signing in for the first time
 

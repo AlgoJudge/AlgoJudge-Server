@@ -477,8 +477,12 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         await using var after = NewContext();
         Assert.Equal(2, await after.Files.CountAsync(f => f.StorageId == "pg"));
 
+        // **Back to `Requested`**, so the window gates it again. Left `Running`
+        // it would take a fresh stretch thirty seconds later and the budget would
+        // have bounded one call rather than the run.
         var stopped = await after.StorageMigrations.AsNoTracking().FirstAsync();
-        Assert.Equal(StorageMigrationState.Running, stopped.State);
+        Assert.Equal(StorageMigrationState.Requested, stopped.State);
+        Assert.Null(stopped.StartedAt);
         Assert.Contains("budget", stopped.Detail);
     }
 

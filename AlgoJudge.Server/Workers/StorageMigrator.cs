@@ -192,33 +192,23 @@ namespace AlgoJudge.Server.Workers
             }
 
             var hour = configuration.GetValue(StartHourSetting, 2);
-            var budget = TimeSpan.FromMinutes(configuration.GetValue(BudgetMinutesSetting, 30));
             var now = clock.GetUtcNow().UtcDateTime;
 
+            // **The window bounds the whole run, not only its first minute.**
+            // This checked `State == Requested` until 2026-08-13, so once a
+            // migration had begun the window stopped applying entirely — and the
+            // budget was recomputed on every thirty-second tick, so it bounded
+            // nothing either. A migration that started at 02:00 was still copying
+            // at nine in the morning, under a working day, which is the one thing
+            // the window exists to prevent.
+            //
             // A negative hour means no window at all, which is what an operator
             // who has already taken the installation down for maintenance wants:
             // they did not stop everything in order to wait until two in the
             // morning. The gates below still apply.
-            if (hour is >= 0 and <= 23)
+            if (hour is >= 0 and <= 23 && now.Hour != hour)
             {
-                // **The window bounds the whole run, not only its first minute.**
-                // This checked `State == Requested` until 2026-08-13, so once a
-                // migration had begun the window stopped applying entirely — and
-                // the budget was recomputed on every thirty-second tick, so it
-                // bounded nothing either. A migration that started at 02:00 was
-                // still copying at nine in the morning, under a working day,
-                // which is the one thing the window exists to prevent. Found by
-                // being asked when a migration actually runs.
-                if (now.Hour != hour) return $"waiting for the window at {hour:00}:00 UTC";
-
-                // And within the window, for at most the budget. `StartedAt` is
-                // when this window's stretch began, so a run that has spent its
-                // budget waits for the next window rather than starting over on
-                // the next tick.
-                if (InThisWindow(migration.StartedAt, now) && now - migration.StartedAt >= budget)
-                {
-                    return "the time budget for this window is spent; it continues in the next one";
-                }
+                return $"waiting for the window at {hour:00}:00 UTC";
             }
 
             if (await context.EvaluationJobs.AnyAsync(
@@ -262,13 +252,7 @@ namespace AlgoJudge.Server.Workers
 
                 migration.State = StorageMigrationState.Running;
                 migration.Detail = null;
-            }
-
-            // A fresh stretch: either this run has just begun, or a new window
-            // has opened since the last one. Recorded before any file moves, so
-            // the budget is measured from when work actually started.
-            if (!InThisWindow(migration.StartedAt, now))
-            {
+                // The stretch starts here, and the budget is measured from it.
                 migration.StartedAt = now;
             }
 
@@ -277,9 +261,9 @@ namespace AlgoJudge.Server.Workers
             var budget = TimeSpan.FromMinutes(configuration.GetValue(BudgetMinutesSetting, 30));
             var grace = TimeSpan.FromMinutes(configuration.GetValue(GraceMinutesSetting, 60));
 
-            // Measured from when this window's stretch began, not from now:
-            // this method runs once per tick, so `now + budget` would hand every
-            // tick a fresh half hour and the budget would bound nothing.
+            // Measured from when this stretch began, not from now: this method
+            // runs once per tick, so `now + budget` would hand every tick a fresh
+            // half hour and the budget would bound nothing.
             var until = (migration.StartedAt ?? now) + budget;
 
             // **What this run has already failed on.** Without it a single file
@@ -300,7 +284,14 @@ namespace AlgoJudge.Server.Workers
                 // finish costs a minute and leaves nothing behind.
                 if (clock.GetUtcNow().UtcDateTime >= until)
                 {
-                    migration.Detail = "the time budget ended this run";
+                    // **Back to `Requested`, which is what makes the budget mean
+                    // something.** Left as `Running` it would take a fresh
+                    // stretch on the very next tick, thirty seconds later, and
+                    // the budget would bound one call rather than the run.
+                    // Returning it here sends it back through the window.
+                    migration.State = StorageMigrationState.Requested;
+                    migration.StartedAt = null;
+                    migration.Detail = "the time budget ended this run; it continues in the next window";
                     await context.SaveChangesAsync(ct);
                     return;
                 }
@@ -346,16 +337,6 @@ namespace AlgoJudge.Server.Workers
                 await context.SaveChangesAsync(ct);
             }
         }
-
-        /// <summary>
-        /// Whether a moment belongs to the window that is open now.
-        /// <para>
-        /// Same day and same hour: a stretch that began in yesterday's window is
-        /// not this one's, so today's budget starts fresh.
-        /// </para>
-        /// </summary>
-        private static bool InThisWindow(DateTime? began, DateTime now) =>
-            began is { } value && value.Date == now.Date && value.Hour == now.Hour;
 
         /// <summary>
         /// One file: read it where it is, check it is itself, write it to the
