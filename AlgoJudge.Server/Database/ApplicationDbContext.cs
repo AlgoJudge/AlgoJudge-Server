@@ -214,7 +214,19 @@ namespace AlgoJudge.Server.Database
                 e.Property(f => f.Sha256).HasMaxLength(64);
                 e.Property(f => f.Name).HasMaxLength(255);
                 e.Property(f => f.MimeType).HasMaxLength(128);
+                e.Property(f => f.StorageId).HasMaxLength(32);
+                e.Property(f => f.PreviousStorageId).HasMaxLength(32);
                 e.HasIndex(f => f.Sha256);
+                // "Which files are still in the store we are retiring" — asked by
+                // the startup check, by the per-store counts, and by every run of
+                // the migration worker.
+                e.HasIndex(f => f.StorageId);
+                // Filtered, because outside a migration every row is NULL here:
+                // an unfiltered index would be the size of the table to answer a
+                // question whose answer is almost always "none".
+                e.HasIndex(f => f.PreviousCopyDeleteAfter)
+                    .HasDatabaseName("IX_Files_PendingCopySweep")
+                    .HasFilter("\"PreviousCopyDeleteAfter\" IS NOT NULL");
                 e.HasOne(f => f.UploadedBy)
                     .WithMany()
                     .HasForeignKey(f => f.UploadedByUserId)

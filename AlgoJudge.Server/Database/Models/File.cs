@@ -25,9 +25,57 @@ namespace AlgoJudge.Server.Database.Models
 
         public required string MimeType { get; set; }
 
+        /// <summary>
+        /// <b>On its way out.</b> The bytes move to <c>FileContents</c> and then
+        /// behind <c>IBlobStore</c>; this column is dropped once nothing reads it.
+        /// Kept for one step so that expanding the schema and moving the readers
+        /// are two changes rather than one — a deployment may sit between them.
+        /// </summary>
         public required byte[] Content { get; set; }
 
         public long SizeBytes { get; set; }
+
+        /// <summary>
+        /// Which configured store holds these bytes.
+        /// <para>
+        /// <b>Names a store, not a kind of backend.</b> A deployment may run
+        /// several of the same kind — two buckets, two volumes — and the day one
+        /// of them is retired, "which files are still in there" has to be a
+        /// question the database can answer. A column saying <c>s3</c> could not.
+        /// </para>
+        /// <para>
+        /// The id is opaque and <b>permanent</b>: once a row names it, it may not
+        /// leave the configuration and may never be reused for another physical
+        /// location. Startup checks the first half of that; nothing but care
+        /// checks the second.
+        /// </para>
+        /// </summary>
+        public string StorageId { get; set; } = InitialStorageId;
+
+        /// <summary>
+        /// What every row was on the day storage became a choice. Existing rows
+        /// are backfilled to it, and it is what a new row gets until the writer
+        /// learns to ask the configuration — one step later, by design.
+        /// </summary>
+        public const string InitialStorageId = "pg";
+
+        /// <summary>
+        /// The store still holding a stale copy, while a migration is in flight.
+        /// <c>NULL</c> at every other time.
+        /// </summary>
+        public string? PreviousStorageId { get; set; }
+
+        /// <summary>
+        /// When the stale copy may go.
+        /// <para>
+        /// A grace period rather than a delete in the same transaction, because a
+        /// reader that resolved the row a moment ago is still holding the old
+        /// <see cref="StorageId"/> — and the copy it is reading has to outlive
+        /// that. The source copy goes after this passes, never before the target
+        /// is committed.
+        /// </para>
+        /// </summary>
+        public DateTime? PreviousCopyDeleteAfter { get; set; }
 
         /// <summary>
         /// Lowercase hexadecimal SHA-256 of <see cref="Content"/>.
