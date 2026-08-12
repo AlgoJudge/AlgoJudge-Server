@@ -106,6 +106,14 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         builder.UseSetting("ConnectionStrings:DbConnectionString", connectionString);
         builder.UseSetting("Admin:Token", AdminToken);
 
+        // **Named, because nothing is assumed any more.** An installation that
+        // configures no storage refuses to start, and the suite is an
+        // installation. `postgres` rather than an object store: the whole point
+        // is that everything above IBlobStore behaves identically, and a suite
+        // that needed a bucket to run would be slower for no reading it gives.
+        builder.UseSetting("Storage:Stores:pg:Kind", "postgres");
+        builder.UseSetting("Storage:Default", "pg");
+
         // `TestServer` leaves `RemoteIpAddress` null, and the maintenance switch
         // answers only to a caller on the loopback interface — so without this
         // every test of it would see a 404 and prove nothing.

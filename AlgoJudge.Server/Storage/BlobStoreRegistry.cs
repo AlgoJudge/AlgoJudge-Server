@@ -55,11 +55,11 @@ namespace AlgoJudge.Server.Storage
     /// (§3, A20, A21).
     /// </para>
     /// <para>
-    /// <b>An unconfigured installation still works.</b> With no
-    /// <c>Storage__*</c> at all, this synthesizes exactly what every installation
-    /// had before storage became a choice: one <c>postgres</c> store called
-    /// <c>pg</c>, which is what the schema migration backfilled every existing
-    /// row to. An upgrade that changes nothing changes nothing.
+    /// <b>An unconfigured installation does not start</b> (decided 2026-08-12).
+    /// It used to synthesize a <c>postgres</c> store and carry on, which meant a
+    /// deployment could take a hundred gigabytes of submissions into its database
+    /// without anybody choosing that. Where the files go is now something an
+    /// operator says out loud, and the failure to say it is loud in return.
     /// </para>
     /// </summary>
     public sealed class BlobStoreRegistry : IBlobStoreRegistry
@@ -67,6 +67,19 @@ namespace AlgoJudge.Server.Storage
         public const string Section = "Storage";
         public const string DefaultSetting = "Storage:Default";
         public const string SpoolPathSetting = "Storage:SpoolPath";
+
+        /// <summary>
+        /// What <c>Storage__Default</c> means when nobody said.
+        /// <para>
+        /// <b>An object store</b> (decided 2026-08-12). An installation that
+        /// configures one under another name simply names it; an installation
+        /// that configures nothing at all does not start, which is the point.
+        /// The other two kinds stay fully supported — <c>postgres</c> is still
+        /// the configuration with no dependencies (§10.1) — they are just no
+        /// longer what a deployment gets by accident.
+        /// </para>
+        /// </summary>
+        public const string DefaultStoreId = "objects";
 
         private readonly Dictionary<string, IBlobStore> stores;
 
@@ -88,6 +101,15 @@ namespace AlgoJudge.Server.Storage
                 {
                     "postgres" => new PostgresBlobStore(storeId, connectionString, spoolPath),
                     "filesystem" => new FilesystemBlobStore(storeId, Required(declared, "Path", storeId)),
+                    "s3" => new S3BlobStore(storeId, new S3StoreOptions
+                    {
+                        Endpoint = Required(declared, "Endpoint", storeId),
+                        Bucket = Required(declared, "Bucket", storeId),
+                        AccessKey = Required(declared, "AccessKey", storeId),
+                        SecretKey = Required(declared, "SecretKey", storeId),
+                        Region = declared["Region"] is { Length: > 0 } region ? region : "us-east-1",
+                        CreateBucket = declared.GetValue("CreateBucket", false),
+                    }, spoolPath),
                     null or "" => throw new InvalidOperationException(
                         $"Storage store '{storeId}' does not say what kind it is"),
                     _ => throw new InvalidOperationException(
@@ -95,15 +117,22 @@ namespace AlgoJudge.Server.Storage
                 };
             }
 
+            // **An installation that says nothing does not start** (decided
+            // 2026-08-12). Where the files of a product go is not a thing to
+            // inherit from a default nobody read: the earlier behaviour — one
+            // synthesized `postgres` store — meant a deployment could accept a
+            // hundred gigabytes of submissions into its database without anyone
+            // ever choosing that.
             if (stores.Count == 0)
             {
-                stores[Database.Models.File.InitialStorageId] = new PostgresBlobStore(
-                    Database.Models.File.InitialStorageId, connectionString, spoolPath);
+                throw new InvalidOperationException(
+                    "No storage is configured. Set Storage__Stores__<id>__Kind and "
+                    + $"{DefaultSetting}; see docs/specs/FILE_STORAGE.md §3.");
             }
 
             var defaultId = configuration[DefaultSetting] is { Length: > 0 } named
                 ? named
-                : stores.Keys.First();
+                : DefaultStoreId;
 
             // Loudly, and at startup. A default naming a store nobody configured
             // means every upload fails — better a container that refuses to start

@@ -78,13 +78,14 @@ public class ProductionSeedTests : IAsyncLifetime
         collection.AddScoped<IInstanceService, InstanceService>();
 
         // The seeder writes its documents through a store like everything else,
-        // so this collection needs one. Configured with nothing, which is the
-        // case that matters here: it must resolve to the same single `postgres`
-        // store an installation that has never heard of `Storage__*` gets.
+        // so this collection needs one — and since 2026-08-12 it has to name it,
+        // because an installation that configures no storage does not start.
         collection.AddSingleton<IConfiguration>(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DbConnectionString"] = container.GetConnectionString(),
+                ["Storage:Stores:pg:Kind"] = "postgres",
+                ["Storage:Default"] = "pg",
             })
             .Build());
         collection.AddSingleton<AlgoJudge.Server.Storage.IBlobStoreRegistry>(
