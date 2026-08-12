@@ -47,8 +47,12 @@ services:
   rustfs:
     image: rustfs/rustfs:1.0.0-rc.1
     environment:
-      - RUSTFS_ACCESS_KEY=algojudge-development
-      - RUSTFS_SECRET_KEY=algojudge-development-only
+      # **The same two values the Server signs with**, substituted from one
+      # place. They were written out twice until 2026-08-13, and a pair that has
+      # to agree and is stated twice is a pair that eventually does not — the
+      # failure being an authentication error naming nothing in particular.
+      - RUSTFS_ACCESS_KEY=${AJ_STORAGE_ACCESS_KEY:-algojudge-development}
+      - RUSTFS_SECRET_KEY=${AJ_STORAGE_SECRET_KEY:-algojudge-development-only}
     volumes:
       - algojudge_dev_objects:/data
     expose:
@@ -81,8 +85,8 @@ services:
     - AJ_Storage__Stores__objects__Kind=s3
     - AJ_Storage__Stores__objects__Endpoint=http://rustfs:9000
     - AJ_Storage__Stores__objects__Bucket=algojudge
-    - AJ_Storage__Stores__objects__AccessKey=algojudge-development
-    - AJ_Storage__Stores__objects__SecretKey=algojudge-development-only
+    - AJ_Storage__Stores__objects__AccessKey=${AJ_STORAGE_ACCESS_KEY:-algojudge-development}
+    - AJ_Storage__Stores__objects__SecretKey=${AJ_STORAGE_SECRET_KEY:-algojudge-development-only}
     # **Development only.** Bucket creation belongs to the operator, because on
     # OVHcloud encryption at rest is applied when the bucket is made and cannot
     # be added convincingly afterwards (FILE_STORAGE.md §10.3, A61). This exists
