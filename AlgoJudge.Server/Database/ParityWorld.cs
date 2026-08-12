@@ -37,6 +37,7 @@ namespace AlgoJudge.Server.Database
     public class ParityWorld(
         ApplicationDbContext context,
         UserManager<User> users,
+        Storage.IBlobStoreRegistry stores,
         ILogger logger)
     {
         /// <summary>The Runner's own scale, as the fake's seed reports on it.</summary>
@@ -612,13 +613,24 @@ namespace AlgoJudge.Server.Database
             string name, string mimeType, string content, string userId, CancellationToken ct)
         {
             var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+            var sha256 = IFileService.Checksum(bytes);
+
+            // Through the store like every other write, rather than straight into
+            // a column. A seed that wrote bytes its own way would be a seed that
+            // works on exactly one backend, and the development stack is where a
+            // broken store is meant to be noticed first.
+            var store = stores.Default;
+            var key = new Storage.BlobKey(Utils.Uuid.New(), sha256);
+            var written = await store.WriteAsync(key.FileId, new MemoryStream(bytes), ct);
+
             var file = new Models.File
             {
+                Id = key.FileId,
                 Name = name,
                 MimeType = mimeType,
-                Content = bytes,
-                SizeBytes = bytes.LongLength,
-                Sha256 = IFileService.Checksum(bytes),
+                SizeBytes = written.SizeBytes,
+                Sha256 = written.Sha256,
+                StorageId = store.Id,
                 UploadedByUserId = userId,
             };
             context.Files.Add(file);

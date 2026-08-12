@@ -11,6 +11,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<MaintenanceState> Maintenance { get; set; }
         public DbSet<File> Files { get; set; }
         public DbSet<FileReference> FileReferences { get; set; }
+        public DbSet<StorageMigration> StorageMigrations { get; set; }
         public DbSet<Problem> Problems { get; set; }
         public DbSet<ProblemShare> ProblemShares { get; set; }
         public DbSet<ProblemVersion> ProblemVersions { get; set; }
@@ -214,7 +215,19 @@ namespace AlgoJudge.Server.Database
                 e.Property(f => f.Sha256).HasMaxLength(64);
                 e.Property(f => f.Name).HasMaxLength(255);
                 e.Property(f => f.MimeType).HasMaxLength(128);
+                e.Property(f => f.StorageId).HasMaxLength(32);
+                e.Property(f => f.PreviousStorageId).HasMaxLength(32);
                 e.HasIndex(f => f.Sha256);
+                // "Which files are still in the store we are retiring" — asked by
+                // the startup check, by the per-store counts, and by every run of
+                // the migration worker.
+                e.HasIndex(f => f.StorageId);
+                // Filtered, because outside a migration every row is NULL here:
+                // an unfiltered index would be the size of the table to answer a
+                // question whose answer is almost always "none".
+                e.HasIndex(f => f.PreviousCopyDeleteAfter)
+                    .HasDatabaseName("IX_Files_PendingCopySweep")
+                    .HasFilter("\"PreviousCopyDeleteAfter\" IS NOT NULL");
                 e.HasOne(f => f.UploadedBy)
                     .WithMany()
                     .HasForeignKey(f => f.UploadedByUserId)
@@ -222,6 +235,16 @@ namespace AlgoJudge.Server.Database
                 // The garbage collector asks "what was uploaded before X and is
                 // referenced by nothing" on every run.
                 e.HasIndex(f => f.CreatedAt);
+            });
+
+            builder.Entity<StorageMigration>(e =>
+            {
+                e.ToTable("StorageMigrations");
+                e.Property(m => m.TargetStoreId).HasMaxLength(32);
+                e.Property(m => m.Detail).HasMaxLength(512);
+                // "Is one running" is asked on every worker tick and by the
+                // operator surface, and the answer is almost always no.
+                e.HasIndex(m => m.State);
             });
 
             builder.Entity<FileReference>(e =>

@@ -296,10 +296,6 @@ namespace AlgoJudge.Server.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<byte[]>("Content")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz");
 
@@ -313,6 +309,13 @@ namespace AlgoJudge.Server.Database.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<DateTime?>("PreviousCopyDeleteAfter")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("PreviousStorageId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("Sha256")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -321,6 +324,11 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("StorageId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("UploadedByUserId")
                         .HasColumnType("text");
 
@@ -328,7 +336,13 @@ namespace AlgoJudge.Server.Database.Migrations
 
                     b.HasIndex("CreatedAt");
 
+                    b.HasIndex("PreviousCopyDeleteAfter")
+                        .HasDatabaseName("IX_Files_PendingCopySweep")
+                        .HasFilter("\"PreviousCopyDeleteAfter\" IS NOT NULL");
+
                     b.HasIndex("Sha256");
+
+                    b.HasIndex("StorageId");
 
                     b.HasIndex("UploadedByUserId");
 
@@ -1103,6 +1117,46 @@ namespace AlgoJudge.Server.Database.Migrations
                         .IsUnique();
 
                     b.ToTable("SeriesProblems", (string)null);
+                });
+
+            modelBuilder.Entity("AlgoJudge.Server.Database.Models.StorageMigration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("BytesMoved")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("FilesMoved")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetStoreId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("State");
+
+                    b.ToTable("StorageMigrations", (string)null);
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.Submission", b =>

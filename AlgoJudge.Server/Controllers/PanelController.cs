@@ -272,12 +272,21 @@ namespace AlgoJudge.Server.Controllers
             return NoContent();
         }
 
-        /// <summary>What the Runner uploaded about itself — its log, its `lscpu`.</summary>
-        [HttpGet("{runnerId:guid}/files/{attachmentId:guid}")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        public async Task<IActionResult> Attachment(
-            Guid runnerId, Guid attachmentId, CancellationToken ct) =>
-            Ok(new { content = await panel.RunnerAttachmentAsync(runnerId, attachmentId, ct) });
+        // **A Runner's attachments are read through `GET /files/{id}`**, like
+        // every other stored file. There was a second endpoint here until
+        // 2026-08-12, and it asked exactly the same question this one would —
+        // `runner:read`, installation-wide — while being a second way to the
+        // bytes, which §2 invariant 1 of FILE_STORAGE.md forbids in so many
+        // words. What it added was a check that the file belonged to the runner
+        // in the path, which is a tidiness rather than a boundary: anybody
+        // holding `runner:read` reads every Runner's attachments either way.
+        //
+        // Its own listing already carries what a reader needs: `attachments`
+        // gives the file id, name, size and checksum of each one.
+        //
+        // `GET /runner/files/{id}` is **not** the same thing and stays: that is
+        // the Runner's own door, authorized against the job or trial it holds
+        // right now, for a caller that has a token and no session.
     }
 
     /// <summary>Configuring the installation: its name, its mark, its documents.</summary>

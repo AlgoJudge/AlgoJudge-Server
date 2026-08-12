@@ -208,8 +208,25 @@ namespace AlgoJudge.Server.Controllers
             var file = await files.FindAsync(id, ct) ?? throw new NotFoundException("File");
 
             Response.Headers.CacheControl = "private, max-age=31536000, immutable";
-            Response.Headers.ETag = $"\"{file.Sha256}\"";
-            return File(file.Content, file.MimeType, file.Name);
+
+            // Streamed rather than handed over as an array: this is the endpoint
+            // several Runners pull a 128 MiB package through at the same time.
+            var content = await files.OpenAsync(file, ct);
+
+            // A Runner does not send `If-None-Match` today and does not have to:
+            // both of these are additive, and a request without either header is
+            // answered exactly as before. What they buy is a package download
+            // that can be resumed instead of restarted.
+            // Every argument named: the byte[] and Stream overloads differ in
+            // what their third positional parameter means, and picking the wrong
+            // one is a compile error only by luck.
+            return File(
+                fileStream: content,
+                contentType: file.MimeType,
+                fileDownloadName: file.Name,
+                lastModified: null,
+                entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{file.Sha256}\""),
+                enableRangeProcessing: true);
         }
 
         /// <summary>
@@ -218,19 +235,31 @@ namespace AlgoJudge.Server.Controllers
         /// chain as everything else in the product.
         /// </summary>
         [HttpPost("files")]
+        [Consumes("multipart/form-data")]
+        [Api.MultipartForm(File = "file", FileRequired = true, Fields = ["sha256"], RequiredFields = ["sha256"])]
+        [RequestSizeLimit(UploadLimits.Package)]
+        [DisableFormValueModelBinding]
         [ProducesResponseType<UploadedFileDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status413PayloadTooLarge)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
-        public async Task<ActionResult<UploadedFileDto>> Upload(
-            [FromForm] IFormFile file, [FromForm] string sha256, CancellationToken ct)
+        public async Task<ActionResult<UploadedFileDto>> Upload(CancellationToken ct)
         {
+            // Before a byte is read: a Runner that cannot prove who it is does
+            // not get to write into the store.
             await runners.AuthenticateAsync(Token(), ct);
-            if (file is null || file.Length == 0)
+
+            var upload = await MultipartUpload.ReadAsync(
+                Request, UploadLimits.Package,
+                (content, _, _, token) => files.StageAsync(content, token), ct);
+
+            if (upload.File is not { SizeBytes: > 0 } staged)
             {
+                if (upload.File is { } empty) await files.DiscardAsync(empty, ct);
                 throw new ValidationException("A file is required", "file.required");
             }
 
-            await using var content = file.OpenReadStream();
-            var stored = await files.StoreAsync(content, file.FileName, file.ContentType, sha256, ct);
+            var stored = await files.CommitAsync(
+                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"), ct);
             return Created($"/api/v1/runner/files/{Api.Contracts.Wire.Id(stored.Id)}", Api.Projections.Uploaded(stored));
         }
 

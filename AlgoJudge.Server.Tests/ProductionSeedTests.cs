@@ -4,6 +4,7 @@ using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
@@ -31,6 +32,7 @@ namespace AlgoJudge.Server.Tests;
 /// between this product and one is a branch in the seeder.
 /// </para>
 /// </summary>
+[Collection("storage")]
 public class ProductionSeedTests : IAsyncLifetime
 {
     private PostgreSqlContainer container = null!;
@@ -75,6 +77,22 @@ public class ProductionSeedTests : IAsyncLifetime
             // `AddIdentityApiEndpoints`.
             .AddDefaultTokenProviders();
         collection.AddScoped<IInstanceService, InstanceService>();
+
+        // The seeder writes its documents through a store like everything else,
+        // so this collection needs one — and since 2026-08-12 it has to name it,
+        // because an installation that configures no storage does not start.
+        collection.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DbConnectionString"] = container.GetConnectionString(),
+                ["Storage:Stores:pg:Kind"] = "postgres",
+                ["Storage:Default"] = "pg",
+            })
+            .Build());
+        collection.AddSingleton<AlgoJudge.Server.Storage.IBlobStoreRegistry>(
+            services => new AlgoJudge.Server.Storage.BlobStoreRegistry(
+                services.GetRequiredService<IConfiguration>()));
+
         collection.AddScoped<Seeder>();
 
         services = collection.BuildServiceProvider();

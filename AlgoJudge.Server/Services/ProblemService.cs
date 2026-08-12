@@ -26,7 +26,7 @@ namespace AlgoJudge.Server.Services
         Task<ManagedProblemDto> SetVisibilityAsync(Guid id, string visibility, IReadOnlyList<string>? sharedWith, CancellationToken ct);
         Task<IReadOnlyList<ManagedProblemVersionDto>> ListVersionsAsync(Guid problemId, CancellationToken ct);
         Task<IReadOnlyList<StatementRefDto>> ContentAsync(Guid problemId, Guid versionId, CancellationToken ct);
-        Task<(byte[] Bytes, string Name)?> PackageAsync(Guid problemId, Guid versionId, CancellationToken ct);
+        Task<(Stream Bytes, string Name)?> PackageAsync(Guid problemId, Guid versionId, CancellationToken ct);
     }
 
     public class ProblemService(
@@ -37,6 +37,7 @@ namespace AlgoJudge.Server.Services
         ISeriesGate gate,
         IEventHub events,
         IEventAudience audience,
+        IFileService files,
         TimeProvider clock
     ) : IProblemService
     {
@@ -541,7 +542,7 @@ namespace AlgoJudge.Server.Services
         /// The Runner archive. Null when the version has none — a version nobody
         /// has finished preparing is not a failure.
         /// </summary>
-        public async Task<(byte[] Bytes, string Name)?> PackageAsync(
+        public async Task<(Stream Bytes, string Name)?> PackageAsync(
             Guid problemId, Guid versionId, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProblemUpdate, null, ct);
@@ -555,7 +556,10 @@ namespace AlgoJudge.Server.Services
                     r => r.ProblemVersionId == versionId && r.Name == PackageNames.Archive, ct);
 
             if (reference?.File is null) return null;
-            return (reference.File.Content, reference.File.Name);
+
+            // A package is the largest thing this product stores, so this is the
+            // one caller that most obviously must not receive an array.
+            return (await files.OpenAsync(reference.File, ct), reference.File.Name);
         }
 
         private static FileScope ParseScope(string? value) => value switch

@@ -24,7 +24,10 @@ namespace AlgoJudge.Server.Controllers
     /// </summary>
     [ApiController]
     [Route("health")]
-    public class HealthController(IMaintenanceService maintenance) : ControllerBase
+    public class HealthController(
+        IMaintenanceService maintenance,
+        Storage.IStorageHealth storage
+    ) : ControllerBase
     {
         [HttpGet]
         [ProducesResponseType<HealthDto>(StatusCodes.Status200OK)]
@@ -42,6 +45,9 @@ namespace AlgoJudge.Server.Controllers
                 Maintenance = state.Level == MaintenanceLevel.Open
                     ? null
                     : MaintenanceWire.Dto(state),
+                // Cached for a minute inside, because the container polls this
+                // every ten seconds and the smoke test behind it writes a blob.
+                Storage = await storage.SummaryAsync(ct),
             };
         }
     }

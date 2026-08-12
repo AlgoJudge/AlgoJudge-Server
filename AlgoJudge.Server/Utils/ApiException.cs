@@ -113,6 +113,31 @@ namespace AlgoJudge.Server.Utils
         public int RetryAfterSeconds { get; } = retryAfterSeconds;
     }
 
+    /// <summary>
+    /// The file exists and this Server cannot reach its bytes.
+    /// <para>
+    /// <b>A distinct code from a maintenance window</b>, because a caller has to
+    /// tell them apart: a window ends by itself and is worth waiting out, while
+    /// this one means a row names a store the configuration no longer has, and no
+    /// amount of retrying will change that.
+    /// </para>
+    /// <para>
+    /// <b>Not a 404.</b> Saying "not found" about a file that exists is a claim
+    /// about somebody else's data that happens to be false — and it is the answer
+    /// that would send an operator looking for a deletion bug instead of at their
+    /// own configuration.
+    /// </para>
+    /// <para>
+    /// The message names no store, no backend, no bucket and no path (A65c).
+    /// What went wrong is in the log and on the administrator surface, both of
+    /// which have a reader who is entitled to it.
+    /// </para>
+    /// </summary>
+    public class StorageUnavailableException()
+        : ApiException(StatusCodes.Status503ServiceUnavailable,
+            "The bytes of this file are not reachable from this Server right now",
+            "storage.unavailable");
+
     /// <summary>The request body was larger than the ceiling that applies to it.</summary>
     public class PayloadTooLargeException(long limitBytes)
         : ApiException(StatusCodes.Status413PayloadTooLarge,

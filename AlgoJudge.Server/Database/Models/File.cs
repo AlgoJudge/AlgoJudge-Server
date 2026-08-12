@@ -25,12 +25,65 @@ namespace AlgoJudge.Server.Database.Models
 
         public required string MimeType { get; set; }
 
-        public required byte[] Content { get; set; }
-
+        /// <summary>
+        /// How many bytes there are, counted by the Server as it stored them.
+        /// <para>
+        /// Never asked of the backend at read time, and never taken from a
+        /// caller: it is what makes a <c>Range</c> request answerable without a
+        /// round trip, so it has to be the number this Server itself saw.
+        /// </para>
+        /// </summary>
         public long SizeBytes { get; set; }
 
         /// <summary>
-        /// Lowercase hexadecimal SHA-256 of <see cref="Content"/>.
+        /// Which configured store holds these bytes.
+        /// <para>
+        /// <b>Names a store, not a kind of backend.</b> A deployment may run
+        /// several of the same kind — two buckets, two volumes — and the day one
+        /// of them is retired, "which files are still in there" has to be a
+        /// question the database can answer. A column saying <c>s3</c> could not.
+        /// </para>
+        /// <para>
+        /// The id is opaque and <b>permanent</b>: once a row names it, it may not
+        /// leave the configuration and may never be reused for another physical
+        /// location. Startup checks the first half of that; nothing but care
+        /// checks the second.
+        /// </para>
+        /// </summary>
+        public string StorageId { get; set; } = InitialStorageId;
+
+        /// <summary>
+        /// What every row was on the day storage became a choice. Existing rows
+        /// are backfilled to it, and it is what a new row gets until the writer
+        /// learns to ask the configuration — one step later, by design.
+        /// </summary>
+        public const string InitialStorageId = "pg";
+
+        /// <summary>
+        /// The store still holding a stale copy, while a migration is in flight.
+        /// <c>NULL</c> at every other time.
+        /// </summary>
+        public string? PreviousStorageId { get; set; }
+
+        /// <summary>
+        /// When the stale copy may go.
+        /// <para>
+        /// A grace period rather than a delete in the same transaction, because a
+        /// reader that resolved the row a moment ago is still holding the old
+        /// <see cref="StorageId"/> — and the copy it is reading has to outlive
+        /// that. The source copy goes after this passes, never before the target
+        /// is committed.
+        /// </para>
+        /// </summary>
+        public DateTime? PreviousCopyDeleteAfter { get; set; }
+
+        /// <summary>
+        /// Lowercase hexadecimal SHA-256 of the stored bytes.
+        /// <para>
+        /// <b>Half of the blob's address.</b> Since the bytes left this table it
+        /// is not only a check but a coordinate: the store derives the path from
+        /// it, so a row whose checksum was edited would point at nothing.
+        /// </para>
         /// <para>
         /// The Client computes it, the Server <b>recomputes</b> it and refuses to
         /// store a mismatch (<c>422</c>, <c>checksum_mismatch</c>), and the Runner

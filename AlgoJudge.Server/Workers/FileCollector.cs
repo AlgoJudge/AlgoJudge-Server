@@ -37,6 +37,7 @@ namespace AlgoJudge.Server.Workers
         IServiceScopeFactory scopes,
         TimeProvider clock,
         IConfiguration configuration,
+        Storage.IBlobStoreRegistry stores,
         ILogger<FileCollector> logger
     ) : BackgroundService
     {
@@ -177,14 +178,51 @@ namespace AlgoJudge.Server.Workers
 
             if (!dryRun && orphans.Count > 0)
             {
+                var collected = new List<Database.Models.File>(orphans.Count);
+
                 foreach (var file in orphans)
                 {
                     logger.LogDebug(
                         "Collecting {File} ({Name}, {Bytes} bytes, uploaded {Uploaded})",
                         file.Id, file.Name, file.SizeBytes, file.CreatedAt);
+
+                    // **The bytes first, and the row only if they went.** The row
+                    // is the only record of where the bytes are; dropping it while
+                    // they remain leaks them permanently, because nothing left
+                    // knows the key. A store that is configured away is skipped
+                    // rather than forced — its files are still somebody's, and
+                    // this is the sweep that would quietly forget them.
+                    if (stores.Find(file.StorageId) is not { } store)
+                    {
+                        logger.LogWarning(
+                            "Not collecting {File}: the store it names is not configured", file.Id);
+                        continue;
+                    }
+
+                    try
+                    {
+                        await store.DeleteAsync(new Storage.BlobKey(file.Id, file.Sha256), ct);
+                        collected.Add(file);
+                    }
+                    catch (Exception e) when (e is not OperationCanceledException)
+                    {
+                        // Leave the row. The next run tries again, and until then
+                        // the file is merely uncollected rather than unreachable.
+                        logger.LogWarning(e, "Could not remove the bytes of {File}", file.Id);
+                    }
                 }
-                context.Files.RemoveRange(orphans);
+
+                bytes = collected.Sum(f => f.SizeBytes);
+                context.Files.RemoveRange(collected);
                 await context.SaveChangesAsync(ct);
+
+                return new CollectorReport
+                {
+                    Candidates = orphans.Count,
+                    Deleted = collected.Count,
+                    BytesReclaimed = bytes,
+                    DryRun = false,
+                };
             }
 
             return new CollectorReport

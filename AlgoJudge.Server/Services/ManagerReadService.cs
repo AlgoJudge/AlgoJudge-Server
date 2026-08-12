@@ -41,7 +41,6 @@ namespace AlgoJudge.Server.Services
         Task<ManagedRunnerDto> RevokeRunnerAsync(Guid id, string? reason, CancellationToken ct);
         Task<ManagedRunnerDto> SetTagsAsync(Guid id, IReadOnlyList<string> tags, CancellationToken ct);
         Task ForgetRunnerAsync(Guid id, CancellationToken ct);
-        Task<string> RunnerAttachmentAsync(Guid runnerId, Guid attachmentId, CancellationToken ct);
     }
 
     public class ManagerReadService(
@@ -856,20 +855,6 @@ namespace AlgoJudge.Server.Services
             context.Runners.Remove(runner);
             await context.SaveChangesAsync(ct);
             await AnnounceRunnerAsync(null, forgotten, ct);
-        }
-
-        public async Task<string> RunnerAttachmentAsync(
-            Guid runnerId, Guid attachmentId, CancellationToken ct)
-        {
-            await permissions.RequireAsync(Permissions.RunnerRead, null, ct);
-
-            var reference = await context.FileReferences
-                .AsNoTracking()
-                .Include(r => r.File)
-                .FirstOrDefaultAsync(r => r.RunnerId == runnerId && r.FileId == attachmentId, ct)
-                ?? throw new NotFoundException("Attachment");
-
-            return System.Text.Encoding.UTF8.GetString(reference.File?.Content ?? []);
         }
     }
 }

@@ -146,6 +146,17 @@ namespace AlgoJudge.Server
 
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IPermissionService, PermissionService>();
+            // A singleton because a store is configuration, not state: it is read
+            // once from the environment and never changes while the process
+            // lives. Building it here also means an unusable configuration takes
+            // the container down at startup rather than at the first upload.
+            builder.Services.AddSingleton<Storage.IBlobStoreRegistry>(
+                services => new Storage.BlobStoreRegistry(
+                    services.GetRequiredService<IConfiguration>()));
+
+            builder.Services.AddSingleton<Storage.IStorageHealth, Storage.StorageHealth>();
+            builder.Services.AddScoped<Storage.IStorageMigrations, Storage.StorageMigrations>();
+
             builder.Services.AddScoped<IFileService, FileService>();
             builder.Services.AddScoped<IInstanceService, InstanceService>();
             builder.Services.AddScoped<IActivityService, ActivityService>();
@@ -196,6 +207,10 @@ namespace AlgoJudge.Server
             builder.Services.AddSingleton<Workers.FileCollector>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.FileCollector>());
 
+            // Separate from the collector: one copies, the other deletes.
+            builder.Services.AddSingleton<Workers.StorageMigrator>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.StorageMigrator>());
+
             // One shape for every failure, including the ones raised outside MVC.
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
@@ -220,7 +235,12 @@ namespace AlgoJudge.Server
             builder.Services.ConfigureHttpJsonOptions(options => OmitNulls(options.SerializerOptions));
 
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                // The three streamed uploads read their own bodies, so they
+                // declare no parameters for Swashbuckle to infer a form from.
+                options.OperationFilter<Api.MultipartFormOperationFilter>();
+            });
 
             builder.Services.AddCors(options =>
             {
@@ -315,6 +335,15 @@ namespace AlgoJudge.Server
                     throw new InvalidOperationException("Database has pending migrations");
                 }
             }
+
+            // **Every store a file names has to be one this Server has.** A
+            // configuration that dropped a store id still holds somebody's
+            // submissions, and the failure it produces otherwise is a 503 at a
+            // download nobody connected to a deployment change. Logged loudly and
+            // reported by the health endpoint; not fatal, because the rest of the
+            // installation works and refusing to start would take that down too.
+            app.Services.GetRequiredService<Storage.IStorageHealth>()
+                .ValidateAsync(CancellationToken.None).GetAwaiter().GetResult();
 
             app.UseHttpsRedirection();
             app.UseCors();

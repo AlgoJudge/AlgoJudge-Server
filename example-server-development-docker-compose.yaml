@@ -30,6 +30,34 @@ services:
       timeout: 5s
       retries: 5
 
+  # The local S3 endpoint, and **only** that.
+  #
+  # RustFS is the development endpoint; the conformance suite's reference
+  # implementation is SeaweedFS, and this must never hold real submissions or
+  # real test data (decided 2026-08-10, FILE_STORAGE.md §10.3). Pinned to an
+  # exact tag for the same reason postgres is: an unpinned object store that
+  # moves under a stack is a morning nobody planned.
+  #
+  # `1.0.0-rc.1` is a release candidate, which is the newest thing this image
+  # publishes as a version. That is acceptable here and is one more reason this
+  # service is development-only.
+  #
+  # Not published to the host, so nothing outside the Compose network reaches
+  # it, and no console: the credentials below exist for this stack alone.
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.1
+    environment:
+      # **The same two values the Server signs with**, substituted from one
+      # place. They were written out twice until 2026-08-13, and a pair that has
+      # to agree and is stated twice is a pair that eventually does not — the
+      # failure being an authentication error naming nothing in particular.
+      - RUSTFS_ACCESS_KEY=${AJ_STORAGE_ACCESS_KEY:-algojudge-development}
+      - RUSTFS_SECRET_KEY=${AJ_STORAGE_SECRET_KEY:-algojudge-development-only}
+    volumes:
+      - algojudge_dev_objects:/data
+    expose:
+      - '9000'
+
   algojudge:
     build:
       context: .
@@ -37,6 +65,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rustfs:
+        condition: service_started
     ports:
     - '127.0.0.1:8080:8080'
     environment:
@@ -48,6 +78,22 @@ services:
     # anybody can sign in at all. See `.env.example` and `docs/specs/MAINTENANCE.md`
     # in the workspace.
     - AJ_Admin__Token=${AJ_ADMIN_TOKEN:-admin-token-development-only}
+    # **Where the files go, said out loud.** An installation that configures no
+    # storage refuses to start (2026-08-12), so this is not decoration — it is
+    # what makes the stack come up. `objects` is also the shipped default name,
+    # so a deployment that follows this file needs no `Storage__Default`.
+    - AJ_Storage__Stores__objects__Kind=s3
+    - AJ_Storage__Stores__objects__Endpoint=http://rustfs:9000
+    - AJ_Storage__Stores__objects__Bucket=algojudge
+    - AJ_Storage__Stores__objects__AccessKey=${AJ_STORAGE_ACCESS_KEY:-algojudge-development}
+    - AJ_Storage__Stores__objects__SecretKey=${AJ_STORAGE_SECRET_KEY:-algojudge-development-only}
+    # **Development only.** Bucket creation belongs to the operator, because on
+    # OVHcloud encryption at rest is applied when the bucket is made and cannot
+    # be added convincingly afterwards (FILE_STORAGE.md §10.3, A61). This exists
+    # so the stack comes up from nothing with one command, and it is off
+    # everywhere else.
+    - AJ_Storage__Stores__objects__CreateBucket=true
 
 volumes:
   algojudge_dev_db_data:
+  algojudge_dev_objects:

@@ -71,6 +71,27 @@ After cloning, inspect the solution and project files, then document:
 - `Activity.Type` is the type discriminator, formatted `name@version`. No
   separate `typeId` and `typeVersion` columns.
 - `main` is the integration and default branch. `devel` no longer exists.
+- **File storage is a choice an installation makes** (2026-08-13), specified in
+  `docs/specs/FILE_STORAGE.md` in the workspace. Bytes left `Files.Content` and
+  live behind `IBlobStore`, with three backends — `postgres`, `filesystem`,
+  `s3` — and a deployment may configure several stores, including several of one
+  kind. Six things about it are easy to get wrong later:
+  - **An installation that configures no storage does not start.** The default
+    store id is `objects`; there is no synthesized fallback any more.
+  - **`File.StorageId` names a store, not a kind**, and is permanent once a row
+    holds it. A read follows its own row, so there is never a global switch-over.
+  - **Nothing materializes a whole file.** Uploads are read with
+    `MultipartReader` and hashed in one pass; downloads stream. `MemoryTests`
+    measures this and a regression to buffering trips it.
+  - **The blob is placed by the checksum the Server computed**, never by the one
+    a caller declared — which is why `IBlobStore.WriteAsync` takes an id rather
+    than a `BlobKey`, unlike §4 of the specification.
+  - **`FileContents` has no foreign key to `Files`**, deliberately: bytes are
+    written before the row that names them, and a key would forbid that. §6 of
+    the specification draws one; §6.1 concedes the invariant cannot be a
+    constraint.
+  - **No public answer names a store, backend, bucket or path.** `/health` says
+    one word; `/admin/storage` carries the detail, behind loopback and a token.
 
 ## Layout
 
