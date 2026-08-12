@@ -1858,6 +1858,55 @@
         }
       }
     },
+    "/admin/storage": {
+      "get": {
+        "tags": [
+          "AdminStorage"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReportDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReportDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReportDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/identity/register": {
       "post": {
         "tags": [
@@ -8867,6 +8916,10 @@
           },
           "maintenance": {
             "$ref": "#/components/schemas/MaintenanceDto"
+          },
+          "storage": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11583,6 +11636,57 @@
           "sizeBytes": {
             "type": "integer",
             "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StorageReportDto": {
+        "type": "object",
+        "properties": {
+          "stores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreStatusDto"
+            },
+            "nullable": true
+          },
+          "unconfigured": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StoreStatusDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "smokeTestPassed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "files": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isDefault": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

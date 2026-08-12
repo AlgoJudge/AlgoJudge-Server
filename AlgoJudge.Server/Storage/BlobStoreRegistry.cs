@@ -87,6 +87,7 @@ namespace AlgoJudge.Server.Storage
                 stores[storeId] = kind switch
                 {
                     "postgres" => new PostgresBlobStore(storeId, connectionString, spoolPath),
+                    "filesystem" => new FilesystemBlobStore(storeId, Required(declared, "Path", storeId)),
                     null or "" => throw new InvalidOperationException(
                         $"Storage store '{storeId}' does not say what kind it is"),
                     _ => throw new InvalidOperationException(
@@ -112,6 +113,21 @@ namespace AlgoJudge.Server.Storage
                 : throw new InvalidOperationException(
                     $"{DefaultSetting} names '{defaultId}', which is not a configured store");
         }
+
+        /// <summary>
+        /// A setting a store cannot work without.
+        /// <para>
+        /// Refused at startup rather than discovered at the first upload: a
+        /// <c>filesystem</c> store with no <c>Path</c> would otherwise write
+        /// somewhere relative to the working directory, which is a place nobody
+        /// chose and no backup covers.
+        /// </para>
+        /// </summary>
+        private static string Required(IConfigurationSection store, string key, string storeId) =>
+            store[key] is { Length: > 0 } value
+                ? value
+                : throw new InvalidOperationException(
+                    $"Storage store '{storeId}' needs a {key}");
 
         public IBlobStore Default { get; }
 

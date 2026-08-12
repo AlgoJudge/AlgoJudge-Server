@@ -42,6 +42,22 @@ namespace AlgoJudge.Server.Api.Contracts
         /// before this existed.
         /// </summary>
         public MaintenanceDto? Maintenance { get; init; }
+
+        /// <summary>
+        /// `ok` or `degraded`, and never more than that.
+        /// <para>
+        /// **One word on purpose.** This endpoint is anonymous, so anything it
+        /// says is said to the internet: a store id, a bucket, a host or a path
+        /// here would be this product disclosing its own infrastructure to
+        /// whoever asks (A65c). Which store, and what is wrong with it, is on
+        /// `/admin/storage`, behind the loopback interface and a token.
+        /// </para>
+        /// <para>
+        /// `degraded` does **not** mean the installation is down. Files in a
+        /// healthy store are still served; the ones in a broken one answer 503.
+        /// </para>
+        /// </summary>
+        public required string Storage { get; init; }
     }
 
     /// <summary>

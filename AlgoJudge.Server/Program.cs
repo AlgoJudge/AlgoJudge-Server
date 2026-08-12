@@ -154,6 +154,8 @@ namespace AlgoJudge.Server
                 services => new Storage.BlobStoreRegistry(
                     services.GetRequiredService<IConfiguration>()));
 
+            builder.Services.AddSingleton<Storage.IStorageHealth, Storage.StorageHealth>();
+
             builder.Services.AddScoped<IFileService, FileService>();
             builder.Services.AddScoped<IInstanceService, InstanceService>();
             builder.Services.AddScoped<IActivityService, ActivityService>();
@@ -328,6 +330,15 @@ namespace AlgoJudge.Server
                     throw new InvalidOperationException("Database has pending migrations");
                 }
             }
+
+            // **Every store a file names has to be one this Server has.** A
+            // configuration that dropped a store id still holds somebody's
+            // submissions, and the failure it produces otherwise is a 503 at a
+            // download nobody connected to a deployment change. Logged loudly and
+            // reported by the health endpoint; not fatal, because the rest of the
+            // installation works and refusing to start would take that down too.
+            app.Services.GetRequiredService<Storage.IStorageHealth>()
+                .ValidateAsync(CancellationToken.None).GetAwaiter().GetResult();
 
             app.UseHttpsRedirection();
             app.UseCors();
