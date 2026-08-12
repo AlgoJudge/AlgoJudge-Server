@@ -19,9 +19,18 @@ public static class Sign
     /// <summary>Long enough for the twelve-character rule, and obviously a test's.</summary>
     public const string Password = "test-password-for-tests";
 
-    public static async Task<HttpClient> InAsync(ServerFixture server, string login, string password)
+    public static Task<HttpClient> InAsync(ServerFixture server, string login, string password) =>
+        InAsync((WebApplicationFactory<Program>)server, login, password);
+
+    /// <summary>
+    /// The same, against a host a test built for itself. Some suites need
+    /// configuration the shared fixture does not have — a store on a volume, a
+    /// database of their own — and signing in should not be a second recipe.
+    /// </summary>
+    public static async Task<HttpClient> InAsync(
+        WebApplicationFactory<Program> host, string login, string password)
     {
-        var client = server.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var client = host.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/identity/login?useSessionCookies=true", new { email = login, password });
