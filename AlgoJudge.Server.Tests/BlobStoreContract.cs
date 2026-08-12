@@ -47,7 +47,7 @@ public abstract class BlobStoreContract
         var bytes = Payload();
         var key = KeyFor(bytes);
 
-        var written = await Store.WriteAsync(key, new MemoryStream(bytes), CancellationToken.None);
+        var written = await Store.WriteAsync(key.FileId, new MemoryStream(bytes), CancellationToken.None);
 
         Assert.Equal(Sha256Of(bytes), written.Sha256);
         Assert.Equal(bytes.LongLength, written.SizeBytes);
@@ -59,21 +59,32 @@ public abstract class BlobStoreContract
         Assert.Equal(bytes, buffer.ToArray());
     }
 
+    /// <summary>
+    /// <para>
+    /// A store cannot be told what the bytes hash to — the write takes an id and
+    /// nothing else, so A12 is carried by the signature rather than by a
+    /// comparison somebody has to remember. What is left to check is that the
+    /// blob really is reachable at the checksum the store reported, because that
+    /// is the address every later read builds.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task The_checksum_is_of_what_arrived_and_not_of_what_was_claimed()
+    public async Task The_blob_is_where_its_own_checksum_says_it_is()
     {
         var bytes = Payload(1024);
+        var fileId = Guid.NewGuid();
 
-        // A key claiming somebody else's checksum. The store must not take the
-        // claim as an answer — this is the whole of A12, and the reason a
-        // truncated upload is refused rather than stored as a file whose
-        // contents are quietly wrong.
-        var key = new BlobKey(Guid.NewGuid(), Sha256Of([0x00]));
-
-        var written = await Store.WriteAsync(key, new MemoryStream(bytes), CancellationToken.None);
-
+        var written = await Store.WriteAsync(fileId, new MemoryStream(bytes), CancellationToken.None);
         Assert.Equal(Sha256Of(bytes), written.Sha256);
-        Assert.NotEqual(key.Sha256, written.Sha256);
+
+        // Built from what came back, exactly as FileService builds it for the row.
+        var key = new BlobKey(fileId, written.Sha256);
+        Assert.True(await Store.ExistsAsync(key, CancellationToken.None));
+
+        await using var read = await Store.OpenReadAsync(key, CancellationToken.None);
+        using var buffer = new MemoryStream();
+        await read.CopyToAsync(buffer);
+        Assert.Equal(bytes, buffer.ToArray());
     }
 
     /// <summary>
@@ -95,7 +106,7 @@ public abstract class BlobStoreContract
     {
         var bytes = Payload();
         var key = KeyFor(bytes);
-        await Store.WriteAsync(key, new MemoryStream(bytes), CancellationToken.None);
+        await Store.WriteAsync(key.FileId, new MemoryStream(bytes), CancellationToken.None);
 
         await using var read = await Store.OpenReadAsync(key, offset, length, CancellationToken.None);
         using var buffer = new MemoryStream();
@@ -109,7 +120,7 @@ public abstract class BlobStoreContract
     {
         var bytes = Payload(5000);
         var key = KeyFor(bytes);
-        await Store.WriteAsync(key, new MemoryStream(bytes), CancellationToken.None);
+        await Store.WriteAsync(key.FileId, new MemoryStream(bytes), CancellationToken.None);
 
         await using var read = await Store.OpenReadAsync(key, 4990, null, CancellationToken.None);
         using var buffer = new MemoryStream();
@@ -123,7 +134,7 @@ public abstract class BlobStoreContract
     {
         var bytes = Payload(64);
         var key = KeyFor(bytes);
-        await Store.WriteAsync(key, new MemoryStream(bytes), CancellationToken.None);
+        await Store.WriteAsync(key.FileId, new MemoryStream(bytes), CancellationToken.None);
 
         Assert.True(await Store.ExistsAsync(key, CancellationToken.None));
 
@@ -179,7 +190,7 @@ public abstract class BlobStoreContract
     {
         var bytes = Payload(16);
         var key = KeyFor(bytes);
-        await Store.WriteAsync(key, new MemoryStream(bytes), CancellationToken.None);
+        await Store.WriteAsync(key.FileId, new MemoryStream(bytes), CancellationToken.None);
 
         var delivery = await Store.PrepareDeliveryAsync(key, CancellationToken.None);
 

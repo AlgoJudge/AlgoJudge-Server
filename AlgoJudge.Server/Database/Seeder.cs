@@ -360,7 +360,7 @@ namespace AlgoJudge.Server.Database
             // broken store is meant to be noticed first.
             var store = stores.Default;
             var key = new Storage.BlobKey(Uuid.New(), sha256);
-            var written = await store.WriteAsync(key, new MemoryStream(bytes), ct);
+            var written = await store.WriteAsync(key.FileId, new MemoryStream(bytes), ct);
 
             var file = new Models.File
             {

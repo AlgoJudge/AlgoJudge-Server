@@ -222,19 +222,31 @@ namespace AlgoJudge.Server.Controllers
         /// chain as everything else in the product.
         /// </summary>
         [HttpPost("files")]
+        [Consumes("multipart/form-data")]
+        [Api.MultipartForm(File = "file", FileRequired = true, Fields = ["sha256"], RequiredFields = ["sha256"])]
+        [RequestSizeLimit(UploadLimits.Package)]
+        [DisableFormValueModelBinding]
         [ProducesResponseType<UploadedFileDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status413PayloadTooLarge)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
-        public async Task<ActionResult<UploadedFileDto>> Upload(
-            [FromForm] IFormFile file, [FromForm] string sha256, CancellationToken ct)
+        public async Task<ActionResult<UploadedFileDto>> Upload(CancellationToken ct)
         {
+            // Before a byte is read: a Runner that cannot prove who it is does
+            // not get to write into the store.
             await runners.AuthenticateAsync(Token(), ct);
-            if (file is null || file.Length == 0)
+
+            var upload = await MultipartUpload.ReadAsync(
+                Request, UploadLimits.Package,
+                (content, _, _, token) => files.StageAsync(content, token), ct);
+
+            if (upload.File is not { SizeBytes: > 0 } staged)
             {
+                if (upload.File is { } empty) await files.DiscardAsync(empty, ct);
                 throw new ValidationException("A file is required", "file.required");
             }
 
-            await using var content = file.OpenReadStream();
-            var stored = await files.StoreAsync(content, file.FileName, file.ContentType, sha256, ct);
+            var stored = await files.CommitAsync(
+                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"), ct);
             return Created($"/api/v1/runner/files/{Api.Contracts.Wire.Id(stored.Id)}", Api.Projections.Uploaded(stored));
         }
 

@@ -9,11 +9,67 @@ using DbFile = AlgoJudge.Server.Database.Models.File;
 namespace AlgoJudge.Server.Services
 {
     /// <summary>
+    /// Bytes that are in a store and in no row.
+    /// <para>
+    /// The state between §7's step 5 and step 6, made explicit because a
+    /// multipart upload really is in it for a while: the file has gone past, and
+    /// the field saying what it should have hashed to has not arrived yet.
+    /// </para>
+    /// </summary>
+    public record StagedBytes
+    {
+        /// <summary>Where they are, addressed by what they turned out to be.</summary>
+        public required BlobKey Key { get; init; }
+
+        public required long SizeBytes { get; init; }
+
+        /// <summary>Which store took them — the value the row will carry for ever.</summary>
+        public required string StoreId { get; init; }
+    }
+
+    /// <summary>
     /// Stored bytes: one way in, one way out, and one rule about who may read.
     /// </summary>
     public interface IFileService
     {
+        /// <summary>
+        /// Writes bytes and commits the row, for a caller that already holds
+        /// everything. Staging and committing in one call.
+        /// </summary>
         Task<DbFile> StoreAsync(Stream content, string name, string mimeType, string declaredSha256, CancellationToken ct);
+
+        /// <summary>
+        /// Puts the bytes down and answers what they turned out to be.
+        /// <para>
+        /// <b>Nothing points at them yet.</b> Splitting this from the commit is
+        /// what lets an upload be read in one pass while the fields that describe
+        /// it are still arriving: a multipart body may carry <c>sha256</c> after
+        /// the file, and the Client's own form does exactly that. The alternative
+        /// is buffering the file until the last field shows up, which is the one
+        /// thing this design exists to avoid.
+        /// </para>
+        /// <para>
+        /// A staged blob that is never committed is an orphan, and orphans are
+        /// already somebody's job: the collector takes them after twenty-four
+        /// hours whether or not <see cref="DiscardAsync"/> was reached.
+        /// </para>
+        /// </summary>
+        Task<StagedBytes> StageAsync(Stream content, CancellationToken ct);
+
+        /// <summary>
+        /// Turns staged bytes into a file, or refuses them.
+        /// <para>
+        /// This is where the declared checksum is finally answered: a mismatch
+        /// discards the blob and throws <c>422</c>, so nothing is stored — no
+        /// row, and nothing left for the collector to find either.
+        /// </para>
+        /// </summary>
+        Task<DbFile> CommitAsync(
+            StagedBytes staged, string name, string mimeType, string declaredSha256, CancellationToken ct);
+
+        /// <summary>Throws staged bytes away. Idempotent, and safe to call twice.</summary>
+        Task DiscardAsync(StagedBytes staged, CancellationToken ct);
+
         Task<DbFile?> FindAsync(Guid id, CancellationToken ct);
 
         /// <summary>
@@ -90,41 +146,63 @@ namespace AlgoJudge.Server.Services
         public async Task<DbFile> StoreAsync(
             Stream content, string name, string mimeType, string declaredSha256, CancellationToken ct)
         {
-            var declared = Normalized(declaredSha256, name);
+            var staged = await StageAsync(content, ct);
+            return await CommitAsync(staged, name, mimeType, declaredSha256, ct);
+        }
 
+        public async Task<StagedBytes> StageAsync(Stream content, CancellationToken ct)
+        {
             var store = stores.Default;
-            var key = new BlobKey(Uuid.New(), declared);
+            var fileId = Uuid.New();
 
             // Hashed while it is written, in one pass, by the store — so the
             // bytes are never held anywhere in order to be checked afterwards.
-            var written = await store.WriteAsync(key, content, ct);
+            var written = await store.WriteAsync(fileId, content, ct);
+
+            return new StagedBytes
+            {
+                Key = new BlobKey(fileId, written.Sha256),
+                SizeBytes = written.SizeBytes,
+                StoreId = store.Id,
+            };
+        }
+
+        public async Task<DbFile> CommitAsync(
+            StagedBytes staged, string name, string mimeType, string declaredSha256, CancellationToken ct)
+        {
+            var declared = Normalized(declaredSha256, name);
 
             // Recomputed, not trusted. A checksum that arrives with the bytes is
             // a claim; what recomputing buys is a truncated upload rejected as
             // corrupt rather than stored as a file whose contents are wrong.
-            if (!string.Equals(written.Sha256, declared, StringComparison.Ordinal))
+            if (!string.Equals(staged.Key.Sha256, declared, StringComparison.Ordinal))
             {
                 // Nothing else knows this key, so removing it here is the whole
                 // of "stores nothing": no row was written, and no reference could
                 // have been taken to one that does not exist.
-                await store.DeleteAsync(key, ct);
+                await DiscardAsync(staged, ct);
                 throw new ChecksumMismatchException(
                     $"The file did not match its checksum and was not stored: {name}");
             }
 
             var file = new DbFile
             {
-                Id = key.FileId,
+                Id = staged.Key.FileId,
                 Name = name,
                 MimeType = string.IsNullOrWhiteSpace(mimeType) ? "application/octet-stream" : mimeType,
-                SizeBytes = written.SizeBytes,
-                Sha256 = written.Sha256,
-                StorageId = store.Id,
+                SizeBytes = staged.SizeBytes,
+                Sha256 = staged.Key.Sha256,
+                StorageId = staged.StoreId,
                 UploadedByUserId = currentUser.UserId,
             };
             context.Files.Add(file);
             await context.SaveChangesAsync(ct);
             return file;
+        }
+
+        public async Task DiscardAsync(StagedBytes staged, CancellationToken ct)
+        {
+            if (stores.Find(staged.StoreId) is { } store) await store.DeleteAsync(staged.Key, ct);
         }
 
         /// <summary>

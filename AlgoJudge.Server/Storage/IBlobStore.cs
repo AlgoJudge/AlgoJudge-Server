@@ -9,13 +9,12 @@ namespace AlgoJudge.Server.Storage
     /// caller inventing a path.
     /// </para>
     /// <para>
-    /// The checksum here is the one the <b>caller declared</b>, not one the
-    /// Server has verified — on a write there is nothing to verify yet, because
-    /// the bytes have not been read. That is safe because the two are reconciled
-    /// before anything is committed: <see cref="IBlobStore.WriteAsync"/> returns
-    /// what the bytes actually hashed to, and a caller that finds a mismatch
-    /// deletes this key and stores no row. A blob nobody has a row for is
-    /// unreachable, and the collector takes it.
+    /// <b>The checksum here is always one the Server computed</b> — never one a
+    /// caller declared. That is why writing takes an id instead of a key: at
+    /// write time the bytes have not been read, so the only checksum in the room
+    /// is a claim, and a blob placed by a claim ends up somewhere that disagrees
+    /// with what it turns out to be. Reading and deleting take a key, built from
+    /// <c>File.Sha256</c> — the value this Server itself arrived at.
     /// </para>
     /// </summary>
     public readonly record struct BlobKey(Guid FileId, string Sha256)
@@ -137,14 +136,27 @@ namespace AlgoJudge.Server.Storage
         /// Writes a stream, computing SHA-256 along the way, and answers with
         /// what it actually got.
         /// <para>
-        /// The write goes to a temporary name and is moved to
-        /// <see cref="BlobKey.Path"/> only once it is whole, so a partially
-        /// written blob is never observable under its final key (§5.2). A caller
-        /// whose declared checksum does not match the returned one deletes this
-        /// key and commits no row.
+        /// <b>Takes an id and not a <see cref="BlobKey"/>, unlike §4.</b> A key
+        /// carries a checksum, and on a write the only checksum available is one
+        /// the caller declared about bytes nobody has read yet. Placing the blob
+        /// by that claim puts it somewhere that disagrees with what it turns out
+        /// to be — and then a refused upload is deleted from the wrong path and
+        /// leaks. It also made the location depend on the declared checksum
+        /// arriving <i>before</i> the file, which the Client's own form does not
+        /// do: <c>FileApiHttp.upload</c> appends <c>file</c> first.
+        /// </para>
+        /// <para>
+        /// So the blob is placed by what the bytes hashed to, which is exactly
+        /// what every later read uses — <c>File.Sha256</c>. The caller builds the
+        /// key from the returned checksum to read or to delete it.
+        /// </para>
+        /// <para>
+        /// The write goes to a temporary name and is moved into place only once
+        /// it is whole, so a partially written blob is never observable under its
+        /// final key (§5.2).
         /// </para>
         /// </summary>
-        Task<BlobWriteResult> WriteAsync(BlobKey key, Stream content, CancellationToken ct);
+        Task<BlobWriteResult> WriteAsync(Guid fileId, Stream content, CancellationToken ct);
 
         /// <summary>The whole blob, from the beginning.</summary>
         Task<Stream> OpenReadAsync(BlobKey key, CancellationToken ct);

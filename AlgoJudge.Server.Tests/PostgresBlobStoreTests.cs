@@ -68,7 +68,7 @@ public sealed class PostgresBlobStoreTests : BlobStoreContract, IAsyncLifetime
             System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 
         await isolated.WriteAsync(
-            new BlobKey(Guid.NewGuid(), sha256), new MemoryStream(bytes), CancellationToken.None);
+            Guid.NewGuid(), new MemoryStream(bytes), CancellationToken.None);
 
         Assert.Empty(Directory.GetFiles(spool));
     }

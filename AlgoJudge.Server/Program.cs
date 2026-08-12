@@ -228,7 +228,12 @@ namespace AlgoJudge.Server
             builder.Services.ConfigureHttpJsonOptions(options => OmitNulls(options.SerializerOptions));
 
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                // The three streamed uploads read their own bodies, so they
+                // declare no parameters for Swashbuckle to infer a form from.
+                options.OperationFilter<Api.MultipartFormOperationFilter>();
+            });
 
             builder.Services.AddCors(options =>
             {

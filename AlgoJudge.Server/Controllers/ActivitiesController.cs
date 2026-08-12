@@ -26,7 +26,8 @@ namespace AlgoJudge.Server.Controllers
         IProblemService problems,
         ISubmissionService submissions,
         IResultsService results,
-        IQuestionService questions
+        IQuestionService questions,
+        IFileService files
     ) : ControllerBase
     {
         /// <summary>
@@ -157,31 +158,56 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status413PayloadTooLarge)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        [Consumes("multipart/form-data")]
+        // The file is optional: a submission may be pasted source instead.
+        [Api.MultipartForm(File = "file", Fields = ["language", "code", "sha256"])]
+        [RequestSizeLimit(UploadLimits.Submission)]
+        [DisableFormValueModelBinding]
         public async Task<ActionResult<SubmissionSummaryDto>> Submit(
             string idOrSlug,
             string problemSlug,
-            [FromForm] string? language,
-            [FromForm] string? code,
-            [FromForm] IFormFile? file,
-            [FromForm] string? sha256,
             CancellationToken ct)
         {
+            var upload = await MultipartUpload.ReadAsync(
+                Request, UploadLimits.Submission,
+                (content, _, _, token) => files.StageAsync(content, token), ct);
+
+            var language = upload.Fields.TryGetValue("language", out var chosen) ? chosen : null;
+            var code = upload.Fields.TryGetValue("code", out var pasted) ? pasted : null;
+
             // One of the two, never both: the form offers an editor or a file
             // field, and which it offers is the problem type's business.
-            if (file is null && code is null)
+            if (upload.File is null && code is null)
             {
                 throw new ValidationException("Send a file or some source", "submission.empty");
             }
 
-            await using var content = file is not null
-                ? file.OpenReadStream()
-                : new MemoryStream(System.Text.Encoding.UTF8.GetBytes(code!));
+            // Pasted source is stored exactly like an uploaded file, so that one
+            // path serves both and a submission is a submission afterwards.
+            var staged = upload.File
+                ?? await files.StageAsync(
+                    new MemoryStream(System.Text.Encoding.UTF8.GetBytes(code!)), ct);
 
-            var name = file?.FileName ?? $"main.{Extension(language)}";
-            var result = await submissions.SubmitAsync(
-                idOrSlug, problemSlug, language, content, name, sha256 ?? "", ct);
+            var name = upload.FileName is { Length: > 0 } uploaded
+                ? uploaded
+                : $"main.{Extension(language)}";
 
-            return Created($"/api/v1/activities/{idOrSlug}/submissions/{result.Id}", result);
+            try
+            {
+                var result = await submissions.SubmitAsync(
+                    idOrSlug, problemSlug, language, staged, name, upload.Field("sha256"), ct);
+
+                return Created($"/api/v1/activities/{idOrSlug}/submissions/{result.Id}", result);
+            }
+            catch
+            {
+                // The bytes are down before the rules are asked — a closed round,
+                // a language this activity does not take, one submission too many.
+                // Every one of those must leave nothing behind, and the collector
+                // is a day too late to be the answer.
+                await files.DiscardAsync(staged, ct);
+                throw;
+            }
         }
 
         /// <summary>

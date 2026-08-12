@@ -42,7 +42,7 @@ namespace AlgoJudge.Server.Storage
         /// </para>
         /// </summary>
         public async Task<BlobWriteResult> WriteAsync(
-            BlobKey key, Stream content, CancellationToken ct)
+            Guid fileId, Stream content, CancellationToken ct)
         {
             Directory.CreateDirectory(spoolPath);
             var spool = Path.Combine(spoolPath, $"{Guid.NewGuid():N}.blob");
@@ -74,7 +74,7 @@ namespace AlgoJudge.Server.Storage
                         ON CONFLICT ("FileId") DO UPDATE SET "Content" = EXCLUDED."Content"
                         """, connection);
 
-                    command.Parameters.AddWithValue("id", key.FileId);
+                    command.Parameters.AddWithValue("id", fileId);
                     // The stream is seekable now, which is the whole point of the
                     // spool: Npgsql reads its length and streams it to the server
                     // without ever holding it.

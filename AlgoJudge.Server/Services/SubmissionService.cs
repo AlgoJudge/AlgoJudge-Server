@@ -15,7 +15,7 @@ namespace AlgoJudge.Server.Services
         Task<PageDto<SubmissionSummaryDto>> ListAsync(string activityIdOrSlug, PageQuery paging, CancellationToken ct);
         Task<SubmissionDetailDto> GetAsync(string activityIdOrSlug, Guid submissionId, CancellationToken ct);
         Task<SubmissionSummaryDto> SubmitAsync(
-            string activityIdOrSlug, string problemSlug, string? language, Stream content,
+            string activityIdOrSlug, string problemSlug, string? language, StagedBytes staged,
             string fileName, string declaredSha256, CancellationToken ct);
 
         /// <summary>Tells everyone who may read it that a submission moved.</summary>
@@ -164,7 +164,7 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         public async Task<SubmissionSummaryDto> SubmitAsync(
-            string activityIdOrSlug, string problemSlug, string? language, Stream content,
+            string activityIdOrSlug, string problemSlug, string? language, StagedBytes staged,
             string fileName, string declaredSha256, CancellationToken ct)
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
@@ -208,14 +208,18 @@ namespace AlgoJudge.Server.Services
                 }
             }
 
+            // **This used to check nothing.** `content.CanSeek` is false for a
+            // body arriving over a socket, so the guard was skipped for every
+            // real submission, and the only ceiling that ran was the one after
+            // the bytes had already been stored. The staged size is what actually
+            // arrived, and refusing here means the row is never written.
             var maxBytes = assignment.MaxUploadBytes ?? activity.MaxUploadBytes;
-            if (content.CanSeek && content.Length > maxBytes) throw new PayloadTooLargeException(maxBytes);
+            if (staged.SizeBytes > maxBytes) throw new PayloadTooLargeException(maxBytes);
 
             var version = await ((ProblemService)problems).ResolveVersionAsync(assignment, ct)
                 ?? throw new ConflictException("This problem has no published version", "problem.noVersion");
 
-            var file = await files.StoreAsync(content, fileName, "text/plain", declaredSha256, ct);
-            if (file.SizeBytes > maxBytes) throw new PayloadTooLargeException(maxBytes);
+            var file = await files.CommitAsync(staged, fileName, "text/plain", declaredSha256, ct);
 
             var submission = new Submission
             {

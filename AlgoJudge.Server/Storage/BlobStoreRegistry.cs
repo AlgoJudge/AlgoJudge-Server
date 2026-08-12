@@ -29,7 +29,7 @@ namespace AlgoJudge.Server.Storage
         {
             try
             {
-                var written = await store.WriteAsync(key, new MemoryStream(Bytes), ct);
+                var written = await store.WriteAsync(key.FileId, new MemoryStream(Bytes), ct);
                 if (written.Sha256 != Sha256 || written.SizeBytes != Bytes.Length) return false;
 
                 await using var read = await store.OpenReadAsync(key, ct);
