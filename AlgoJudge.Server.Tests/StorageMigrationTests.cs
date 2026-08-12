@@ -442,6 +442,102 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         public Task<StoreHealth> CheckHealthAsync(CancellationToken ct) => inner.CheckHealthAsync(ct);
     }
 
+    /// <summary>
+    /// A run that has spent its budget stops, and stays stopped until the next
+    /// window.
+    /// <para>
+    /// <b>Written because it did neither.</b> The window was only checked while
+    /// a migration had not begun, and the budget was recomputed on every
+    /// thirty-second tick — so a run that started at 02:00 was still copying at
+    /// nine in the morning, with a fresh half hour handed to it every half
+    /// minute. Both are what the window exists to prevent.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_run_that_has_spent_its_budget_waits_for_the_next_window()
+    {
+        await StoredInSourceAsync();
+        await StoredInSourceAsync();
+
+        await RequestAsync();
+
+        // Begun, and its stretch started long enough ago that the budget is
+        // gone. A tick now must move nothing.
+        await using (var context = NewContext())
+        {
+            var migration = await context.StorageMigrations.FirstAsync();
+            migration.State = StorageMigrationState.Running;
+            migration.StartedAt = DateTime.UtcNow.AddMinutes(-11);
+            await context.SaveChangesAsync();
+        }
+
+        await TickAsync();
+
+        await using var after = NewContext();
+        Assert.Equal(2, await after.Files.CountAsync(f => f.StorageId == "pg"));
+
+        var stopped = await after.StorageMigrations.AsNoTracking().FirstAsync();
+        Assert.Equal(StorageMigrationState.Running, stopped.State);
+        Assert.Contains("budget", stopped.Detail);
+    }
+
+    /// <summary>
+    /// Outside its hour, a migration that has already begun does not move files
+    /// either — the window is about when work happens, not about when it is
+    /// asked for.
+    /// </summary>
+    [Fact]
+    public async Task A_run_outside_its_window_moves_nothing_even_once_it_has_begun()
+    {
+        await StoredInSourceAsync();
+        await RequestAsync();
+
+        await using (var context = NewContext())
+        {
+            var migration = await context.StorageMigrations.FirstAsync();
+            migration.State = StorageMigrationState.Running;
+            migration.StartedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        // A window three hours from now, so the current hour is not it.
+        var elsewhere = WithStartHour((DateTime.UtcNow.Hour + 3) % 24);
+        await elsewhere.GetRequiredService<StorageMigrator>().RunOnceAsync(CancellationToken.None);
+
+        await using var after = NewContext();
+        Assert.Equal(1, await after.Files.CountAsync(f => f.StorageId == "pg"));
+        Assert.Contains(
+            "window", (await after.StorageMigrations.AsNoTracking().FirstAsync()).Detail);
+    }
+
+    /// <summary>The same wiring with one setting changed, for the window tests.</summary>
+    private ServiceProvider WithStartHour(int hour)
+    {
+        var collection = new ServiceCollection();
+        collection.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+        collection.AddSingleton(TimeProvider.System);
+        collection.AddDbContext<ApplicationDbContext>(
+            options => options.UseNpgsql(container.GetConnectionString()));
+        collection.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DbConnectionString"] = container.GetConnectionString(),
+                ["Storage:Stores:pg:Kind"] = "postgres",
+                ["Storage:Stores:objects:Kind"] = "filesystem",
+                ["Storage:Stores:objects:Path"] = volume,
+                ["Storage:Default"] = "objects",
+                [StorageMigrator.StartHourSetting] = hour.ToString(),
+                [StorageMigrator.BudgetMinutesSetting] = "10",
+                [StorageMigrator.GraceMinutesSetting] = "60",
+            })
+            .Build());
+        collection.AddSingleton<IBlobStoreRegistry>(
+            provider => new BlobStoreRegistry(provider.GetRequiredService<IConfiguration>()));
+        collection.AddScoped<IStorageMigrations, StorageMigrations>();
+        collection.AddSingleton<StorageMigrator>();
+        return collection.BuildServiceProvider();
+    }
+
     /// <summary>Moves one file the way the worker does, for tests that need a half-done run.</summary>
     private async Task MoveOneByHandAsync(Guid id)
     {
