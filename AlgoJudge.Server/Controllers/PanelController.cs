@@ -272,12 +272,34 @@ namespace AlgoJudge.Server.Controllers
             return NoContent();
         }
 
-        /// <summary>What the Runner uploaded about itself — its log, its `lscpu`.</summary>
+        /// <summary>
+        /// What the Runner uploaded about itself — its log, its `lscpu`.
+        /// <para>
+        /// <b>The bytes, not a JSON envelope.</b> It answered
+        /// <c>{ "content": "…" }</c> until 2026-08-12, which meant the whole
+        /// attachment was read into a string on the way out — the one endpoint
+        /// left that materialized a stored file. A Runner's log has no ceiling
+        /// but its own, so that was a size nobody chose.
+        /// </para>
+        /// <para>
+        /// The wire shape changes, which is a change in `AlgoJudge-Client` too:
+        /// `getRunnerAttachment` reads text instead of unwrapping a field. It is
+        /// the only endpoint in this work that leaves the Server.
+        /// </para>
+        /// </summary>
         [HttpGet("{runnerId:guid}/files/{attachmentId:guid}")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        // No [Produces]: the content type is the attachment's own. A Runner
+        // may attach anything it likes, and forcing text/plain onto it would be
+        // this endpoint deciding what a Runner's diagnostics are made of.
+        [ProducesResponseType<FileResult>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status503ServiceUnavailable)]
         public async Task<IActionResult> Attachment(
-            Guid runnerId, Guid attachmentId, CancellationToken ct) =>
-            Ok(new { content = await panel.RunnerAttachmentAsync(runnerId, attachmentId, ct) });
+            Guid runnerId, Guid attachmentId, CancellationToken ct)
+        {
+            var (content, mimeType, name) = await panel.RunnerAttachmentAsync(runnerId, attachmentId, ct);
+            return File(content, mimeType, name);
+        }
     }
 
     /// <summary>Configuring the installation: its name, its mark, its documents.</summary>

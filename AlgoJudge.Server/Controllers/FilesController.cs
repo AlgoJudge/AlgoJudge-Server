@@ -85,7 +85,10 @@ namespace AlgoJudge.Server.Controllers
         [HttpGet("{id:guid}")]
         [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status206PartialContent)]
+        [ProducesResponseType(StatusCodes.Status304NotModified)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status503ServiceUnavailable)]
         public async Task<IActionResult> Download(Guid id, CancellationToken ct)
         {
             if (!await files.CanReadAsync(id, ct)) throw new NotFoundException("File");
@@ -97,10 +100,26 @@ namespace AlgoJudge.Server.Controllers
             // never hold a model solution.
             var visibility = await files.IsPublicAsync(id, ct) ? "public" : "private";
             Response.Headers.CacheControl = $"{visibility}, max-age=31536000, immutable";
-            Response.Headers.ETag = $"\"{file.Sha256}\"";
 
             var content = await files.OpenAsync(file, ct);
-            return File(content, file.MimeType, file.Name);
+
+            // **Through the overload, not as a header.** Writing `ETag` onto the
+            // response by hand puts the right string in the right place and buys
+            // nothing: the framework compares `If-None-Match` only against an
+            // entity tag it was handed here, so a conditional request was answered
+            // `200` and the whole file. Range processing is off by default for the
+            // same kind of reason — nobody turned it on — so `Range:` was answered
+            // `200` with every byte. Measured on the running stack, 2026-08-12.
+            // Every argument named: the byte[] and Stream overloads differ in
+            // what their third positional parameter means, and picking the wrong
+            // one is a compile error only by luck.
+            return File(
+                fileStream: content,
+                contentType: file.MimeType,
+                fileDownloadName: file.Name,
+                lastModified: null,
+                entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{file.Sha256}\""),
+                enableRangeProcessing: true);
         }
 
         /// <summary>The same document <c>POST /files</c> answers with, without the bytes.</summary>

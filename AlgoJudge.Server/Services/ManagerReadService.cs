@@ -41,7 +41,8 @@ namespace AlgoJudge.Server.Services
         Task<ManagedRunnerDto> RevokeRunnerAsync(Guid id, string? reason, CancellationToken ct);
         Task<ManagedRunnerDto> SetTagsAsync(Guid id, IReadOnlyList<string> tags, CancellationToken ct);
         Task ForgetRunnerAsync(Guid id, CancellationToken ct);
-        Task<string> RunnerAttachmentAsync(Guid runnerId, Guid attachmentId, CancellationToken ct);
+        Task<(Stream Content, string MimeType, string Name)> RunnerAttachmentAsync(
+            Guid runnerId, Guid attachmentId, CancellationToken ct);
     }
 
     public class ManagerReadService(
@@ -859,7 +860,7 @@ namespace AlgoJudge.Server.Services
             await AnnounceRunnerAsync(null, forgotten, ct);
         }
 
-        public async Task<string> RunnerAttachmentAsync(
+        public async Task<(Stream Content, string MimeType, string Name)> RunnerAttachmentAsync(
             Guid runnerId, Guid attachmentId, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.RunnerRead, null, ct);
@@ -872,13 +873,15 @@ namespace AlgoJudge.Server.Services
 
             if (reference.File is null) throw new NotFoundException("Attachment");
 
-            // **Still materialized, and knowingly so for one step.** The endpoint
-            // above this returns the text inside a JSON envelope, so there is
-            // nothing to stream into — that shape is what changes next, together
-            // with the Client that reads it.
-            await using var content = await files.OpenAsync(reference.File, ct);
-            using var reader = new StreamReader(content, System.Text.Encoding.UTF8);
-            return await reader.ReadToEndAsync(ct);
+            // **The last place in the product that read a whole file into a
+            // string.** It did so because the endpoint answered with the text
+            // inside a JSON envelope, and a JSON envelope cannot be streamed
+            // into. The envelope is gone, the Client fetches text instead, and
+            // nothing here is bounded by anything but the log's own size.
+            return (
+                await files.OpenAsync(reference.File, ct),
+                reference.File.MimeType,
+                reference.File.Name);
         }
     }
 }

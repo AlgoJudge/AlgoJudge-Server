@@ -208,12 +208,25 @@ namespace AlgoJudge.Server.Controllers
             var file = await files.FindAsync(id, ct) ?? throw new NotFoundException("File");
 
             Response.Headers.CacheControl = "private, max-age=31536000, immutable";
-            Response.Headers.ETag = $"\"{file.Sha256}\"";
 
             // Streamed rather than handed over as an array: this is the endpoint
             // several Runners pull a 128 MiB package through at the same time.
             var content = await files.OpenAsync(file, ct);
-            return File(content, file.MimeType, file.Name);
+
+            // A Runner does not send `If-None-Match` today and does not have to:
+            // both of these are additive, and a request without either header is
+            // answered exactly as before. What they buy is a package download
+            // that can be resumed instead of restarted.
+            // Every argument named: the byte[] and Stream overloads differ in
+            // what their third positional parameter means, and picking the wrong
+            // one is a compile error only by luck.
+            return File(
+                fileStream: content,
+                contentType: file.MimeType,
+                fileDownloadName: file.Name,
+                lastModified: null,
+                entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{file.Sha256}\""),
+                enableRangeProcessing: true);
         }
 
         /// <summary>

@@ -255,8 +255,7 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         private IBlobStore StoreFor(DbFile file) =>
             stores.Find(file.StorageId)
-            ?? throw new ServiceUnavailableException(
-                "The bytes of this file are not reachable from this Server right now");
+            ?? throw new StorageUnavailableException();
 
         public async Task<bool> DeleteUnreferencedAsync(Guid fileId, CancellationToken ct)
         {
