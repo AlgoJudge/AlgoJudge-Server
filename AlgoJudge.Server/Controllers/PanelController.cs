@@ -272,34 +272,21 @@ namespace AlgoJudge.Server.Controllers
             return NoContent();
         }
 
-        /// <summary>
-        /// What the Runner uploaded about itself — its log, its `lscpu`.
-        /// <para>
-        /// <b>The bytes, not a JSON envelope.</b> It answered
-        /// <c>{ "content": "…" }</c> until 2026-08-12, which meant the whole
-        /// attachment was read into a string on the way out — the one endpoint
-        /// left that materialized a stored file. A Runner's log has no ceiling
-        /// but its own, so that was a size nobody chose.
-        /// </para>
-        /// <para>
-        /// The wire shape changes, which is a change in `AlgoJudge-Client` too:
-        /// `getRunnerAttachment` reads text instead of unwrapping a field. It is
-        /// the only endpoint in this work that leaves the Server.
-        /// </para>
-        /// </summary>
-        [HttpGet("{runnerId:guid}/files/{attachmentId:guid}")]
-        // No [Produces]: the content type is the attachment's own. A Runner
-        // may attach anything it likes, and forcing text/plain onto it would be
-        // this endpoint deciding what a Runner's diagnostics are made of.
-        [ProducesResponseType<FileResult>(StatusCodes.Status200OK)]
-        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
-        [ProducesResponseType<ProblemDto>(StatusCodes.Status503ServiceUnavailable)]
-        public async Task<IActionResult> Attachment(
-            Guid runnerId, Guid attachmentId, CancellationToken ct)
-        {
-            var (content, mimeType, name) = await panel.RunnerAttachmentAsync(runnerId, attachmentId, ct);
-            return File(content, mimeType, name);
-        }
+        // **A Runner's attachments are read through `GET /files/{id}`**, like
+        // every other stored file. There was a second endpoint here until
+        // 2026-08-12, and it asked exactly the same question this one would —
+        // `runner:read`, installation-wide — while being a second way to the
+        // bytes, which §2 invariant 1 of FILE_STORAGE.md forbids in so many
+        // words. What it added was a check that the file belonged to the runner
+        // in the path, which is a tidiness rather than a boundary: anybody
+        // holding `runner:read` reads every Runner's attachments either way.
+        //
+        // Its own listing already carries what a reader needs: `attachments`
+        // gives the file id, name, size and checksum of each one.
+        //
+        // `GET /runner/files/{id}` is **not** the same thing and stays: that is
+        // the Runner's own door, authorized against the job or trial it holds
+        // right now, for a caller that has a token and no session.
     }
 
     /// <summary>Configuring the installation: its name, its mark, its documents.</summary>

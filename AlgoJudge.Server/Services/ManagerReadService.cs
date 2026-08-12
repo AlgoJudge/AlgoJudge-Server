@@ -41,8 +41,6 @@ namespace AlgoJudge.Server.Services
         Task<ManagedRunnerDto> RevokeRunnerAsync(Guid id, string? reason, CancellationToken ct);
         Task<ManagedRunnerDto> SetTagsAsync(Guid id, IReadOnlyList<string> tags, CancellationToken ct);
         Task ForgetRunnerAsync(Guid id, CancellationToken ct);
-        Task<(Stream Content, string MimeType, string Name)> RunnerAttachmentAsync(
-            Guid runnerId, Guid attachmentId, CancellationToken ct);
     }
 
     public class ManagerReadService(
@@ -53,7 +51,6 @@ namespace AlgoJudge.Server.Services
         ISubmissionService submissions,
         IEventHub events,
         IEventAudience audience,
-        IFileService files,
         TimeProvider clock
     ) : IManagerReadService
     {
@@ -858,30 +855,6 @@ namespace AlgoJudge.Server.Services
             context.Runners.Remove(runner);
             await context.SaveChangesAsync(ct);
             await AnnounceRunnerAsync(null, forgotten, ct);
-        }
-
-        public async Task<(Stream Content, string MimeType, string Name)> RunnerAttachmentAsync(
-            Guid runnerId, Guid attachmentId, CancellationToken ct)
-        {
-            await permissions.RequireAsync(Permissions.RunnerRead, null, ct);
-
-            var reference = await context.FileReferences
-                .AsNoTracking()
-                .Include(r => r.File)
-                .FirstOrDefaultAsync(r => r.RunnerId == runnerId && r.FileId == attachmentId, ct)
-                ?? throw new NotFoundException("Attachment");
-
-            if (reference.File is null) throw new NotFoundException("Attachment");
-
-            // **The last place in the product that read a whole file into a
-            // string.** It did so because the endpoint answered with the text
-            // inside a JSON envelope, and a JSON envelope cannot be streamed
-            // into. The envelope is gone, the Client fetches text instead, and
-            // nothing here is bounded by anything but the log's own size.
-            return (
-                await files.OpenAsync(reference.File, ct),
-                reference.File.MimeType,
-                reference.File.Name);
         }
     }
 }

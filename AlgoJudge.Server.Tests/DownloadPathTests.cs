@@ -132,16 +132,17 @@ public class DownloadPathTests(ServerFixture server)
     }
 
     /// <summary>
-    /// The one endpoint whose wire shape this work changes.
+    /// A Runner's diagnostics come through the one file endpoint.
     /// <para>
-    /// It answered <c>{ "content": "…" }</c>, which meant reading a whole
-    /// attachment into a string. Nothing tested it, which is why nothing broke
-    /// when it changed — so the test arrives now, describing what it is rather
-    /// than what it was.
+    /// There was a second endpoint for these — <c>/runners/{id}/files/{id}</c> —
+    /// until 2026-08-12. It asked the same question this path asks and was
+    /// therefore a second way to the bytes, which §2 invariant 1 forbids. Going
+    /// through <c>/files/{id}</c> is also what gives the panel a conditional
+    /// request and a range, which the dedicated endpoint never had.
     /// </para>
     /// </summary>
     [Fact]
-    public async Task A_runner_attachment_comes_back_as_its_own_bytes()
+    public async Task A_runner_attachment_is_read_through_the_one_file_endpoint()
     {
         var runner = await Build.RunnerAsync(server);
         var log = "cpu MHz : 3600.000\nmodel name : something\n";
@@ -161,17 +162,51 @@ public class DownloadPathTests(ServerFixture server)
             "/api/v1/runner/files/attach", new { fileId, name = "lscpu.txt" });
         await Sign.Succeeded(attached);
 
+        // Somebody holding runner:read, through the ordinary file endpoint.
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
-
-        var response = await admin.GetAsync($"/api/v1/runners/{runner.Id}/files/{fileId}");
+        var response = await admin.GetAsync($"/api/v1/files/{fileId}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(log, await response.Content.ReadAsStringAsync());
 
-        var served = await response.Content.ReadAsStringAsync();
-        Assert.Equal(log, served);
+        // And everything the file endpoint gives, which the endpoint that used
+        // to serve this did not: a conditional request is answered as one.
+        var conditional = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/files/{fileId}");
+        conditional.Headers.IfNoneMatch.Add(new EntityTagHeaderValue($"\"{Sha256Of(bytes)}\""));
+        Assert.Equal(HttpStatusCode.NotModified, (await admin.SendAsync(conditional)).StatusCode);
+    }
 
-        // Not wrapped. A body that still parsed as `{"content": …}` would mean
-        // the Client's change and the Server's had gone in opposite directions.
-        Assert.DoesNotContain("\"content\"", served, StringComparison.Ordinal);
+    /// <summary>
+    /// The boundary the removed endpoint was carrying, checked where it now
+    /// lives: a Runner's log is operator material, and a participant is not an
+    /// operator.
+    /// </summary>
+    [Fact]
+    public async Task A_participant_cannot_read_a_Runners_diagnostics()
+    {
+        var runner = await Build.RunnerAsync(server);
+        var bytes = Encoding.UTF8.GetBytes("model name : something private\n");
+
+        using var upload = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(bytes), "file", "lscpu.txt" },
+            { new StringContent(Sha256Of(bytes)), "sha256" },
+        };
+        var stored = await runner.Client.PostAsync("/api/v1/runner/files", upload);
+        await Sign.Succeeded(stored);
+        var fileId = (await stored.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetString()!;
+
+        await Sign.Succeeded(await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/files/attach", new { fileId, name = "lscpu.txt" }));
+
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var response = await participant.GetAsync($"/api/v1/files/{fileId}");
+
+        // 404 and not 403: a file id is opaque, and a 403 would confirm the
+        // bytes exist.
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }
