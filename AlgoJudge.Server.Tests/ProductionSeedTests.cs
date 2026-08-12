@@ -4,6 +4,7 @@ using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
@@ -75,6 +76,21 @@ public class ProductionSeedTests : IAsyncLifetime
             // `AddIdentityApiEndpoints`.
             .AddDefaultTokenProviders();
         collection.AddScoped<IInstanceService, InstanceService>();
+
+        // The seeder writes its documents through a store like everything else,
+        // so this collection needs one. Configured with nothing, which is the
+        // case that matters here: it must resolve to the same single `postgres`
+        // store an installation that has never heard of `Storage__*` gets.
+        collection.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DbConnectionString"] = container.GetConnectionString(),
+            })
+            .Build());
+        collection.AddSingleton<AlgoJudge.Server.Storage.IBlobStoreRegistry>(
+            services => new AlgoJudge.Server.Storage.BlobStoreRegistry(
+                services.GetRequiredService<IConfiguration>()));
+
         collection.AddScoped<Seeder>();
 
         services = collection.BuildServiceProvider();

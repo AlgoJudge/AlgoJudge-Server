@@ -52,6 +52,7 @@ namespace AlgoJudge.Server.Services
         ISubmissionService submissions,
         IEventHub events,
         IEventAudience audience,
+        IFileService files,
         TimeProvider clock
     ) : IManagerReadService
     {
@@ -869,7 +870,15 @@ namespace AlgoJudge.Server.Services
                 .FirstOrDefaultAsync(r => r.RunnerId == runnerId && r.FileId == attachmentId, ct)
                 ?? throw new NotFoundException("Attachment");
 
-            return System.Text.Encoding.UTF8.GetString(reference.File?.Content ?? []);
+            if (reference.File is null) throw new NotFoundException("Attachment");
+
+            // **Still materialized, and knowingly so for one step.** The endpoint
+            // above this returns the text inside a JSON envelope, so there is
+            // nothing to stream into — that shape is what changes next, together
+            // with the Client that reads it.
+            await using var content = await files.OpenAsync(reference.File, ct);
+            using var reader = new StreamReader(content, System.Text.Encoding.UTF8);
+            return await reader.ReadToEndAsync(ct);
         }
     }
 }

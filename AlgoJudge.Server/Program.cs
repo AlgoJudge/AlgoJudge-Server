@@ -146,6 +146,14 @@ namespace AlgoJudge.Server
 
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IPermissionService, PermissionService>();
+            // A singleton because a store is configuration, not state: it is read
+            // once from the environment and never changes while the process
+            // lives. Building it here also means an unusable configuration takes
+            // the container down at startup rather than at the first upload.
+            builder.Services.AddSingleton<Storage.IBlobStoreRegistry>(
+                services => new Storage.BlobStoreRegistry(
+                    services.GetRequiredService<IConfiguration>()));
+
             builder.Services.AddScoped<IFileService, FileService>();
             builder.Services.AddScoped<IInstanceService, InstanceService>();
             builder.Services.AddScoped<IActivityService, ActivityService>();

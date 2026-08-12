@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Storage;
 using AlgoJudge.Server.Utils;
 using Microsoft.EntityFrameworkCore;
 using DbFile = AlgoJudge.Server.Database.Models.File;
@@ -14,6 +15,22 @@ namespace AlgoJudge.Server.Services
     {
         Task<DbFile> StoreAsync(Stream content, string name, string mimeType, string declaredSha256, CancellationToken ct);
         Task<DbFile?> FindAsync(Guid id, CancellationToken ct);
+
+        /// <summary>
+        /// The bytes, as a stream nobody has to hold.
+        /// <para>
+        /// <b>Seekable, and that is load-bearing</b>: ASP.NET Core answers a
+        /// <c>Range</c> request with <c>206</c> only from a seekable stream, and
+        /// silently serves the whole file otherwise.
+        /// </para>
+        /// <para>
+        /// Answers <c>503</c> — never <c>404</c> — when the row names a store this
+        /// installation is not configured for. The file exists; this Server
+        /// cannot reach it. Saying "not found" would be a claim about somebody
+        /// else's data that happens to be false.
+        /// </para>
+        /// </summary>
+        Task<Stream> OpenAsync(DbFile file, CancellationToken ct);
 
         /// <summary>
         /// Removes bytes nothing points at. **Refuses anything referenced.**
@@ -56,33 +73,53 @@ namespace AlgoJudge.Server.Services
     public class FileService(
         ApplicationDbContext context,
         ICurrentUserService currentUser,
-        IPermissionService permissions
+        IPermissionService permissions,
+        IBlobStoreRegistry stores
     ) : IFileService
     {
+        /// <summary>
+        /// Writes the bytes, then the row — in that order, and the order is the
+        /// point.
+        /// <para>
+        /// A crash anywhere before the row commits leaves bytes nobody points at,
+        /// which the collector removes twenty-four hours later. The other order
+        /// would leave a row promising bytes that are not there, and nothing in
+        /// the product could tell that from corruption.
+        /// </para>
+        /// </summary>
         public async Task<DbFile> StoreAsync(
             Stream content, string name, string mimeType, string declaredSha256, CancellationToken ct)
         {
-            using var buffer = new MemoryStream();
-            await content.CopyToAsync(buffer, ct);
-            var bytes = buffer.ToArray();
+            var declared = Normalized(declaredSha256, name);
+
+            var store = stores.Default;
+            var key = new BlobKey(Uuid.New(), declared);
+
+            // Hashed while it is written, in one pass, by the store — so the
+            // bytes are never held anywhere in order to be checked afterwards.
+            var written = await store.WriteAsync(key, content, ct);
 
             // Recomputed, not trusted. A checksum that arrives with the bytes is
             // a claim; what recomputing buys is a truncated upload rejected as
             // corrupt rather than stored as a file whose contents are wrong.
-            var actual = IFileService.Checksum(bytes);
-            if (!string.Equals(actual, declaredSha256?.Trim(), StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(written.Sha256, declared, StringComparison.Ordinal))
             {
+                // Nothing else knows this key, so removing it here is the whole
+                // of "stores nothing": no row was written, and no reference could
+                // have been taken to one that does not exist.
+                await store.DeleteAsync(key, ct);
                 throw new ChecksumMismatchException(
                     $"The file did not match its checksum and was not stored: {name}");
             }
 
             var file = new DbFile
             {
+                Id = key.FileId,
                 Name = name,
                 MimeType = string.IsNullOrWhiteSpace(mimeType) ? "application/octet-stream" : mimeType,
-                Content = bytes,
-                SizeBytes = bytes.LongLength,
-                Sha256 = actual,
+                SizeBytes = written.SizeBytes,
+                Sha256 = written.Sha256,
+                StorageId = store.Id,
                 UploadedByUserId = currentUser.UserId,
             };
             context.Files.Add(file);
@@ -90,8 +127,58 @@ namespace AlgoJudge.Server.Services
             return file;
         }
 
+        /// <summary>
+        /// A declared checksum, or a refusal.
+        /// <para>
+        /// Checked for <b>shape</b> before it is used, because it is about to
+        /// decide where the blob is written: a short or non-hexadecimal value
+        /// would either throw somewhere less legible or, worse, land every such
+        /// upload in one directory. A malformed checksum cannot match what the
+        /// bytes hash to, so the answer is the same 422 either way — it just
+        /// arrives before the bytes are read rather than after.
+        /// </para>
+        /// </summary>
+        private static string Normalized(string? declared, string name)
+        {
+            var value = declared?.Trim().ToLowerInvariant() ?? "";
+
+            if (value.Length != 64 || !value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            {
+                throw new ChecksumMismatchException(
+                    $"The file did not arrive with a usable checksum and was not stored: {name}");
+            }
+
+            return value;
+        }
+
         public Task<DbFile?> FindAsync(Guid id, CancellationToken ct) =>
             context.Files.FirstOrDefaultAsync(f => f.Id == id, ct);
+
+        public Task<Stream> OpenAsync(DbFile file, CancellationToken ct)
+        {
+            var store = StoreFor(file);
+            var key = new BlobKey(file.Id, file.Sha256);
+
+            // The length is what the Server counted while storing the bytes, so
+            // a range can be served without asking the backend how big the blob
+            // is — one fewer round trip, and one fewer thing to disagree.
+            return Task.FromResult<Stream>(new BlobStream(
+                (offset, length, token) => store.OpenReadAsync(key, offset, length, token),
+                file.SizeBytes));
+        }
+
+        /// <summary>
+        /// The store a row names, or a refusal that does not name it.
+        /// <para>
+        /// The message says nothing about which store, what kind, or where — a
+        /// public error that named a bucket would be the one place this product
+        /// discloses its own infrastructure (A65c).
+        /// </para>
+        /// </summary>
+        private IBlobStore StoreFor(DbFile file) =>
+            stores.Find(file.StorageId)
+            ?? throw new ServiceUnavailableException(
+                "The bytes of this file are not reachable from this Server right now");
 
         public async Task<bool> DeleteUnreferencedAsync(Guid fileId, CancellationToken ct)
         {
@@ -99,6 +186,14 @@ namespace AlgoJudge.Server.Services
 
             var file = await context.Files.FirstOrDefaultAsync(f => f.Id == fileId, ct);
             if (file is null) return false;
+
+            // The blob first. A row removed while its bytes stay is a leak
+            // nothing will ever find again — the row was the only thing that knew
+            // where they were.
+            if (stores.Find(file.StorageId) is { } store)
+            {
+                await store.DeleteAsync(new BlobKey(file.Id, file.Sha256), ct);
+            }
 
             context.Files.Remove(file);
             await context.SaveChangesAsync(ct);

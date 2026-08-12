@@ -209,7 +209,11 @@ namespace AlgoJudge.Server.Controllers
 
             Response.Headers.CacheControl = "private, max-age=31536000, immutable";
             Response.Headers.ETag = $"\"{file.Sha256}\"";
-            return File(file.Content, file.MimeType, file.Name);
+
+            // Streamed rather than handed over as an array: this is the endpoint
+            // several Runners pull a 128 MiB package through at the same time.
+            var content = await files.OpenAsync(file, ct);
+            return File(content, file.MimeType, file.Name);
         }
 
         /// <summary>

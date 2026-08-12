@@ -86,7 +86,9 @@ namespace AlgoJudge.Server.Controllers
             var visibility = await files.IsPublicAsync(id, ct) ? "public" : "private";
             Response.Headers.CacheControl = $"{visibility}, max-age=31536000, immutable";
             Response.Headers.ETag = $"\"{file.Sha256}\"";
-            return File(file.Content, file.MimeType, file.Name);
+
+            var content = await files.OpenAsync(file, ct);
+            return File(content, file.MimeType, file.Name);
         }
 
         /// <summary>The same document <c>POST /files</c> answers with, without the bytes.</summary>

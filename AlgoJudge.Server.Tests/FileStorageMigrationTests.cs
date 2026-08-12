@@ -29,6 +29,9 @@ public sealed class FileStorageMigrationTests : IAsyncLifetime
     /// <summary>The last migration before storage became a choice.</summary>
     private const string Before = "20260811204856_InstanceShowLocalSignIn";
 
+    /// <summary>The expand step, where a deployment may legitimately sit for a while.</summary>
+    private const string Expand = "20260812190710_FileStorageExpand";
+
     private PostgreSqlContainer container = null!;
     private string connectionString = "";
 
@@ -79,6 +82,45 @@ public sealed class FileStorageMigrationTests : IAsyncLifetime
         Assert.True(await ScalarAsync<bool>(
             @"SELECT ""PreviousStorageId"" IS NULL AND ""PreviousCopyDeleteAfter"" IS NULL
               FROM ""Files"" WHERE ""Id"" = @id", ("id", fileId)));
+    }
+
+    /// <summary>
+    /// The day between the two migrations, which is a real day for anybody who
+    /// deploys them separately.
+    /// <para>
+    /// The expand step copies what exists when it runs. Everything written
+    /// <b>after</b> it and before the code that writes through a store still goes
+    /// into the old column — and the contract step drops that column. Without the
+    /// top-up sweep, those uploads are deleted by a migration, silently, with
+    /// nothing left to recover from.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Bytes_written_between_the_two_migrations_are_not_dropped_with_the_column()
+    {
+        var early = Guid.NewGuid();
+        var late = Guid.NewGuid();
+        var lateBytes = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
+
+        await MigrateToAsync(Before);
+        await InsertOldStyleFileAsync(early, [0x01]);
+
+        // Halfway: the expand has run, the readers have not moved yet.
+        await MigrateToAsync(Expand);
+        await InsertOldStyleFileAsync(late, lateBytes, withStorageId: true);
+
+        await MigrateToLatestAsync();
+
+        var kept = await ScalarAsync<byte[]>(
+            @"SELECT ""Content"" FROM ""FileContents"" WHERE ""FileId"" = @id", ("id", late));
+        Assert.Equal(lateBytes, kept);
+
+        // And the one the first sweep already took is still exactly itself —
+        // a top-up that overwrote what was there would be worse than one that
+        // missed something.
+        var earlier = await ScalarAsync<byte[]>(
+            @"SELECT ""Content"" FROM ""FileContents"" WHERE ""FileId"" = @id", ("id", early));
+        Assert.Equal(new byte[] { 0x01 }, earlier);
     }
 
     [Fact]
@@ -151,19 +193,29 @@ public sealed class FileStorageMigrationTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// A file as it was written before storage became a choice: bytes in
-    /// <c>Files.Content</c>, and no other column knowing anything about them.
+    /// A file as it was written before the bytes moved: in <c>Files.Content</c>,
+    /// with no <c>FileContents</c> row.
+    /// <para>
     /// Raw SQL because the entity no longer describes that shape — which is the
-    /// point of the test.
+    /// point of the test. <paramref name="withStorageId"/> is the difference
+    /// between the two moments this suite reproduces: before the expand there is
+    /// no such column, and after it the application's own entity always sends
+    /// one, because the property carries a default.
+    /// </para>
     /// </summary>
-    private Task InsertOldStyleFileAsync(Guid fileId, byte[] bytes) =>
-        ExecuteAsync(
-            @"INSERT INTO ""Files"" (""Id"", ""Name"", ""MimeType"", ""Content"", ""SizeBytes"", ""Sha256"", ""CreatedAt"")
-              VALUES (@id, 'main.cpp', 'text/plain', @content, @size, @sha, now() at time zone 'utc')",
+    private Task InsertOldStyleFileAsync(Guid fileId, byte[] bytes, bool withStorageId = false)
+    {
+        var columns = withStorageId ? @", ""StorageId""" : "";
+        var values = withStorageId ? ", 'pg'" : "";
+
+        return ExecuteAsync(
+            $@"INSERT INTO ""Files"" (""Id"", ""Name"", ""MimeType"", ""Content"", ""SizeBytes"", ""Sha256"", ""CreatedAt""{columns})
+               VALUES (@id, 'main.cpp', 'text/plain', @content, @size, @sha, now() at time zone 'utc'{values})",
             ("id", fileId),
             ("content", bytes),
             ("size", (long)bytes.Length),
             ("sha", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant()));
+    }
 
     private async Task ExecuteAsync(string sql, params (string Name, object Value)[] parameters)
     {

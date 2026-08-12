@@ -26,13 +26,13 @@ namespace AlgoJudge.Server.Database.Models
         public required string MimeType { get; set; }
 
         /// <summary>
-        /// <b>On its way out.</b> The bytes move to <c>FileContents</c> and then
-        /// behind <c>IBlobStore</c>; this column is dropped once nothing reads it.
-        /// Kept for one step so that expanding the schema and moving the readers
-        /// are two changes rather than one — a deployment may sit between them.
+        /// How many bytes there are, counted by the Server as it stored them.
+        /// <para>
+        /// Never asked of the backend at read time, and never taken from a
+        /// caller: it is what makes a <c>Range</c> request answerable without a
+        /// round trip, so it has to be the number this Server itself saw.
+        /// </para>
         /// </summary>
-        public required byte[] Content { get; set; }
-
         public long SizeBytes { get; set; }
 
         /// <summary>
@@ -78,7 +78,12 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime? PreviousCopyDeleteAfter { get; set; }
 
         /// <summary>
-        /// Lowercase hexadecimal SHA-256 of <see cref="Content"/>.
+        /// Lowercase hexadecimal SHA-256 of the stored bytes.
+        /// <para>
+        /// <b>Half of the blob's address.</b> Since the bytes left this table it
+        /// is not only a check but a coordinate: the store derives the path from
+        /// it, so a row whose checksum was edited would point at nothing.
+        /// </para>
         /// <para>
         /// The Client computes it, the Server <b>recomputes</b> it and refuses to
         /// store a mismatch (<c>422</c>, <c>checksum_mismatch</c>), and the Runner
