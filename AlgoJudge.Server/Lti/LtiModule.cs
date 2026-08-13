@@ -39,6 +39,18 @@ namespace AlgoJudge.Server.Lti
 
             services.AddScoped<Services.IToolKeyService, Services.ToolKeyService>();
             services.AddScoped<Services.IPlatformService, Services.PlatformService>();
+            services.AddScoped<Services.ILaunchService, Services.LaunchService>();
+
+            // **A singleton, because the cache is the point.** A per-request
+            // instance would fetch every platform's key set on every launch.
+            services.AddSingleton<Services.IPlatformKeys, Services.PlatformKeys>();
+
+            // Named, with a timeout that is short on purpose: this call sits in
+            // the middle of a redirect chain somebody is waiting through, and a
+            // platform that is not answering should fail the launch quickly with
+            // a reason rather than hang until a default expires.
+            services.AddHttpClient(nameof(Services.PlatformKeys),
+                http => http.Timeout = TimeSpan.FromSeconds(10));
 
             return services;
         }
