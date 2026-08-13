@@ -63,6 +63,20 @@ namespace AlgoJudge.Server.Lti.Data
         public Guid? SeriesId { get; set; }
 
         /// <summary>
+        /// Where this course's gradebook accepts new columns, from the launch's
+        /// AGS <c>endpoint</c> claim.
+        /// <para>
+        /// Recorded on the link because that is the only place it arrives: it is
+        /// per placement, and the reconciling worker runs long after the launch
+        /// that carried it. Null means the platform offered no line-item
+        /// container — a course with grading switched off, or a tool registered
+        /// without the AGS scopes — and grade synchronisation then has nowhere to
+        /// go, which is a state to report rather than an error to retry.
+        /// </para>
+        /// </summary>
+        public string? AgsLineItemsUrl { get; set; }
+
+        /// <summary>
         /// Which attempt becomes the grade.
         /// <para>
         /// <b>It lives here rather than on <c>Activity</c>, and that is a

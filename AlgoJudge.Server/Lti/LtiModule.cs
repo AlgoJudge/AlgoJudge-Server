@@ -43,6 +43,15 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.IResourceLinkService, Services.ResourceLinkService>();
             services.AddScoped<Services.IIdentityResolver, Services.IdentityResolver>();
             services.AddScoped<Services.ILtiEnrolmentService, Services.EnrolmentService>();
+            services.AddScoped<Services.IGradeSyncService, Services.GradeSyncService>();
+            services.AddScoped<Services.IAgsClient, Services.AgsClient>();
+            services.AddSingleton<Services.IPlatformTokens, Services.PlatformTokens>();
+            services.AddHostedService<Workers.GradeSyncWorker>();
+
+            services.AddHttpClient(nameof(Services.PlatformTokens),
+                http => http.Timeout = TimeSpan.FromSeconds(15));
+            services.AddHttpClient(nameof(Services.AgsClient),
+                http => http.Timeout = TimeSpan.FromSeconds(30));
 
             // **A singleton, because the cache is the point.** A per-request
             // instance would fetch every platform's key set on every launch.

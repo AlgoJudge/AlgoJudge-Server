@@ -1,0 +1,252 @@
+using AlgoJudge.Server.Lti.Data;
+using AlgoJudge.Server.Lti.Services;
+using Microsoft.EntityFrameworkCore;
+
+namespace AlgoJudge.Server.Lti.Workers
+{
+    /// <summary>
+    /// Moves the gradebook towards what AlgoJudge holds, and keeps moving.
+    /// <para>
+    /// <b>A reconciler, not a sender</b> (§6.4). At least six things detach a
+    /// gradebook from the truth — a released freeze, a platform that was down, a
+    /// rejudge, a changed maximum, an account linked late, a roster member with
+    /// no account — and every one of them becomes the same act here: the row says
+    /// what should be true, and this makes it true. Six code paths that each have
+    /// to remember to post is the arrangement this replaces.
+    /// </para>
+    /// <para>
+    /// It is the shape the evaluation lease already uses in this Server, which is
+    /// why it should look familiar rather than clever.
+    /// </para>
+    /// </summary>
+    public class GradeSyncWorker(
+        IServiceScopeFactory scopes,
+        TimeProvider clock,
+        ILogger<GradeSyncWorker> logger
+    ) : BackgroundService
+    {
+        /// <summary>
+        /// How often the sweep runs. A gradebook does not notice a minute, and
+        /// the alternative — waking every few seconds to find nothing — is a
+        /// database query per instance per tick, for ever.
+        /// </summary>
+        private static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
+
+        /// <summary>
+        /// How long a grade may keep failing before it is reported as failed
+        /// rather than as still coming.
+        /// <para>
+        /// A day, reached by doubling. §13 #5 left the ceiling open; this is the
+        /// answer, and the reason is what the two states mean to a teacher: a
+        /// grade that is "pending" is one they are waiting for, and one that will
+        /// never arrive has to stop looking like that. Nothing is lost by
+        /// failing — the row keeps its intent, and any change to it, or a manual
+        /// resync, starts the attempts again.
+        /// </para>
+        /// </summary>
+        private const int MaximumAttempts = 12;
+
+        protected override async Task ExecuteAsync(CancellationToken stopping)
+        {
+            while (!stopping.IsCancellationRequested)
+            {
+                try
+                {
+                    await RunOnceAsync(stopping);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    // A sweep that throws must not take the worker down with it:
+                    // the next one may well succeed, and a dead worker is a
+                    // gradebook that silently stops moving.
+                    logger.LogError(e, "The grade sweep failed");
+                }
+
+                try
+                {
+                    await Task.Delay(Interval, clock, stopping);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// One sweep. <c>internal</c> so a test can run it against a clock
+        /// somebody turns rather than wait a minute for it.
+        /// </summary>
+        internal async Task<int> RunOnceAsync(CancellationToken ct)
+        {
+            using var scope = scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<LtiDbContext>();
+            var sync = scope.ServiceProvider.GetRequiredService<IGradeSyncService>();
+            var ags = scope.ServiceProvider.GetRequiredService<IAgsClient>();
+            var core = scope.ServiceProvider.GetRequiredService<Database.ApplicationDbContext>();
+
+            var links = await db.ResourceLinks.AsNoTracking().ToListAsync(ct);
+            foreach (var link in links)
+            {
+                await sync.RefreshAsync(link, ct);
+            }
+
+            var now = clock.GetUtcNow().UtcDateTime;
+
+            var due = await db.GradeSyncStates
+                .Where(s => s.State == GradeSyncStatus.Pending
+                    && (s.NextAttemptAt == null || s.NextAttemptAt <= now))
+                .OrderBy(s => s.UpdatedAt)
+                // Bounded, so one course with a thousand people cannot hold the
+                // sweep for minutes while every other course waits.
+                .Take(200)
+                .ToListAsync(ct);
+
+            var posted = 0;
+            foreach (var state in due)
+            {
+                if (await PostAsync(db, core, ags, state, ct))
+                {
+                    posted++;
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+            return posted;
+        }
+
+        private async Task<bool> PostAsync(
+            LtiDbContext db, Database.ApplicationDbContext core,
+            IAgsClient ags, GradeSyncState state, CancellationToken ct)
+        {
+            var item = await db.LineItems.FirstOrDefaultAsync(i => i.Id == state.LineItemId, ct);
+            var link = item is null
+                ? null
+                : await db.ResourceLinks.FirstOrDefaultAsync(l => l.Id == item.ResourceLinkId, ct);
+            var platform = link is null
+                ? null
+                : await db.Platforms.AsNoTracking().FirstOrDefaultAsync(p => p.Id == link.PlatformId, ct);
+            var subject = await db.ExternalIdentities.AsNoTracking()
+                .Where(i => i.PlatformId == (platform == null ? Guid.Empty : platform.Id)
+                    && i.UserId == state.UserId)
+                .Select(i => i.Subject)
+                .FirstOrDefaultAsync(ct);
+
+            if (item is null || link is null || platform is null || subject is null)
+            {
+                return Failed(state, "the placement, platform or link this grade belongs to is gone");
+            }
+
+            if (!platform.Enabled)
+            {
+                // Not a failure and not an attempt: the operator switched it off,
+                // and the grade waits for them to switch it back on.
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(link.AgsLineItemsUrl))
+            {
+                return Failed(state,
+                    "the platform offered no gradebook for this placement — the tool may be "
+                    + "registered without the grade services");
+            }
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(item.PlatformUrl))
+                {
+                    item.PlatformUrl = await ags.EnsureLineItemAsync(
+                        platform, link.AgsLineItemsUrl, link.PlatformResourceLinkId,
+                        item.SeriesProblemId.ToString("D"),
+                        await LabelAsync(core, item, ct),
+                        item.ScoreMaximum, ct);
+                }
+
+                // **Monotonic, per person per column, and this is the whole
+                // reason the column exists.** A platform rejects a score whose
+                // timestamp is not newer than what it holds — by returning
+                // success and changing nothing — so a retry that reuses the
+                // original result's time is silently dropped. The verifier is
+                // what would otherwise never reveal it.
+                var stamp = clock.GetUtcNow().UtcDateTime;
+                if (state.LastTimestamp is { } last && stamp <= last)
+                {
+                    stamp = last.AddMilliseconds(1);
+                }
+
+                await ags.PostScoreAsync(
+                    platform, item.PlatformUrl, subject,
+                    state.DesiredScore, item.ScoreMaximum, stamp, graded: true, ct);
+
+                state.PostedScore = state.DesiredScore;
+                state.PostedAt = stamp;
+                state.LastTimestamp = stamp;
+                state.State = GradeSyncStatus.Synchronised;
+                state.Attempts = 0;
+                state.NextAttemptAt = null;
+                state.LastError = null;
+                state.UpdatedAt = stamp;
+                return true;
+            }
+            catch (Exception e) when (e is AgsException or LtiLaunchException)
+            {
+                return Failed(state, e.Message);
+            }
+        }
+
+        /// <summary>
+        /// Records a failure and decides when to try again — doubling, and giving
+        /// up loudly rather than quietly.
+        /// </summary>
+        private bool Failed(GradeSyncState state, string why)
+        {
+            state.Attempts++;
+            state.LastError = why;
+            state.UpdatedAt = clock.GetUtcNow().UtcDateTime;
+
+            if (state.Attempts >= MaximumAttempts)
+            {
+                state.State = GradeSyncStatus.Failed;
+                state.NextAttemptAt = null;
+                logger.LogWarning(
+                    "Grade for {User} in line item {Item} failed after {Attempts} attempts: {Why}",
+                    state.UserId, state.LineItemId, state.Attempts, why);
+            }
+            else
+            {
+                var backoff = TimeSpan.FromSeconds(Math.Pow(2, Math.Min(state.Attempts, 10)));
+                state.NextAttemptAt = state.UpdatedAt + backoff;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// What the column is called in the teacher's gradebook.
+        /// <para>
+        /// The assignment's own name, then the problem's, then its slug — because
+        /// that is what somebody typed and what they will look for. A column
+        /// named after an identifier is a column nobody can find, and a gradebook
+        /// full of them is worse than no integration.
+        /// </para>
+        /// </summary>
+        private static async Task<string> LabelAsync(
+            Database.ApplicationDbContext core, LineItem item, CancellationToken ct)
+        {
+            var named = await core.SeriesProblems.AsNoTracking()
+                .Where(sp => sp.Id == item.SeriesProblemId)
+                .Select(sp => new { sp.Name, sp.Slug, ProblemName = sp.Problem!.Name })
+                .FirstOrDefaultAsync(ct);
+
+            if (named is null)
+            {
+                return "AlgoJudge";
+            }
+
+            return Pick(named.Name) ?? Pick(named.ProblemName) ?? named.Slug;
+        }
+
+        private static string? Pick(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+}

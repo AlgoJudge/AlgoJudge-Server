@@ -45,11 +45,24 @@ namespace AlgoJudge.Server.Lti.Services
 
                 // Recorded on every launch rather than once: a course copied
                 // between two launches changes it, and milestone 4 reads it.
+                var changed = false;
                 if (launch.ContextHistory is not null && existing.ContextHistory != launch.ContextHistory)
                 {
                     existing.ContextHistory = launch.ContextHistory;
-                    await db.SaveChangesAsync(ct);
+                    changed = true;
                 }
+
+                // Refreshed on every launch too. A tool re-registered with the
+                // AGS scopes starts carrying this, and a placement made before
+                // that would otherwise never learn where the gradebook is.
+                var endpoint = AgsEndpoint.Parse(launch.AgsEndpointJson)?.LineItems;
+                if (endpoint is not null && existing.AgsLineItemsUrl != endpoint)
+                {
+                    existing.AgsLineItemsUrl = endpoint;
+                    changed = true;
+                }
+
+                if (changed) await db.SaveChangesAsync(ct);
 
                 return existing;
             }
@@ -84,6 +97,7 @@ namespace AlgoJudge.Server.Lti.Services
                 ContextTitle = launch.ContextTitle,
                 ContextHistory = launch.ContextHistory,
                 ActivityId = activity.Id,
+                AgsLineItemsUrl = AgsEndpoint.Parse(launch.AgsEndpointJson)?.LineItems,
                 // True on the first placement, because there is nothing to
                 // accept. False on a later one until a manager says so.
                 SharingAcknowledged = !alreadyPlaced,
