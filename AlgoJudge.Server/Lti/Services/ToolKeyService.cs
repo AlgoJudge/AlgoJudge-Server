@@ -69,6 +69,17 @@ namespace AlgoJudge.Server.Lti.Services
         /// an undocumented path.
         /// </para>
         /// <para>
+        /// <b>Worth replacing when a platform offers better, and cheap to.</b>
+        /// The algorithm is negotiated at registration rather than fixed by the
+        /// protocol, and this key is already rotatable with an overlapping pair
+        /// in the JWKS — so adopting ES256 the day a platform advertises it is a
+        /// key rotation, not a migration. The one thing missing would be a
+        /// column here naming the algorithm, which is implied while there is
+        /// only one. §9 of <c>LMS_INTEGRATION.md</c> records the trigger:
+        /// a new value in <c>token_endpoint_auth_signing_alg_values_supported</c>,
+        /// which <c>AlgoJudge-Moodle/scripts/probe.sh</c> answers in a line.
+        /// </para>
+        /// <para>
         /// Generated with the framework's own RSA rather than with BouncyCastle:
         /// .NET 8 exports and imports PEM natively, so this needs no dependency
         /// at all, and the Ed25519 package already here is for the Runner
