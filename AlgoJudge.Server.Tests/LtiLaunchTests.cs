@@ -104,6 +104,9 @@ public class LtiLaunchTests(ServerFixture server)
         // The placement is already resolved and bound before anybody signs in,
         // so coming back is a redirect rather than a second launch.
         Assert.Contains("link=", destination);
+        // And no ticket, because nothing was established: a ticket is proof that
+        // a launch resolved to somebody, and nobody was resolved here.
+        Assert.DoesNotContain("ticket=", destination);
     }
 
     /// <summary>

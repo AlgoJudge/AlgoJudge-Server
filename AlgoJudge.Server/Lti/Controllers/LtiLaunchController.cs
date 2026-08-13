@@ -28,6 +28,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         IResourceLinkService links,
         IIdentityResolver identities,
         ILtiEnrolmentService enrolment,
+        ILaunchTickets tickets,
         SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
         IConfiguration configuration) : ControllerBase
     {
@@ -125,7 +126,7 @@ namespace AlgoJudge.Server.Lti.Controllers
                         // because an open redirect on this endpoint would be a
                         // phishing primitive that really is ours.
                         return Redirect(AppUrl(
-                            "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(launch, link))));
+                            "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(link))));
 
                     case Resolution.Resolved resolved:
                         await enrolment.EnrolAsync(
@@ -137,7 +138,21 @@ namespace AlgoJudge.Server.Lti.Controllers
                         // than argued about here.
                         await signIn.SignInAsync(resolved.User, isPersistent: true);
 
-                        return Redirect(AppUrl(Landing(launch, link)));
+                        // **A ticket, not a mode.** §5.2 wants the embedded
+                        // presentation entered because of how the session was
+                        // established rather than because a URL said so; this is
+                        // opaque, single-use and bound to the person the launch
+                        // resolved to, and the Client exchanges it for the
+                        // context. Anybody may write a query parameter; nobody
+                        // else can produce one of these.
+                        var ticket = await tickets.IssueAsync(
+                            link.Id, resolved.User.Id, launch.Locale,
+                            string.Equals(launch.DocumentTarget, "iframe",
+                                StringComparison.OrdinalIgnoreCase),
+                            launch.ReturnUrl, ct);
+
+                        return Redirect(AppUrl(
+                            "/lti/launched?ticket=" + Uri.EscapeDataString(ticket)));
 
                     default:
                         return Failed(LtiLaunchException.BadToken);
@@ -150,36 +165,12 @@ namespace AlgoJudge.Server.Lti.Controllers
         }
 
         /// <summary>
-        /// Where a finished launch lands in the application.
-        /// <para>
-        /// Everything the Client needs to enter embedded mode and to render in
-        /// the right language, from the launch rather than from a guess. The
-        /// resource link id is ours, not the platform's — the Client asks this
-        /// Server about it, and a platform's own identifier would mean nothing
-        /// to it.
-        /// </para>
+        /// Where a launch lands when nobody could be resolved: the sign-in offer
+        /// returns here afterwards, and the placement is already bound so coming
+        /// back is a redirect rather than a second launch.
         /// </summary>
-        private static string Landing(LaunchedMessage launch, Data.ResourceLink link)
-        {
-            var query = new List<string> { "link=" + link.Id.ToString("D") };
-
-            if (launch.Locale is not null)
-            {
-                // §5.4: the platform knows what language the course is taken in,
-                // and the Client should not have to guess.
-                query.Add("locale=" + Uri.EscapeDataString(launch.Locale));
-            }
-            if (string.Equals(launch.DocumentTarget, "iframe", StringComparison.OrdinalIgnoreCase))
-            {
-                // §5.2: embedded is the learner's default, and the mode is
-                // entered because of how the session was established rather than
-                // because a URL said so. This says how the platform framed it;
-                // what the Client does with a session is the Client's rule.
-                query.Add("embedded=1");
-            }
-
-            return "/lti/launched?" + string.Join('&', query);
-        }
+        private static string Landing(Data.ResourceLink link) =>
+            "/lti/launched?link=" + link.Id.ToString("D");
 
         /// <summary>
         /// Where the platform sends the token. It has to be an absolute address

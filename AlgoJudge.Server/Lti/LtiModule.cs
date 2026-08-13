@@ -46,6 +46,7 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.IGradeSyncService, Services.GradeSyncService>();
             services.AddScoped<Services.IAgsClient, Services.AgsClient>();
             services.AddScoped<Services.IGradeVerifier, Services.GradeVerifier>();
+            services.AddScoped<Controllers.ILaunchTickets, Controllers.LaunchTickets>();
             services.AddSingleton<Services.IPlatformTokens, Services.PlatformTokens>();
             services.AddHostedService<Workers.GradeSyncWorker>();
 

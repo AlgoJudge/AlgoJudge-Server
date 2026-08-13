@@ -39,6 +39,7 @@ namespace AlgoJudge.Server.Lti.Data
         public DbSet<ExternalIdentity> ExternalIdentities => Set<ExternalIdentity>();
         public DbSet<LaunchState> LaunchStates => Set<LaunchState>();
         public DbSet<LtiSettings> Settings => Set<LtiSettings>();
+        public DbSet<LaunchTicket> LaunchTickets => Set<LaunchTicket>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -56,6 +57,7 @@ namespace AlgoJudge.Server.Lti.Data
             builder.Entity<ExternalIdentity>().ToTable("LtiExternalIdentities");
             builder.Entity<LaunchState>().ToTable("LtiLaunchStates");
             builder.Entity<LtiSettings>().ToTable("LtiSettings");
+            builder.Entity<LaunchTicket>().ToTable("LtiLaunchTickets");
 
             builder.Entity<Platform>(platform =>
             {
@@ -122,6 +124,12 @@ namespace AlgoJudge.Server.Lti.Data
                     .WithMany()
                     .HasForeignKey(i => i.PlatformId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<LaunchTicket>(ticket =>
+            {
+                ticket.HasIndex(t => t.Ticket).IsUnique();
+                ticket.HasIndex(t => t.ExpiresAt);
             });
 
             builder.Entity<LaunchState>(state =>
