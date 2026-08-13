@@ -38,6 +38,7 @@ namespace AlgoJudge.Server.Lti.Data
         public DbSet<GradeSyncState> GradeSyncStates => Set<GradeSyncState>();
         public DbSet<ExternalIdentity> ExternalIdentities => Set<ExternalIdentity>();
         public DbSet<LaunchState> LaunchStates => Set<LaunchState>();
+        public DbSet<LtiSettings> Settings => Set<LtiSettings>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -54,6 +55,7 @@ namespace AlgoJudge.Server.Lti.Data
             builder.Entity<GradeSyncState>().ToTable("LtiGradeSyncStates");
             builder.Entity<ExternalIdentity>().ToTable("LtiExternalIdentities");
             builder.Entity<LaunchState>().ToTable("LtiLaunchStates");
+            builder.Entity<LtiSettings>().ToTable("LtiSettings");
 
             builder.Entity<Platform>(platform =>
             {

@@ -40,6 +40,9 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.IToolKeyService, Services.ToolKeyService>();
             services.AddScoped<Services.IPlatformService, Services.PlatformService>();
             services.AddScoped<Services.ILaunchService, Services.LaunchService>();
+            services.AddScoped<Services.IResourceLinkService, Services.ResourceLinkService>();
+            services.AddScoped<Services.IIdentityResolver, Services.IdentityResolver>();
+            services.AddScoped<Services.ILtiEnrolmentService, Services.EnrolmentService>();
 
             // **A singleton, because the cache is the point.** A per-request
             // instance would fetch every platform's key set on every launch.

@@ -350,24 +350,28 @@ namespace AlgoJudge.Server.Lti.Services
         private static string? Claim(JsonWebToken token, string name) =>
             token.TryGetClaim(name, out var claim) ? claim.Value : null;
 
+        /// <summary>
+        /// A claim as the JSON it actually is.
+        /// <para>
+        /// <b>Read from the payload rather than through <c>TryGetClaim</c></b>,
+        /// which flattens: for an array claim it hands back the first element as
+        /// a bare string, so parsing it as JSON fails and the whole claim reads
+        /// as absent. That is not theoretical — it is how the roles claim
+        /// silently became empty, and every launch arrived as a learner
+        /// regardless of what the platform said. Caught by the instructor test
+        /// and not by reasoning about it.
+        /// </para>
+        /// </summary>
+        private static JsonElement? Payload(JsonWebToken token, string name) =>
+            token.TryGetPayloadValue<JsonElement>(name, out var value) ? value : null;
+
         private static string? Raw(JsonWebToken token, string name) =>
-            token.TryGetClaim(name, out var claim) ? claim.Value : null;
+            Payload(token, name)?.GetRawText();
 
         private static JsonElement? Object(JsonWebToken token, string name)
         {
-            if (!token.TryGetClaim(name, out var claim))
-            {
-                return null;
-            }
-            try
-            {
-                using var document = JsonDocument.Parse(claim.Value);
-                return document.RootElement.Clone();
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
+            var value = Payload(token, name);
+            return value?.ValueKind == JsonValueKind.Object ? value : null;
         }
 
         private static string? String(JsonElement? element, string property) =>
@@ -379,25 +383,18 @@ namespace AlgoJudge.Server.Lti.Services
 
         private static IReadOnlyList<string> Strings(JsonWebToken token, string name)
         {
-            var raw = Raw(token, name);
-            if (raw is null)
+            var value = Payload(token, name);
+            return value?.ValueKind switch
             {
-                return [];
-            }
-            try
-            {
-                using var document = JsonDocument.Parse(raw);
-                return document.RootElement.ValueKind == JsonValueKind.Array
-                    ? document.RootElement.EnumerateArray()
-                        .Where(v => v.ValueKind == JsonValueKind.String)
-                        .Select(v => v.GetString()!)
-                        .ToList()
-                    : [];
-            }
-            catch (JsonException)
-            {
-                return [];
-            }
+                JsonValueKind.Array => value.Value.EnumerateArray()
+                    .Where(v => v.ValueKind == JsonValueKind.String)
+                    .Select(v => v.GetString()!)
+                    .ToList(),
+                // A single role sent as a bare string rather than a list of one.
+                // The specification says array; platforms are platforms.
+                JsonValueKind.String => [value.Value.GetString()!],
+                _ => [],
+            };
         }
     }
 }

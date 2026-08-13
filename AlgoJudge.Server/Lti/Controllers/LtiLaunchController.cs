@@ -1,5 +1,6 @@
 using AlgoJudge.Server.Controllers;
 using AlgoJudge.Server.Lti.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AlgoJudge.Server.Lti.Controllers
@@ -23,7 +24,12 @@ namespace AlgoJudge.Server.Lti.Controllers
     [ApiController]
     [Route("lti")]
     public class LtiLaunchController(
-        ILaunchService launches, IConfiguration configuration) : ControllerBase
+        ILaunchService launches,
+        IResourceLinkService links,
+        IIdentityResolver identities,
+        ILtiEnrolmentService enrolment,
+        SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
+        IConfiguration configuration) : ControllerBase
     {
         /// <summary>
         /// Third-party-initiated login. The platform sends the browser here, and
@@ -75,10 +81,9 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// <summary>
         /// The launch itself: the platform posts an <c>id_token</c> back here.
         /// <para>
-        /// Milestone 1 stops after validation. Resolving who launched, and the
-        /// session that follows, is the next stage — until then a validated
-        /// launch lands on the Client with what it resolved, which is enough to
-        /// tell a working registration from a broken one.
+        /// Four ways out, and each is a different page rather than a different
+        /// status code: the activity, a conflict to report, an offer to sign in
+        /// through SSO, or a refusal naming what went wrong.
         /// </para>
         /// </summary>
         [HttpPost("launch")]
@@ -96,28 +101,84 @@ namespace AlgoJudge.Server.Lti.Controllers
                 var launch = await launches.CompleteAsync(
                     form["state"].FirstOrDefault(), form["id_token"].FirstOrDefault(), ct);
 
-                var query = new List<string>
-                {
-                    "context=" + Uri.EscapeDataString(launch.ContextId),
-                    "resourceLink=" + Uri.EscapeDataString(launch.ResourceLinkId),
-                };
-                if (launch.Locale is not null)
-                {
-                    // §5.4: the platform knows what language the course is being
-                    // taken in, and the Client should not have to guess.
-                    query.Add("locale=" + Uri.EscapeDataString(launch.Locale));
-                }
-                if (launch.ActivitySlug is not null)
-                {
-                    query.Add("activity=" + Uri.EscapeDataString(launch.ActivitySlug));
-                }
+                // The placement first: a launch that names no activity, or one
+                // shared into a second course without anybody accepting it, is
+                // refused before anybody is signed in. Signing somebody in and
+                // then telling them the tool is misconfigured is a worse order.
+                var link = await links.ResolveAsync(launch, ct);
 
-                return Redirect(AppUrl("/lti/launched?" + string.Join('&', query)));
+                var resolution = await identities.ResolveAsync(launch, ct);
+
+                switch (resolution)
+                {
+                    case Resolution.Conflict conflict:
+                        // Reported, never followed (§4.3). The two names travel
+                        // so the page can say what disagrees with what.
+                        return Redirect(AppUrl(
+                            "/lti/conflict"
+                            + "?stored=" + Uri.EscapeDataString(conflict.Stored)
+                            + "&asserted=" + Uri.EscapeDataString(conflict.Asserted)));
+
+                    case Resolution.NeedsSignIn:
+                        // One action, and it finishes where the launch was going
+                        // (§4.4). The return path is local and checked as one,
+                        // because an open redirect on this endpoint would be a
+                        // phishing primitive that really is ours.
+                        return Redirect(AppUrl(
+                            "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(launch, link))));
+
+                    case Resolution.Resolved resolved:
+                        await enrolment.EnrolAsync(
+                            link, launch.Platform.ProviderId, resolved.User.Id, launch.Roles, ct);
+
+                        // The session that carries them into the application. In
+                        // an iframe this cookie is third-party, which is §5.3's
+                        // open half and the thing measured in a browser rather
+                        // than argued about here.
+                        await signIn.SignInAsync(resolved.User, isPersistent: true);
+
+                        return Redirect(AppUrl(Landing(launch, link)));
+
+                    default:
+                        return Failed(LtiLaunchException.BadToken);
+                }
             }
             catch (LtiLaunchException failure)
             {
                 return Failed(failure.Code);
             }
+        }
+
+        /// <summary>
+        /// Where a finished launch lands in the application.
+        /// <para>
+        /// Everything the Client needs to enter embedded mode and to render in
+        /// the right language, from the launch rather than from a guess. The
+        /// resource link id is ours, not the platform's — the Client asks this
+        /// Server about it, and a platform's own identifier would mean nothing
+        /// to it.
+        /// </para>
+        /// </summary>
+        private static string Landing(LaunchedMessage launch, Data.ResourceLink link)
+        {
+            var query = new List<string> { "link=" + link.Id.ToString("D") };
+
+            if (launch.Locale is not null)
+            {
+                // §5.4: the platform knows what language the course is taken in,
+                // and the Client should not have to guess.
+                query.Add("locale=" + Uri.EscapeDataString(launch.Locale));
+            }
+            if (string.Equals(launch.DocumentTarget, "iframe", StringComparison.OrdinalIgnoreCase))
+            {
+                // §5.2: embedded is the learner's default, and the mode is
+                // entered because of how the session was established rather than
+                // because a URL said so. This says how the platform framed it;
+                // what the Client does with a session is the Client's rule.
+                query.Add("embedded=1");
+            }
+
+            return "/lti/launched?" + string.Join('&', query);
         }
 
         /// <summary>

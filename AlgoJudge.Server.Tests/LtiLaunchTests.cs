@@ -68,30 +68,42 @@ public class LtiLaunchTests(ServerFixture server)
         Assert.False(string.IsNullOrWhiteSpace(query["nonce"]));
     }
 
+    /// <summary>
+    /// A launch that validates but resolves to nobody — this platform is not an
+    /// identity authority — offers the one action §4.4 allows, and <b>keeps
+    /// where the launch was going</b>. Signing in and then landing on a front
+    /// page would make the person find their way back by hand, which is the
+    /// difference between one click and giving up.
+    /// </summary>
     [Fact]
-    public async Task A_signed_launch_arrives_at_the_application_with_what_it_resolved()
+    public async Task A_launch_with_nobody_to_resolve_offers_sign_in_and_keeps_the_destination()
     {
         using var platform = new FakePlatform();
         await RegisterAsync(platform);
+        // A launch has to name an activity that exists, so this test needs one:
+        // resolving the placement is the first thing a validated launch does.
+        var (slug, _) = await Build.ActivityAsync(server);
         using var host = HostFor(platform);
 
         var (state, nonce) = await BeginAsync(host, platform);
-        var response = await LaunchAsync(host, state, platform.IdToken(nonce));
+        var response = await LaunchAsync(host, state, platform.IdToken(nonce, activitySlug: slug));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var landing = response.Headers.Location!.ToString();
 
-        Assert.Contains("/lti/launched", landing);
+        Assert.Contains("/lti/sign-in", landing);
+
         // Parsed off the string rather than through `Uri`: with `App:BaseUrl`
         // unset — a single-origin deployment, and every test — the redirect is a
         // relative path, and `Uri.Query` throws on one of those.
         var query = HttpUtility.ParseQueryString(landing[(landing.IndexOf('?') + 1)..]);
-        Assert.Equal("course-1", query["context"]);
-        Assert.Equal("rl-1", query["resourceLink"]);
-        Assert.Equal("activity-slug", query["activity"]);
-        // §5.4 — the platform knows the course's language and the Client should
-        // not have to guess it.
-        Assert.Equal("pl", query["locale"]);
+        var destination = query["returnTo"];
+
+        Assert.NotNull(destination);
+        Assert.StartsWith("/lti/launched", destination);
+        // The placement is already resolved and bound before anybody signs in,
+        // so coming back is a redirect rather than a second launch.
+        Assert.Contains("link=", destination);
     }
 
     /// <summary>
@@ -106,8 +118,9 @@ public class LtiLaunchTests(ServerFixture server)
         await RegisterAsync(platform);
         using var host = HostFor(platform);
 
+        var (slug, _) = await Build.ActivityAsync(server);
         var (state, nonce) = await BeginAsync(host, platform);
-        var token = platform.IdToken(nonce);
+        var token = platform.IdToken(nonce, activitySlug: slug);
 
         Assert.DoesNotContain("failed", (await LaunchAsync(host, state, token))
             .Headers.Location!.ToString());
