@@ -43,11 +43,29 @@ namespace AlgoJudge.Server.Lti.Services
     public class ToolKeyService(LtiDbContext db) : IToolKeyService
     {
         /// <summary>
-        /// RSA-2048 is the specification's floor and what every platform
-        /// accepts. Generated with the framework's own RSA rather than with
-        /// BouncyCastle: .NET 8 exports and imports PEM natively, so this needs
-        /// no dependency at all, and the Ed25519 package already here is for the
-        /// Runner handshake, which is a different problem.
+        /// RSA-2048, which §9 of <c>LMS_INTEGRATION.md</c> states as the floor.
+        /// <para>
+        /// 1EdTech's security framework defers the algorithm list to its best
+        /// practices rather than naming one in the body, so the harder evidence
+        /// is the platform. Measured 2026-08-13 against Moodle 4.5.13, 5.2.2 and
+        /// 5.3dev: <c>openid-configuration.php</c> advertises exactly one value
+        /// for both <c>id_token_signing_alg_values_supported</c> and
+        /// <c>token_endpoint_auth_signing_alg_values_supported</c> — `RS256` —
+        /// and <c>locallib.php</c> hardcodes it when decoding. The second of
+        /// those is the one that binds us: it governs the client assertion this
+        /// key signs for AGS.
+        /// </para>
+        /// <para>
+        /// An EC key is not unthinkable — <c>jwks_helper.php</c> parses
+        /// ES256/384/512 — but nothing advertises them, so it would be a bet on
+        /// an undocumented path.
+        /// </para>
+        /// <para>
+        /// Generated with the framework's own RSA rather than with BouncyCastle:
+        /// .NET 8 exports and imports PEM natively, so this needs no dependency
+        /// at all, and the Ed25519 package already here is for the Runner
+        /// handshake, which is a different problem.
+        /// </para>
         /// </summary>
         private const int KeySizeBits = 2048;
 
