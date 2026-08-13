@@ -37,6 +37,9 @@ namespace AlgoJudge.Server.Lti
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory_Lti")));
 
+            services.AddScoped<Services.IToolKeyService, Services.ToolKeyService>();
+            services.AddScoped<Services.IPlatformService, Services.PlatformService>();
+
             return services;
         }
 
