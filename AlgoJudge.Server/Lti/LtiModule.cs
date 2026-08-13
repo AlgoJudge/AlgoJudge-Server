@@ -45,6 +45,7 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.ILtiEnrolmentService, Services.EnrolmentService>();
             services.AddScoped<Services.IGradeSyncService, Services.GradeSyncService>();
             services.AddScoped<Services.IAgsClient, Services.AgsClient>();
+            services.AddScoped<Services.IGradeVerifier, Services.GradeVerifier>();
             services.AddSingleton<Services.IPlatformTokens, Services.PlatformTokens>();
             services.AddHostedService<Workers.GradeSyncWorker>();
 

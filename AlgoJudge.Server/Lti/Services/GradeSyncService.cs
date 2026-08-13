@@ -153,27 +153,50 @@ namespace AlgoJudge.Server.Lti.Services
                     continue;
                 }
 
-                var scaleMoved = Math.Abs(item.ScoreMaximum - maxPoints) > 0.0001;
-                var wanted = Math.Abs(existing.DesiredScore - score) > 0.0001;
+                // **The policy state and the sync state are different things**,
+                // and conflating them cost an hour: comparing them directly moved
+                // every synchronised row back to pending on every sweep, so every
+                // grade in the installation was reposted every minute for ever.
+                // Caught by a test that expected a sweep to leave a teacher's
+                // edit alone.
+                var scoreChanged = Math.Abs(existing.DesiredScore - score) > 0.0001;
 
-                if (wanted || existing.State != state || scaleMoved)
+                if (state != GradeSyncStatus.Pending)
                 {
-                    existing.DesiredScore = score;
-                    existing.SourceResultId = entry.Id;
-                    existing.UpdatedAt = now;
-
-                    // Withheld and deferred are not failures and do not consume
-                    // attempts. Moving back to pending resets the backoff,
-                    // because what failed before was a different intent.
-                    existing.State = state;
-                    if (state == GradeSyncStatus.Pending)
+                    // Withheld or deferred. The desired score is still tracked, so
+                    // that when a freeze lifts the right number is already known.
+                    if (scoreChanged)
                     {
-                        existing.Attempts = 0;
-                        existing.NextAttemptAt = null;
-                        existing.LastError = null;
+                        existing.DesiredScore = score;
+                        existing.SourceResultId = entry.Id;
                     }
-                    touched++;
+                    if (existing.State != state || scoreChanged)
+                    {
+                        existing.State = state;
+                        existing.UpdatedAt = now;
+                        touched++;
+                    }
+                    continue;
                 }
+
+                // Postable. Something has to have changed for it to be sent
+                // again: a different number, or a freeze that has lifted.
+                var released = existing.State is GradeSyncStatus.Deferred or GradeSyncStatus.Withheld;
+                if (!scoreChanged && !released)
+                {
+                    continue;
+                }
+
+                existing.DesiredScore = score;
+                existing.SourceResultId = entry.Id;
+                existing.UpdatedAt = now;
+                existing.State = GradeSyncStatus.Pending;
+                // The backoff resets because what failed before was a different
+                // intent, and a new one deserves its own attempts.
+                existing.Attempts = 0;
+                existing.NextAttemptAt = null;
+                existing.LastError = null;
+                touched++;
             }
 
             return touched;

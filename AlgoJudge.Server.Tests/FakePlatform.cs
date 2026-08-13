@@ -102,6 +102,17 @@ public sealed class FakePlatform : IDisposable
                 ["locale"] = locale ?? "en",
                 ["return_url"] = Issuer + "/mod/lti/return.php",
             },
+            // Where this course's gradebook lives. Carried by default because a
+            // launch without it is a course with grading switched off, which is
+            // the unusual case rather than the ordinary one.
+            [LtiClaims.AgsEndpoint] = new Dictionary<string, object>
+            {
+                ["scope"] = new[]
+                {
+                    AgsScopes.LineItem, AgsScopes.Score, AgsScopes.ResultReadOnly,
+                },
+                ["lineitems"] = FakeGradebook.LineItemsUrl,
+            },
         };
 
         var descriptor = new SecurityTokenDescriptor

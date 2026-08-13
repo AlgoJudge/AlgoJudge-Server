@@ -168,11 +168,37 @@ namespace AlgoJudge.Server.Lti.Workers
                 // success and changing nothing — so a retry that reuses the
                 // original result's time is silently dropped. The verifier is
                 // what would otherwise never reveal it.
-                var stamp = clock.GetUtcNow().UtcDateTime;
-                if (state.LastTimestamp is { } last && stamp <= last)
+                // **Truncated to the precision the database keeps**, before
+                // anything is compared or sent. PostgreSQL stores a timestamp to
+                // the microsecond, so a value written at .NET's 100-nanosecond
+                // resolution comes back a few ticks earlier than it went in —
+                // and the comparison below then measures a truncated `last`
+                // against an untruncated `now`, decides nothing needs bumping,
+                // and posts a timestamp the platform has already seen. Accepted,
+                // ignored, and reported as synchronised.
+                //
+                // Found by a test with the clock stopped. With a real clock the
+                // next sweep is a minute later and the fault never shows, which
+                // is exactly the kind of thing that surfaces in a lab a year on.
+                var stamp = Microseconds(clock.GetUtcNow().UtcDateTime);
+                if (state.LastTimestamp is { } last && stamp <= Microseconds(last))
                 {
-                    stamp = last.AddMilliseconds(1);
+                    stamp = Microseconds(last).AddMilliseconds(1);
                 }
+
+                // **The limit of this, stated rather than discovered.** The rule
+                // above keeps *our* timestamps rising, which is what a retry
+                // needs. It cannot beat a timestamp the *platform* holds that is
+                // ahead of our clock — an edit made on a machine running fast, or
+                // real skew between two servers. AGS offers no way to read the
+                // stored timestamp back: a result carries a score and no time. So
+                // the post is accepted, changes nothing, and the verifier keeps
+                // reporting drift that a resync appears not to fix.
+                //
+                // Not worked around here, because every workaround is a lie about
+                // time: stamping into the future to win would poison every later
+                // post for the same person. If it is ever seen in the field, the
+                // fix is on the clocks.
 
                 await ags.PostScoreAsync(
                     platform, item.PlatformUrl, subject,
@@ -248,5 +274,13 @@ namespace AlgoJudge.Server.Lti.Workers
 
         private static string? Pick(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        /// <summary>
+        /// The same instant, at the resolution this Server's database keeps.
+        /// Comparing two timestamps only means something when both have been
+        /// through the same rounding.
+        /// </summary>
+        private static DateTime Microseconds(DateTime value) =>
+            new(value.Ticks - value.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
     }
 }
