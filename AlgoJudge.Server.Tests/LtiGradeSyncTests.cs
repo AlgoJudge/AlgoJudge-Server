@@ -416,9 +416,12 @@ public class LtiGradeSyncTests(ServerFixture server)
     private static async Task<Guid> LaunchAsync(
         WebApplicationFactory<Program> host, FakePlatform platform, string username, string slug)
     {
+        // Cookies kept, because the claim below is made with the session the
+        // launch established.
         var client = host.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
+            HandleCookies = true,
         });
 
         var begun = await client.PostAsync("/api/v1/lti/login",
@@ -439,8 +442,17 @@ public class LtiGradeSyncTests(ServerFixture server)
         var landing = launched.Headers.Location!.ToString();
         Assert.Contains("/lti/launched", landing);
 
-        var parameters = HttpUtility.ParseQueryString(landing[(landing.IndexOf('?') + 1)..]);
-        return Guid.Parse(parameters["link"]!);
+        // The placement is bought with the ticket, the way the Client does it.
+        var ticket = HttpUtility.ParseQueryString(landing[(landing.IndexOf('?') + 1)..])["ticket"];
+        Assert.False(string.IsNullOrWhiteSpace(ticket), $"no ticket in {landing}");
+
+        var claimed = await client.PostAsJsonAsync(
+            "/api/v1/lti/session/claim", new { ticket });
+        Assert.True(claimed.IsSuccessStatusCode,
+            $"{(int)claimed.StatusCode}: {await claimed.Content.ReadAsStringAsync()}");
+
+        var context = await claimed.Content.ReadFromJsonAsync<JsonElement>();
+        return Guid.Parse(context.GetProperty("linkId").GetString()!);
     }
 }
 

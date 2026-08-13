@@ -43,13 +43,13 @@ public class LtiIdentityTests(ServerFixture server)
 
         Assert.Contains("/lti/launched", landing);
 
+        // **A ticket, and nothing else.** The context — placement, locale,
+        // whether the platform framed it — is bought with it rather than written
+        // in the address, because §5.2 will not have the confined mode entered
+        // because a URL said so. `LtiSessionTests` covers the exchange.
         var query = System.Web.HttpUtility.ParseQueryString(landing[(landing.IndexOf('?') + 1)..]);
-        // **Our id for the placement, not the platform's.** The Client asks this
-        // Server about it, and Moodle's own string would mean nothing to it.
-        Assert.True(Guid.TryParse(query["link"], out _), "the landing names the placement");
-        // §5.4 — the platform knows the course's language; §5.2 — it framed it.
-        Assert.Equal("pl", query["locale"]);
-        Assert.Equal("1", query["embedded"]);
+        Assert.False(string.IsNullOrWhiteSpace(query["ticket"]), "the landing carries no ticket");
+        Assert.Null(query["embedded"]);
 
         // The link is written once and read afterwards, so it has to exist.
         await UsingLtiAsync(host, async db =>
