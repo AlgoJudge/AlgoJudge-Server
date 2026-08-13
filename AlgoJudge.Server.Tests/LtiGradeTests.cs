@@ -70,27 +70,63 @@ public class LtiGradeTests
     }
 
     /// <summary>
-    /// <b>The one that would be silent.</b> Two posts with the same timestamp:
-    /// the platform keeps the first and ignores the second, answering success
-    /// both times.
+    /// What Moodle actually does with a stale timestamp, measured 2026-08-14
+    /// against 4.5.13, 5.2.2 and 5.3dev: <b>409, with a sentence saying so.</b>
+    /// <para>
+    /// And the resolution matters as much as the refusal: the comparison goes
+    /// through <c>strtotime</c>, so a post a millisecond later is <i>the same
+    /// second</i> and is refused too. That is why the worker moves by a whole
+    /// second rather than by the smallest amount that looks newer.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task A_repeated_timestamp_is_accepted_and_changes_nothing()
+    public async Task A_timestamp_in_the_same_second_is_refused_by_name()
     {
         var (ags, gradebook, platform) = Build();
         var stamp = DateTime.UtcNow;
 
         await ags.PostScoreAsync(platform, gradebook.LineItemUrl, "u", 10, 100, stamp, true,
             CancellationToken.None);
+
+        var refusal = await Assert.ThrowsAsync<AgsException>(() =>
+            ags.PostScoreAsync(platform, gradebook.LineItemUrl, "u", 90, 100,
+                stamp.AddMilliseconds(1), true, CancellationToken.None));
+
+        Assert.Contains("409", refusal.Message);
+        Assert.Contains("earlier timestamp", refusal.Message);
+        Assert.Equal(10, gradebook.Held["u"].Score);
+
+        // A second later does land, which is what the worker's bump is sized for.
+        await ags.PostScoreAsync(platform, gradebook.LineItemUrl, "u", 90, 100,
+            stamp.AddSeconds(1), true, CancellationToken.None);
+
+        Assert.Equal(90, gradebook.Held["u"].Score);
+    }
+
+    /// <summary>
+    /// The other behaviour the specification permits, and the one §6.4 assumed:
+    /// accepted, ignored, reported as success. No platform in the reference
+    /// stack does this — but a tool that only survived Moodle's answer would
+    /// mark a grade synchronised that never arrived.
+    /// </summary>
+    [Fact]
+    public async Task A_platform_that_drops_a_stale_score_silently_still_gets_a_newer_one()
+    {
+        var (ags, gradebook, platform) = Build();
+        gradebook.DropsStaleSilently = true;
+        var stamp = DateTime.UtcNow;
+
+        await ags.PostScoreAsync(platform, gradebook.LineItemUrl, "u", 10, 100, stamp, true,
+            CancellationToken.None);
+        // No exception, and no change: exactly the failure that is invisible
+        // without the verifier.
         await ags.PostScoreAsync(platform, gradebook.LineItemUrl, "u", 90, 100, stamp, true,
             CancellationToken.None);
 
         Assert.Equal(10, gradebook.Held["u"].Score);
 
-        // And a later one does land, which is what the worker's monotonic stamp
-        // is for.
         await ags.PostScoreAsync(platform, gradebook.LineItemUrl, "u", 90, 100,
-            stamp.AddMilliseconds(1), true, CancellationToken.None);
+            stamp.AddSeconds(1), true, CancellationToken.None);
 
         Assert.Equal(90, gradebook.Held["u"].Score);
     }

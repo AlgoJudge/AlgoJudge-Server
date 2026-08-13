@@ -163,11 +163,18 @@ namespace AlgoJudge.Server.Lti.Workers
                 }
 
                 // **Monotonic, per person per column, and this is the whole
-                // reason the column exists.** A platform rejects a score whose
-                // timestamp is not newer than what it holds — by returning
-                // success and changing nothing — so a retry that reuses the
-                // original result's time is silently dropped. The verifier is
-                // what would otherwise never reveal it.
+                // reason the column exists.** A platform refuses a score whose
+                // timestamp is not newer than the one it holds, so a retry that
+                // reuses the original result's time achieves nothing.
+                //
+                // <b>How loudly it refuses depends on the platform.</b> Measured
+                // 2026-08-14 against Moodle 4.5.13, 5.2.2 and 5.3dev, all three
+                // identical: `scores.php` throws <b>409</b> with "Refusing score
+                // with an earlier timestamp", which lands in `LastError` and on
+                // the manager's screen. §6.4 of `LMS_INTEGRATION.md` states the
+                // refusal as silent — a success that changes nothing — and that
+                // is not true of Moodle. It may be true of something else, which
+                // is why the rule below holds either way.
                 // **Truncated to the precision the database keeps**, before
                 // anything is compared or sent. PostgreSQL stores a timestamp to
                 // the microsecond, so a value written at .NET's 100-nanosecond
@@ -180,10 +187,23 @@ namespace AlgoJudge.Server.Lti.Workers
                 // Found by a test with the clock stopped. With a real clock the
                 // next sweep is a minute later and the fault never shows, which
                 // is exactly the kind of thing that surfaces in a lab a year on.
+                // **Compared at the receiver's resolution, not at ours.** Moodle
+                // reads the timestamp with `strtotime`, which resolves to whole
+                // seconds — so two posts inside one second are the same instant
+                // to it, however different they look here. Comparing more finely
+                // than the platform does is the same mistake as comparing more
+                // finely than the database keeps, one scale up.
                 var stamp = Microseconds(clock.GetUtcNow().UtcDateTime);
-                if (state.LastTimestamp is { } last && stamp <= Microseconds(last))
+                if (state.LastTimestamp is { } last && Second(stamp) <= Second(last))
                 {
-                    stamp = Microseconds(last).AddMilliseconds(1);
+                    // **A whole second, not a millisecond**, and that is measured
+                    // rather than cautious. Moodle compares with `strtotime`,
+                    // which resolves to seconds — so two posts inside one second
+                    // carry the same instant as far as it is concerned, and the
+                    // second is refused. A millisecond here would produce a 409,
+                    // a backoff, and a grade that eventually lands looking as
+                    // though something had gone wrong.
+                    stamp = Microseconds(last).AddSeconds(1);
                 }
 
                 // **The limit of this, stated rather than discovered.** The rule
@@ -282,5 +302,11 @@ namespace AlgoJudge.Server.Lti.Workers
         /// </summary>
         private static DateTime Microseconds(DateTime value) =>
             new(value.Ticks - value.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
+
+        /// <summary>
+        /// The same instant, at the resolution a platform compares at. One
+        /// second, measured against Moodle rather than assumed.
+        /// </summary>
+        private static long Second(DateTime value) => value.Ticks / TimeSpan.TicksPerSecond;
     }
 }

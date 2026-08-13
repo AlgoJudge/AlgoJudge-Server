@@ -13,10 +13,16 @@ namespace AlgoJudge.Server.Tests;
 /// that only returned 200 would let all three through.
 /// </para>
 /// <para>
-/// It also behaves like a real one where the behaviour matters — a score whose
-/// timestamp is not newer than the last is <b>accepted and ignored</b>, which is
-/// what AGS says a platform does and is the reason the tool has to stamp
-/// monotonically.
+/// It refuses a stale timestamp <b>the way Moodle does</b>, measured 2026-08-14
+/// against 4.5.13, 5.2.2 and 5.3dev: <c>409</c>, with "Refusing score with an
+/// earlier timestamp", and the comparison made through <c>strtotime</c> — so it
+/// resolves to <b>whole seconds</b>, and two posts inside one second collide.
+/// </para>
+/// <para>
+/// <see cref="DropsStaleSilently"/> switches to the other behaviour §6.4 of
+/// `LMS_INTEGRATION.md` describes — accepted, ignored, reported as success. No
+/// platform here does that, but the specification allows it and the tool must
+/// survive both.
 /// </para>
 /// </summary>
 public sealed class FakeGradebook : HttpMessageHandler
@@ -36,6 +42,12 @@ public sealed class FakeGradebook : HttpMessageHandler
 
     /// <summary>Set to make the gradebook refuse, for the failure paths.</summary>
     public HttpStatusCode? RefuseScoresWith { get; set; }
+
+    /// <summary>
+    /// Accept a stale timestamp and quietly keep the old score, instead of
+    /// answering 409. Not what Moodle does; what the specification permits.
+    /// </summary>
+    public bool DropsStaleSilently { get; set; }
 
     /// <summary>How many times a token was minted, to prove the cache works.</summary>
     public int TokensIssued { get; private set; }
@@ -70,11 +82,22 @@ public sealed class FakeGradebook : HttpMessageHandler
             var score = document.RootElement.GetProperty("scoreGiven").GetDouble();
             var stamp = document.RootElement.GetProperty("timestamp").GetDateTime();
 
-            // **The real behaviour, and the reason it is worth reproducing.** A
-            // platform answers success and changes nothing when the timestamp is
-            // not newer than what it holds. A tool that reuses a timestamp on a
-            // retry therefore believes it succeeded.
-            if (!Held.TryGetValue(user, out var current) || stamp > current.At)
+            // Seconds, because that is the resolution Moodle compares at —
+            // `strtotime` on the incoming timestamp against the grade's
+            // `timemodified`. Sub-second differences do not exist here.
+            var held = Held.TryGetValue(user, out var current);
+            var stale = held && Second(stamp) <= Second(current.At);
+
+            if (stale && !DropsStaleSilently)
+            {
+                return new HttpResponseMessage(HttpStatusCode.Conflict)
+                {
+                    Content = new StringContent(
+                        "Refusing score with an earlier timestamp for item 1 and user " + user),
+                };
+            }
+
+            if (!stale)
             {
                 Held[user] = (score, stamp);
             }
@@ -108,6 +131,9 @@ public sealed class FakeGradebook : HttpMessageHandler
             ["scoreMaximum"] = 100.0,
         }));
     }
+
+    private static long Second(DateTime value) =>
+        value.Ticks / TimeSpan.TicksPerSecond;
 
     private static HttpResponseMessage Json(string payload) =>
         new(HttpStatusCode.OK) { Content = new StringContent(payload, Encoding.UTF8, "application/json") };
