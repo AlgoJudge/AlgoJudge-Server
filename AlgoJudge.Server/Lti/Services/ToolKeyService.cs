@@ -43,11 +43,19 @@ namespace AlgoJudge.Server.Lti.Services
     public class ToolKeyService(LtiDbContext db) : IToolKeyService
     {
         /// <summary>
-        /// RSA-2048, which §9 of <c>LMS_INTEGRATION.md</c> states as the floor.
+        /// RSA-2048, which is <b>this project's choice and not a requirement of
+        /// the specification</b>.
         /// <para>
-        /// 1EdTech's security framework defers the algorithm list to its best
-        /// practices rather than naming one in the body, so the harder evidence
-        /// is the platform. Measured 2026-08-13 against Moodle 4.5.13, 5.2.2 and
+        /// 1EdTech Security Framework v1.0 makes RS256 a default at
+        /// <c>SHOULD</c> strength and explicitly negotiable at registration —
+        /// "the algorithm sent by the Tool in the
+        /// <c>id_token_signed_response_alg</c> parameter" — and mandates no RSA
+        /// key size at all. §9 of <c>LMS_INTEGRATION.md</c> stated both as the
+        /// specification's until it was corrected on 2026-08-13.
+        /// </para>
+        /// <para>
+        /// The reason to pick them anyway is the platform. Measured 2026-08-13
+        /// against Moodle 4.5.13, 5.2.2 and
         /// 5.3dev: <c>openid-configuration.php</c> advertises exactly one value
         /// for both <c>id_token_signing_alg_values_supported</c> and
         /// <c>token_endpoint_auth_signing_alg_values_supported</c> — `RS256` —
