@@ -324,5 +324,10 @@ public class LtiLaunchTests(ServerFixture server)
     /// this Server does not serve.
     /// </summary>
     private static HttpClient NoRedirects(WebApplicationFactory<Program> host) =>
-        host.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        host.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            // Over TLS: a launch's session cookie is `Secure`.
+            BaseAddress = new Uri("https://localhost"),
+        });
 }

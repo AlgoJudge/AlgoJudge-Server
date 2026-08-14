@@ -112,6 +112,28 @@ namespace AlgoJudge.Server
                 // which is framework code and takes the login it is given.
                 .AddUserValidator<ReservedLoginValidator>();
 
+            // **A session established inside somebody else's page keeps a wider
+            // cookie, and only that session.** `SameSite=Lax` is right for every
+            // ordinary sign-in and is what stays; a response written into a
+            // frame on another site, though, has its cookie dropped by the
+            // browser before anything can go wrong with it, and the sign-in then
+            // looks like it worked. `Authorization/EmbeddedSessions.cs` says why
+            // in full — including why it names no integration.
+            builder.Services.ConfigureApplicationCookie(options =>
+            {
+                var signingIn = options.Events.OnSigningIn;
+                options.Events.OnSigningIn = async context =>
+                {
+                    if (signingIn is not null) await signingIn(context);
+                    if (Authorization.EmbeddedSessions.IsEmbedded(context.Properties))
+                    {
+                        Authorization.EmbeddedSessions.Widen(context.CookieOptions);
+                        // So anything else set in this same response knows too.
+                        Authorization.EmbeddedSessions.Mark(context.HttpContext);
+                    }
+                };
+            });
+
             // The external cookie — where a provider's ticket waits between the
             // callback and the decision to admit — is already registered:
             // `AddIdentityApiEndpoints` ends in `AddIdentityCookies()`, which

@@ -104,10 +104,73 @@ public class LtiSessionTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
     }
 
+
+    /// <summary>
+    /// The cookie a launch sets, read as a browser reads it.
+    ///
+    /// <para>
+    /// <b>`SameSite=Lax` is not stored at all inside a frame on another site.</b>
+    /// The sign-in appears to work, the redirect happens, and every request after
+    /// it is anonymous — measured in Chrome on 2026-08-14, where the browser
+    /// refused both cookies with the reason `SameSiteLax`. An assertion on the
+    /// header is the only part of that a test can hold.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_launch_into_a_frame_sets_a_cookie_a_browser_will_keep()
+    {
+        var world = await LaunchAsync();
+
+        var cookies = world.Launched.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.ToList()
+            : [];
+        var identity = cookies.FirstOrDefault(c => c.StartsWith(".AspNetCore.Identity.Application"));
+        Assert.NotNull(identity);
+
+        Assert.Contains("samesite=none", identity!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secure", identity, StringComparison.OrdinalIgnoreCase);
+        // Keyed to the site that embedded us, so a session opened inside one
+        // course is not a session anywhere else.
+        Assert.Contains("partitioned", identity, StringComparison.OrdinalIgnoreCase);
+
+        // **And the session cookie beside it**, which is written by middleware on
+        // this same response and cannot read a ticket that does not exist yet.
+        // Left narrow it is refused, and every request after the launch then
+        // starts a fresh session row.
+        var tracking = cookies.FirstOrDefault(c => c.StartsWith("aj_session"));
+        Assert.NotNull(tracking);
+        Assert.Contains("samesite=none", tracking!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("partitioned", tracking, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// And the ordinary sign-in keeps the narrow cookie, which is the half that
+    /// would be easy to lose: widening everything would be simpler to write and
+    /// would give up what `Lax` buys on every screen that has nothing to do with
+    /// any of this.
+    /// </summary>
+    [Fact]
+    public async Task An_ordinary_sign_in_stays_narrow()
+    {
+        var client = server.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/identity/login?useCookies=true",
+            new { email = Seeder.DevAdminLogin, password = Seeder.DevAdminPassword });
+        response.EnsureSuccessStatusCode();
+
+        var identity = response.Headers.GetValues("Set-Cookie")
+            .First(c => c.StartsWith(".AspNetCore.Identity.Application"));
+
+        Assert.Contains("samesite=lax", identity, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("partitioned", identity, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── Getting there ────────────────────────────────────────────────────────
 
     private sealed record World(
-        WebApplicationFactory<Program> Host, HttpClient Client, string Ticket, string Slug)
+        WebApplicationFactory<Program> Host, HttpClient Client, string Ticket, string Slug,
+        HttpResponseMessage Launched)
     {
         public async Task<JsonElement> ClaimAsync(string ticket)
         {
@@ -141,10 +204,17 @@ public class LtiSessionTests(ServerFixture server)
 
         // Cookies kept, redirects not followed: the launch's `SignInAsync` sets
         // the session on this client, and the redirect carries the ticket.
+        // **Over TLS, because the cookie a launch sets is `Secure`.** An
+        // embedded session is `SameSite=None`, which no browser accepts without
+        // `Secure`, so a client on plain HTTP is handed a cookie it will never
+        // send back — and every request after the launch is anonymous. That is
+        // the real behaviour, not a test artefact: an installation serving plain
+        // HTTP cannot have embedded sessions at all.
         var client = host.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
+            BaseAddress = new Uri("https://localhost"),
         });
 
         var begun = await client.PostAsync("/api/v1/lti/login",
@@ -166,7 +236,7 @@ public class LtiSessionTests(ServerFixture server)
         var ticket = HttpUtility.ParseQueryString(landing[(landing.IndexOf('?') + 1)..])["ticket"];
         Assert.False(string.IsNullOrWhiteSpace(ticket), $"no ticket in {landing}");
 
-        return new World(host, client, ticket!, slug);
+        return new World(host, client, ticket!, slug, launched);
     }
 
     private async Task<User> DirectoryUserAsync()

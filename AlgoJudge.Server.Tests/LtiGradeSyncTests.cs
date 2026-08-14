@@ -418,10 +418,14 @@ public class LtiGradeSyncTests(ServerFixture server)
     {
         // Cookies kept, because the claim below is made with the session the
         // launch established.
+        // **Over TLS.** A launch into a frame signs somebody in with a
+        // `Secure` cookie, which a client on plain HTTP is handed and never
+        // sends back — every request after the launch is then anonymous.
         var client = host.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
+            BaseAddress = new Uri("https://localhost"),
         });
 
         var begun = await client.PostAsync("/api/v1/lti/login",

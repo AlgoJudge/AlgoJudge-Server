@@ -1,3 +1,4 @@
+using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Controllers;
 using AlgoJudge.Server.Lti.Services;
 using Microsoft.AspNetCore.Identity;
@@ -132,11 +133,18 @@ namespace AlgoJudge.Server.Lti.Controllers
                         await enrolment.EnrolAsync(
                             link, launch.Platform.ProviderId, resolved.User.Id, launch.Roles, ct);
 
-                        // The session that carries them into the application. In
-                        // an iframe this cookie is third-party, which is §5.3's
-                        // open half and the thing measured in a browser rather
-                        // than argued about here.
-                        await signIn.SignInAsync(resolved.User, isPersistent: true);
+                        var embedded = string.Equals(launch.DocumentTarget, "iframe",
+                            StringComparison.OrdinalIgnoreCase);
+
+                        // The session that carries them into the application.
+                        // **Inside a frame it is a third-party cookie**, and a
+                        // browser drops one written `SameSite=Lax` without
+                        // saying so to anybody but its own console — measured in
+                        // Chrome, 2026-08-14. Asking for an embedded session is
+                        // the core's own idea; this is the only thing here that
+                        // knows a launch is what put us in the frame.
+                        await signIn.SignInAsync(resolved.User,
+                            EmbeddedSessions.Properties(embedded, isPersistent: true));
 
                         // **A ticket, not a mode.** §5.2 wants the embedded
                         // presentation entered because of how the session was
@@ -146,9 +154,7 @@ namespace AlgoJudge.Server.Lti.Controllers
                         // context. Anybody may write a query parameter; nobody
                         // else can produce one of these.
                         var ticket = await tickets.IssueAsync(
-                            link.Id, resolved.User.Id, launch.Locale,
-                            string.Equals(launch.DocumentTarget, "iframe",
-                                StringComparison.OrdinalIgnoreCase),
+                            link.Id, resolved.User.Id, launch.Locale, embedded,
                             launch.ReturnUrl, ct);
 
                         return Redirect(AppUrl(

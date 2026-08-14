@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using AlgoJudge.Server.Database;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace AlgoJudge.Server.Realtime
@@ -91,7 +93,7 @@ namespace AlgoJudge.Server.Realtime
                 };
                 context.UserSessions.Add(session);
 
-                http.Response.Cookies.Append(SessionCookie, session.Id.ToString(), new CookieOptions
+                var cookie = new CookieOptions
                 {
                     HttpOnly = true,
                     // Same site as the cookie that authenticates the request, so
@@ -100,7 +102,21 @@ namespace AlgoJudge.Server.Realtime
                     Secure = http.Request.IsHttps,
                     IsEssential = true,
                     Expires = now.AddDays(30),
-                });
+                };
+
+                // **Which is why it has to follow that cookie into a frame too.**
+                // This one is written on a later request than the sign-in, so
+                // the answer is read back off the authentication ticket rather
+                // than remembered — and a session left on `Lax` here would be
+                // dropped by the browser while the identity cookie survived,
+                // leaving somebody signed in and untracked.
+                if (await Authorization.EmbeddedSessions.IsEmbeddedAsync(
+                        http, IdentityConstants.ApplicationScheme))
+                {
+                    Authorization.EmbeddedSessions.Widen(cookie);
+                }
+
+                http.Response.Cookies.Append(SessionCookie, session.Id.ToString(), cookie);
             }
 
             session.LastRequestAt = now.UtcDateTime;
