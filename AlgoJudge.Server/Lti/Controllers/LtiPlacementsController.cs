@@ -18,8 +18,33 @@ namespace AlgoJudge.Server.Lti.Controllers
     [ApiController]
     [Route("lti/placements")]
     [Authorize]
-    public class LtiPlacementsController(IGradeVerifier verifier) : ControllerBase
+    public class LtiPlacementsController(
+        IGradeVerifier verifier, IPlacementService placements) : ControllerBase
     {
+        /// <summary>
+        /// Every course link this installation knows, newest first.
+        /// <para>
+        /// Without this a placement is invisible until something goes wrong with
+        /// it: a manager could not see which courses reach an activity, and the
+        /// sharing question below would be asked about a row nobody could find.
+        /// </para>
+        /// </summary>
+        [HttpGet]
+        [ProducesResponseType<IReadOnlyList<PlacementView>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<PlacementView>> List(
+            [FromQuery] Guid? activityId, CancellationToken ct) =>
+            placements.ListAsync(activityId, ct);
+
+        /// <summary>
+        /// Accepts that this activity is reached from more than one course, which
+        /// is what unblocks a launch refused with <c>sharingNotAcknowledged</c>.
+        /// </summary>
+        [HttpPost("{id:guid}/sharing")]
+        [ProducesResponseType<PlacementView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        public Task<PlacementView> AcknowledgeSharing(Guid id, CancellationToken ct) =>
+            placements.AcknowledgeSharingAsync(id, ct);
+
         /// <summary>
         /// How the grades stand.
         /// </summary>

@@ -257,6 +257,60 @@ public class LtiIdentityTests(ServerFixture server)
         Assert.Contains("reason=" + LtiLaunchException.SharingNotAcknowledged, second);
     }
 
+    /// <summary>
+    /// The same person, the same activity, reached from <b>two platforms</b> —
+    /// which is what a university running two Moodles actually looks like.
+    /// <para>
+    /// <b>They already hold an activity grant, and there is only ever one.</b>
+    /// The unique index is on <c>(UserId, ActivityId)</c> alone, so enrolment
+    /// that looks for its own provider's row finds none, inserts, and the launch
+    /// answers 500 on that constraint. Found by launching the same activity from
+    /// Moodle 4.5 after Moodle 5.2, 2026-08-14 — and <b>not</b> reproducible with
+    /// one platform, because there the lookup finds its own row.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_second_platform_launches_once_the_sharing_is_accepted()
+    {
+        using var first = new FakePlatform();
+        using var second = new FakePlatform();
+        await RegisterAsync(first, authority: true);
+        await RegisterAsync(second, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        using var host = server.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+                services.Replace(ServiceDescriptor.Singleton<IPlatformKeys>(
+                    new StubbedPlatformKeys(first.SigningKey, second.SigningKey)))));
+
+        await LaunchAsync(host, first, username: user.UserName!, activity: slug,
+            resourceLinkId: "rl-one", contextId: "course-a");
+        await LaunchAsync(host, second, username: user.UserName!, activity: slug,
+            resourceLinkId: "rl-two", contextId: "course-b");
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var placements = await admin.GetFromJsonAsync<JsonElement>("/api/v1/lti/placements");
+        var waiting = placements.EnumerateArray()
+            .First(p => !p.GetProperty("sharingAcknowledged").GetBoolean());
+
+        var accepted = await admin.PostAsync(
+            $"/api/v1/lti/placements/{waiting.GetProperty("id").GetString()}/sharing", null);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        var again = await LaunchAsync(host, second, username: user.UserName!, activity: slug,
+            resourceLinkId: "rl-two", contextId: "course-b");
+        Assert.Contains("/lti/launched", again);
+
+        // And still one activity grant, holding what the first course gave them.
+        using var scope = host.Services.CreateScope();
+        var core = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var grants = await core.Grants.AsNoTracking()
+            .Where(g => g.UserId == user.Id && g.ActivityId != null)
+            .ToListAsync();
+        Assert.Single(grants);
+    }
+
     // ── Getting there ────────────────────────────────────────────────────────
 
     private WebApplicationFactory<Program> HostFor(FakePlatform platform) =>

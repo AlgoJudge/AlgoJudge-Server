@@ -73,10 +73,25 @@ namespace AlgoJudge.Server.Lti.Services
                 .ToList();
             var json = JsonSerializer.Serialize(ordered);
 
+            // **One row per person per activity, whoever put it there.** Activity
+            // scope is not the union that system scope is: the unique index is on
+            // `(UserId, ActivityId)` alone. Looking this up by provider as well
+            // found nothing when a second course had already granted the same
+            // activity, and the insert then broke on that index — a launch from
+            // the second Moodle answering 500. Found that way, 2026-08-14.
             var grant = await core.Grants.FirstOrDefaultAsync(
-                g => g.UserId == userId
-                     && g.ActivityId == link.ActivityId
-                     && g.SourceProviderId == platform.Id, ct);
+                g => g.UserId == userId && g.ActivityId == link.ActivityId, ct);
+
+            // **Somebody else's contribution is left exactly as it is.** Where the
+            // grant came from another platform — the same activity reached from
+            // two courses, which §5.1 allows once a manager accepts it — rewriting
+            // it from this platform's roles would let one course quietly demote
+            // what the other granted. There is no subtraction in this model, and
+            // that would be one through the back door.
+            if (grant is not null && grant.SourceProviderId != platform.Id)
+            {
+                return;
+            }
 
             if (grant is null)
             {

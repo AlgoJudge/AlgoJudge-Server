@@ -43,8 +43,8 @@
       shipping stable releases. No alpha or beta package goes on this path, which
       is a constraint the project owner set rather than a preference.
     -->
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="7.0.3" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="7.0.3" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.2" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
