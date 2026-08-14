@@ -26,6 +26,25 @@
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
+    <!--
+      The LTI module validates a platform's `id_token` and signs its own client
+      assertions with these. **Neither is a new dependency**: both were already
+      in the closure at 7.0.3, pulled by the OpenIdConnect handler above, and are
+      promoted to direct references so the version on a signature-validation path
+      is stated rather than inherited from a transitive graph that a minor bump
+      elsewhere can move.
+
+      Pinned to 7.0.3 for the same reason they are not on 8.x: the ASP.NET
+      OpenIdConnect handler that federated sign-in runs on resolves this family,
+      and raising it here would raise it there — a change to the sign-in path,
+      made as a side effect of an LTI feature, verified by nothing.
+
+      MIT, maintained by Microsoft in `AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet`,
+      shipping stable releases. No alpha or beta package goes on this path, which
+      is a constraint the project owner set rather than a preference.
+    -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.2" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

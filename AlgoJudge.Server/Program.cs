@@ -56,6 +56,10 @@ namespace AlgoJudge.Server
                     options => options.UseNpgsql(dbConnectionString));
             }
 
+            // The LTI module. One of the two lines it is allowed outside `Lti/`;
+            // the other is `app.MapLti()` below. See `Lti/LtiModule.cs`.
+            AlgoJudge.Server.Lti.LtiModule.AddLti(builder.Services, builder.Configuration);
+
             // The Server sits behind a reverse proxy in every real deployment.
             // Without this the scheme is http, redirects point at the wrong
             // place, and — the one that matters here — every Runner is recorded
@@ -107,6 +111,28 @@ namespace AlgoJudge.Server
                 // the only place that catches `MapIdentityApi`'s own /register,
                 // which is framework code and takes the login it is given.
                 .AddUserValidator<ReservedLoginValidator>();
+
+            // **A session established inside somebody else's page keeps a wider
+            // cookie, and only that session.** `SameSite=Lax` is right for every
+            // ordinary sign-in and is what stays; a response written into a
+            // frame on another site, though, has its cookie dropped by the
+            // browser before anything can go wrong with it, and the sign-in then
+            // looks like it worked. `Authorization/EmbeddedSessions.cs` says why
+            // in full — including why it names no integration.
+            builder.Services.ConfigureApplicationCookie(options =>
+            {
+                var signingIn = options.Events.OnSigningIn;
+                options.Events.OnSigningIn = async context =>
+                {
+                    if (signingIn is not null) await signingIn(context);
+                    if (Authorization.EmbeddedSessions.IsEmbedded(context.Properties))
+                    {
+                        Authorization.EmbeddedSessions.Widen(context.CookieOptions);
+                        // So anything else set in this same response knows too.
+                        Authorization.EmbeddedSessions.Mark(context.HttpContext);
+                    }
+                };
+            });
 
             // The external cookie — where a provider's ticket waits between the
             // callback and the decision to admit — is already registered:
@@ -379,6 +405,8 @@ namespace AlgoJudge.Server
 
             app.MapGroup("/identity").MapIdentityApi<User>();
             app.MapControllers();
+
+            AlgoJudge.Server.Lti.LtiModule.MapLti(app);
 
             // One socket per tab, carrying core, participant and manager events
             // together. Authenticated by the same cookie as everything else — no
