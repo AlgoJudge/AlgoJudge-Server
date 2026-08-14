@@ -7,6 +7,10 @@ using System.Text.Json;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Workers;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Org.BouncyCastle.Crypto.Generators;
@@ -95,6 +99,108 @@ public class RunnerTests(ServerFixture server)
 
         await runner.ReportAsync(jobId, leaseToken);
     }
+
+    /// <summary>
+    /// The renewal that loses the race, forced rather than waited for.
+    ///
+    /// <para>
+    /// A Runner renewing reads the job, then writes it. If the lease is reclaimed
+    /// in between — which is what <c>LeaseReaper</c> does the instant a deadline
+    /// passes — the write finds a row that has moved and EF raises
+    /// <c>DbUpdateConcurrencyException</c>. Left unhandled that leaves the
+    /// endpoint answering <b>500</b>, and a Runner cannot tell "try again in a
+    /// moment" from "you have lost this job, stop computing" — two opposite
+    /// actions behind one status.
+    /// </para>
+    ///
+    /// <para>
+    /// §5 of the accepted Server–Runner API already names the answer:
+    /// <b>the lease has already been reclaimed → <c>runner.lease.stale</c></b>.
+    /// So this is the contract being met, not a contract being changed.
+    /// </para>
+    ///
+    /// <para>
+    /// Found as a test that failed about one full run in four and passed alone.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_renewal_that_loses_the_race_says_the_lease_is_gone()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(4)\n");
+
+        var thief = new ReclaimWhileSaving(server.ConnectionString);
+        using var host = HostRacing(thief);
+
+        var runner = await Build.RunnerAsync(server, host);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        // Armed only now, so the claim itself is an ordinary one.
+        thief.JobId = Guid.Parse(jobId);
+
+        var response = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/lease", new { leaseToken, leaseSeconds = 3600 });
+
+        Assert.True(thief.Fired, "the race never happened, so this test proved nothing");
+
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("runner.lease.stale", problem.GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// The same race on the other endpoint that goes through the same read.
+    /// Fixing one and not the other leaves the identical defect at a second
+    /// address, which is the way this kind of fix usually half-lands.
+    /// </summary>
+    [Fact]
+    public async Task Reporting_progress_that_loses_the_race_says_the_lease_is_gone()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(5)\n");
+
+        var thief = new ReclaimWhileSaving(server.ConnectionString);
+        using var host = HostRacing(thief);
+
+        var runner = await Build.RunnerAsync(server, host);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        thief.JobId = Guid.Parse(jobId);
+
+        var response = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/progress", new { leaseToken });
+
+        Assert.True(thief.Fired, "the race never happened, so this test proved nothing");
+
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("runner.lease.stale", problem.GetProperty("code").GetString());
+    }
+
+
+    /// <summary>
+    /// A host whose database context carries the interceptor.
+    ///
+    /// <b>Registered on the options rather than left to be discovered.</b> EF
+    /// Core will resolve an <c>IInterceptor</c> out of the application container
+    /// in some configurations, and it did not in this one — the interceptor
+    /// simply never ran, and the test passed by not racing. Which is why it
+    /// asserts that it fired.
+    /// </summary>
+    private WebApplicationFactory<Program> HostRacing(ReclaimWhileSaving thief) =>
+        server.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+            services.RemoveAll<DbContextOptions>();
+            services.AddDbContext<ApplicationDbContext>(options =>
+                options.UseNpgsql(server.ConnectionString).AddInterceptors(thief));
+        }));
 
     /// <summary>
     /// The whole recovery story: the Runner is stateless, so nobody is coming

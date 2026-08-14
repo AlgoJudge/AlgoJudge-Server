@@ -564,15 +564,11 @@ namespace AlgoJudge.Server.Services
         public async Task<LeaseDto> RenewAsync(
             DbRunner runner, Guid jobId, string leaseToken, int? seconds, CancellationToken ct)
         {
-            var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
-
             var lease = seconds is { } requested
                 ? TimeSpan.FromSeconds(Math.Clamp(requested, 60, MaxLease.TotalSeconds))
                 : DefaultLease;
 
-            job.LeaseExpiresAt = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(lease));
-            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
-            await context.SaveChangesAsync(ct);
+            var job = await ExtendAsync(runner, jobId, leaseToken, lease, ct);
 
             return new LeaseDto
             {
@@ -590,13 +586,72 @@ namespace AlgoJudge.Server.Services
         public async Task ProgressAsync(
             DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct)
         {
-            var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
             // Same rule as renewing, for the same reason: saying "still working"
-            // must never bring the deadline closer.
-            job.LeaseExpiresAt = Later(
-                job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(DefaultLease));
-            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
-            await context.SaveChangesAsync(ct);
+            // must never bring the deadline closer — and it loses the same race,
+            // so it goes through the same place.
+            await ExtendAsync(runner, jobId, leaseToken, DefaultLease, ct);
+        }
+
+        /// <summary>
+        /// Pushes a held lease out, and survives losing the race to do it.
+        ///
+        /// <para>
+        /// <b>Reading a job and then writing it is two steps, and the reaper fits
+        /// between them.</b> The moment a deadline passes, <c>LeaseReaper</c>
+        /// takes the job back; a renewal already past its read then writes a row
+        /// that has moved, and PostgreSQL's <c>xmin</c> — the concurrency token
+        /// on <c>EvaluationJob</c>, and the only one on this path — makes that
+        /// update match nothing. EF raises <c>DbUpdateConcurrencyException</c>,
+        /// and unhandled it left the endpoint answering <b>500</b>.
+        /// </para>
+        ///
+        /// <para>
+        /// <b>Which is the one answer a Runner cannot act on.</b> "Try again in a
+        /// moment" and "you have lost this job, stop computing" are opposite
+        /// actions, and a 500 is both. §5 of the accepted Server–Runner API
+        /// already names the right one — <c>runner.lease.stale</c> — so this is
+        /// the contract being met rather than changed.
+        /// </para>
+        ///
+        /// <para>
+        /// The conflict is not itself the answer, though: it says the row moved,
+        /// not who moved it or into what. So the job is re-read and put back
+        /// through the same rules, which produce <c>stale</c>, <c>foreign</c>,
+        /// <c>job.state</c> or a plain 404 on their own evidence. A conflict that
+        /// changed none of those is somebody touching an unrelated column, and
+        /// the write is simply tried again.
+        /// </para>
+        /// </summary>
+        private async Task<EvaluationJob> ExtendAsync(
+            DbRunner runner, Guid jobId, string leaseToken, TimeSpan lease, CancellationToken ct)
+        {
+            // Two attempts, not a loop without an end: the second read is against
+            // a row somebody has just written, so a further conflict would mean
+            // continuous contention on one job, and spinning through it would
+            // hold a request open rather than answer it.
+            for (var attempt = 0; ; attempt++)
+            {
+                var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
+
+                job.LeaseExpiresAt = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(lease));
+                runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+
+                try
+                {
+                    await context.SaveChangesAsync(ct);
+                    return job;
+                }
+                catch (DbUpdateConcurrencyException conflict) when (attempt == 0)
+                {
+                    // Reloaded from the database rather than re-queried: the
+                    // context is still tracking the stale instance, and a second
+                    // read would hand back exactly what was just refused.
+                    foreach (var entry in conflict.Entries)
+                    {
+                        await entry.ReloadAsync(ct);
+                    }
+                }
+            }
         }
 
         /// <summary>
