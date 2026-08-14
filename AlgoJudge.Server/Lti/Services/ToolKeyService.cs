@@ -1,10 +1,29 @@
 using System.Security.Cryptography;
+using AlgoJudge.Server.Api.Contracts;
+using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Lti.Data;
+using AlgoJudge.Server.Services;
+using AlgoJudge.Server.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AlgoJudge.Server.Lti.Services
 {
+    /// <summary>
+    /// One key, as a manager may see it. <b>There is no field for the private
+    /// half</b>, and its absence is the design rather than an omission: a type
+    /// that cannot carry a secret cannot leak one.
+    /// </summary>
+    public record ToolKeyView
+    {
+        public required string Kid { get; init; }
+        public required string CreatedAt { get; init; }
+        public string? RetiredAt { get; init; }
+
+        /// <summary>Whether new signatures are made with this one.</summary>
+        public required bool Signing { get; init; }
+    }
+
     /// <summary>The tool's own key: generated here, and never given out.</summary>
     public interface IToolKeyService
     {
@@ -23,6 +42,30 @@ namespace AlgoJudge.Server.Lti.Services
         /// Signing credentials for the current key, for a client assertion.
         /// </summary>
         Task<SigningCredentials> CredentialsAsync(CancellationToken cancellationToken);
+
+        /// <summary>What a manager sees: every key, and which one signs.</summary>
+        Task<IReadOnlyList<ToolKeyView>> ListAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Mints a new key and stops the old one signing, <b>leaving it
+        /// published</b>. That overlap is the point: a platform caches a key set
+        /// on its own terms, so a rotation that took the old key out at the same
+        /// moment would refuse everything signed before the platform refetched —
+        /// an outage in somebody else's installation.
+        /// </summary>
+        Task<ToolKeyView> RotateAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Closes the overlap: takes a retired key out of the published set and
+        /// <b>deletes its private half</b>.
+        /// <para>
+        /// A separate act from rotating, and a manual one, because only a person
+        /// can tell that every platform has refetched. Refused for the key that
+        /// is currently signing — withdrawing that one would leave a tool whose
+        /// signatures verify against nothing.
+        /// </para>
+        /// </summary>
+        Task WithdrawAsync(string kid, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -40,7 +83,8 @@ namespace AlgoJudge.Server.Lti.Services
     /// chat message, a wiki and a backup nobody remembers.
     /// </para>
     /// </summary>
-    public class ToolKeyService(LtiDbContext db) : IToolKeyService
+    public class ToolKeyService(
+        LtiDbContext db, IPermissionService permissions, TimeProvider clock) : IToolKeyService
     {
         /// <summary>
         /// RSA-2048, which is <b>this project's choice and not a requirement of
@@ -168,5 +212,86 @@ namespace AlgoJudge.Server.Lti.Services
                 new RsaSecurityKey(rsa) { KeyId = key.Kid },
                 SecurityAlgorithms.RsaSha256);
         }
+
+        public async Task<IReadOnlyList<ToolKeyView>> ListAsync(CancellationToken cancellationToken)
+        {
+            await permissions.RequireAsync(Permissions.ProviderManage, null, cancellationToken);
+
+            // Generated on a read here for the same reason the key set does it: a
+            // screen opened before anything has been signed should show the key
+            // this installation will actually use, not an empty table.
+            var current = await CurrentAsync(cancellationToken);
+
+            var keys = await db.ToolKeys
+                .AsNoTracking()
+                .OrderByDescending(k => k.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            return keys.Select(key => Project(key, key.Id == current.Id)).ToList();
+        }
+
+        public async Task<ToolKeyView> RotateAsync(CancellationToken cancellationToken)
+        {
+            await permissions.RequireAsync(Permissions.ProviderManage, null, cancellationToken);
+
+            var now = clock.GetUtcNow().UtcDateTime;
+
+            // Every key still signing is retired, not merely the newest: an
+            // installation that somehow holds two would otherwise keep the older
+            // one eligible, and which key signs would depend on a timestamp
+            // comparison nobody meant to rely on.
+            var signing = await db.ToolKeys
+                .Where(k => k.RetiredAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var key in signing)
+            {
+                key.RetiredAt = now;
+            }
+
+            using var rsa = RSA.Create(KeySizeBits);
+            var minted = new ToolKey
+            {
+                Kid = Guid.NewGuid().ToString("N"),
+                PublicPem = rsa.ExportSubjectPublicKeyInfoPem(),
+                PrivatePem = rsa.ExportPkcs8PrivateKeyPem(),
+                CreatedAt = now,
+            };
+
+            db.ToolKeys.Add(minted);
+            await db.SaveChangesAsync(cancellationToken);
+
+            return Project(minted, signing: true);
+        }
+
+        public async Task WithdrawAsync(string kid, CancellationToken cancellationToken)
+        {
+            await permissions.RequireAsync(Permissions.ProviderManage, null, cancellationToken);
+
+            var key = await db.ToolKeys.FirstOrDefaultAsync(k => k.Kid == kid, cancellationToken)
+                ?? throw new NotFoundException("Tool key");
+
+            if (key.RetiredAt is null)
+            {
+                // The key that signs is the one every platform is currently
+                // checking against. Taking it out of the set would not be a
+                // rotation, it would be the tool going quiet.
+                throw new ConflictException(
+                    "This key is still signing. Rotate first, then withdraw the retired one",
+                    "lti.key.signing");
+            }
+
+            // The row goes, and the private half with it. A withdrawn key has no
+            // further use, and a private key nobody needs is only a liability.
+            db.ToolKeys.Remove(key);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        private static ToolKeyView Project(ToolKey key, bool signing) => new()
+        {
+            Kid = key.Kid,
+            CreatedAt = Wire.At(key.CreatedAt),
+            RetiredAt = key.RetiredAt is { } retired ? Wire.At(retired) : null,
+            Signing = signing,
+        };
     }
 }
