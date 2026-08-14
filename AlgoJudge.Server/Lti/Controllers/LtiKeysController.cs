@@ -1,3 +1,5 @@
+using AlgoJudge.Server.Api.Contracts;
+using Microsoft.AspNetCore.Authorization;
 using AlgoJudge.Server.Lti.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,5 +31,53 @@ namespace AlgoJudge.Server.Lti.Controllers
         [HttpGet("jwks.json")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public Task<object> KeySet(CancellationToken ct) => keys.KeySetAsync(ct);
+    }
+
+    /// <summary>
+    /// Rotating that key, which is <b>two deliberate acts and no schedule</b>
+    /// (decided 2026-08-15).
+    ///
+    /// <para>
+    /// A platform caches a key set on its own terms and refetches when it feels
+    /// like it. So rotating mints a new key and leaves the old one published —
+    /// signatures already in flight still verify — and a <i>second</i> act, taken
+    /// once somebody can see every platform has refetched, closes the overlap.
+    /// Automating either would put the failure in somebody else's installation at
+    /// a moment nobody chose.
+    /// </para>
+    ///
+    /// <para>
+    /// A separate class from the key set above because these are the opposite
+    /// thing: that one is anonymous by necessity, these are behind
+    /// <c>provider:manage</c>. Nothing here answers with a private key, and
+    /// <see cref="ToolKeyView"/> has nowhere to put one.
+    /// </para>
+    /// </summary>
+    [ApiController]
+    [Route("lti/keys")]
+    [Authorize]
+    public class LtiKeyRotationController(IToolKeyService keys) : ControllerBase
+    {
+        [HttpGet]
+        [ProducesResponseType<IReadOnlyList<ToolKeyView>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<ToolKeyView>> List(CancellationToken ct) => keys.ListAsync(ct);
+
+        [HttpPost("rotate")]
+        [ProducesResponseType<ToolKeyView>(StatusCodes.Status200OK)]
+        public Task<ToolKeyView> Rotate(CancellationToken ct) => keys.RotateAsync(ct);
+
+        /// <summary>
+        /// Closes the overlap for one retired key. Refused for the key that is
+        /// still signing — see <see cref="IToolKeyService.WithdrawAsync"/>.
+        /// </summary>
+        [HttpPost("{kid}/withdraw")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> Withdraw(string kid, CancellationToken ct)
+        {
+            await keys.WithdrawAsync(kid, ct);
+            return NoContent();
+        }
     }
 }
