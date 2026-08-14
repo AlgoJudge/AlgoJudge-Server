@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AlgoJudge.Server.Database;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
@@ -155,7 +156,13 @@ public static class Build
     }
 
     /// <summary>A registered, approved Runner with a live token.</summary>
-    public static async Task<StubRunner> RunnerAsync(ServerFixture server)
+    /// <param name="host">
+    /// Where the Runner's own calls go, when a test needs a host of its own —
+    /// one carrying an interceptor, say. Registration and approval always go to
+    /// the fixture, because they are the same database either way.
+    /// </param>
+    public static async Task<StubRunner> RunnerAsync(
+        ServerFixture server, WebApplicationFactory<Program>? host = null)
     {
         var anonymous = server.CreateClient();
 
@@ -179,7 +186,8 @@ public static class Build
         await Sign.Succeeded(await admin.PostAsync($"/api/v1/runners/{runnerId}/approve", null));
 
         var stub = new StubRunner(
-            server.CreateClient(), runnerId, registered.GetProperty("fingerprint").GetString()!, priv);
+            (host ?? (WebApplicationFactory<Program>)server).CreateClient(),
+            runnerId, registered.GetProperty("fingerprint").GetString()!, priv);
         await stub.AuthenticateAsync();
         return stub;
     }
