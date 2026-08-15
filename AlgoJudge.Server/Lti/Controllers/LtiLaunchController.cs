@@ -30,6 +30,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         IIdentityResolver identities,
         ILtiEnrolmentService enrolment,
         ILaunchTickets tickets,
+        AlgoJudge.Server.Services.IActivityService activities,
         SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
         Data.LtiDbContext db,
         TimeProvider clock,
@@ -143,6 +144,23 @@ namespace AlgoJudge.Server.Lti.Controllers
                             "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(link))));
 
                     case Resolution.Resolved resolved:
+                        // **Decided by the same role the grant is decided by.**
+                        // Whoever runs the course at the platform is the person
+                        // preparing the copy, and they launch into it; everybody
+                        // else is told it is not open yet.
+                        //
+                        // Deliberately the platform's roles rather than this
+                        // installation's permissions: the permission belongs to
+                        // an account, and nobody is signed in yet at this point
+                        // in the request - the session is established two lines
+                        // below. Trusting the role claim here trusts it for
+                        // exactly what the enrolment already trusts it for.
+                        if (!await activities.IsPublishedAsync(link.ActivityId, ct)
+                            && !LtiRoles.RunsTheCourse(launch.Roles))
+                        {
+                            return Failed(LtiLaunchException.NotPublished);
+                        }
+
                         await enrolment.EnrolAsync(
                             link, launch.Platform.ProviderId, resolved.User.Id, launch.Roles, ct);
 

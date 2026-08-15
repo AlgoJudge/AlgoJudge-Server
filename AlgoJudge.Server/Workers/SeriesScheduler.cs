@@ -39,6 +39,15 @@ namespace AlgoJudge.Server.Workers
         /// From the shortest thing a participant would notice — a round opening.
         /// A minute would be visible; an hour would be a complaint.
         /// </summary>
+        /// <summary>
+        /// **An unpublished activity is swept past, in all four passes.** A copy
+        /// of last year's course carries last year's dates until somebody shifts
+        /// them, and the first tick after it exists would otherwise open every
+        /// round it has and announce them to a course full of people. The filter
+        /// is repeated rather than factored out because a pass added later has to
+        /// state it too, and a shared helper is the thing somebody forgets to
+        /// call.
+        /// </summary>
         private static readonly TimeSpan Interval = TimeSpan.FromSeconds(15);
 
         /// <summary>
@@ -111,6 +120,7 @@ namespace AlgoJudge.Server.Workers
                 // This asked for `StartDate != null` until 2026-08-08, so the two
                 // gave different answers about the same round and one of them
                 // could never open it again once it had closed.
+                .Where(s => s.Activity!.PublishedAt != null)
                 .Where(s => s.StartAnnouncedAt == null
                     && (s.StartDate == null || s.StartDate <= now)
                     && s.PausedAt == null
@@ -156,6 +166,7 @@ namespace AlgoJudge.Server.Workers
             var due = await context.Series
                 .Include(s => s.Activity)
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
+                .Where(s => s.Activity!.PublishedAt != null)
                 .Where(s => s.EndAnnouncedAt == null && s.EndDate != null && s.EndDate <= now)
                 .AsNoTracking()
                 .ToListAsync(ct);
@@ -195,6 +206,7 @@ namespace AlgoJudge.Server.Workers
             ApplicationDbContext context, IEventHub events, DateTime now, CancellationToken ct)
         {
             var due = await context.Series
+                .Where(s => s.Activity!.PublishedAt != null)
                 .Where(s => s.WindowAnnouncedAt == null
                     && ((s.RankingVisibleFrom != null && s.RankingVisibleFrom <= now)
                         || (s.RankingVisibleFrom == null && s.StartDate != null && s.StartDate <= now)))
@@ -225,6 +237,7 @@ namespace AlgoJudge.Server.Workers
             ApplicationDbContext context, IEventHub events, DateTime now, CancellationToken ct)
         {
             var due = await context.Series
+                .Where(s => s.Activity!.PublishedAt != null)
                 .Where(s => s.UnfrozenAnnouncedAt == null
                     && s.RankingFreezeAt != null
                     && s.RankingRevealAt != null && s.RankingRevealAt <= now)

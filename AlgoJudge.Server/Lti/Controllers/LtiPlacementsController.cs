@@ -106,5 +106,25 @@ namespace AlgoJudge.Server.Lti.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Resync(Guid id, CancellationToken ct) =>
             Ok(new { queued = await verifier.ResyncAsync(id, ct) });
+
+        /// <summary>
+        /// Copies the activity this placement points at, and points it at the
+        /// copy - the answer for a course that was copied, where accepting the
+        /// sharing instead would put two cohorts into one activity.
+        /// </summary>
+        [HttpPost("{id:guid}/copy-activity")]
+        [ProducesResponseType<PlacementView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<PlacementView> CopyActivity(
+            Guid id, [FromBody] CopyActivityDto input, CancellationToken ct) =>
+            placements.CopyActivityAsync(id, input.Slug ?? "", input.StartsAt, ct);
+    }
+
+    /// <summary>What the copy needs: a name of its own and when it runs.</summary>
+    public record CopyActivityDto
+    {
+        public string? Slug { get; init; }
+        public DateTime StartsAt { get; init; }
     }
 }

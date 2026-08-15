@@ -86,6 +86,33 @@ namespace AlgoJudge.Server.Controllers
             return Created($"/api/v1/manager/activities/{created.Id}", created);
         }
 
+        /// <summary>
+        /// Copies an activity for a new run of it.
+        ///
+        /// <para>
+        /// <b>The copy arrives unpublished.</b> It has rounds, dates and problem
+        /// assignments and nobody can reach it until somebody says so - which is
+        /// the point: a copy of last year is not this year until a person has
+        /// been through it.
+        /// </para>
+        /// </summary>
+        [HttpPost("{id:guid}/duplicate")]
+        [ProducesResponseType<ManagedActivityDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<ManagedActivityDto>> Duplicate(
+            Guid id, [FromBody] DuplicateActivityDto input, CancellationToken ct)
+        {
+            var copy = await activities.DuplicateAsync(id, input.Slug ?? "", input.StartsAt, ct);
+            return Created($"/api/v1/manager/activities/{copy.Id}", copy);
+        }
+
+        /// <summary>Makes an activity exist for the people taking part, or stops it.</summary>
+        [HttpPost("{id:guid}/published")]
+        [ProducesResponseType<ManagedActivityDto>(StatusCodes.Status200OK)]
+        public Task<ManagedActivityDto> SetPublished(
+            Guid id, [FromBody] PublishedInputDto input, CancellationToken ct) =>
+            activities.SetPublishedAsync(id, input.Published, ct);
+
         [HttpPost("{idOrSlug}/series")]
         [ProducesResponseType<ManagedSeriesDto>(StatusCodes.Status201Created)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
@@ -95,6 +122,24 @@ namespace AlgoJudge.Server.Controllers
             var created = await series.CreateAsync(idOrSlug, input, ct);
             return Created($"/api/v1/manager/activities/{idOrSlug}/series", created);
         }
+    }
+
+    public record PublishedInputDto
+    {
+        public bool Published { get; init; }
+    }
+
+    /// <summary>What a copy needs that cannot be derived from the original.</summary>
+    public record DuplicateActivityDto
+    {
+        /// <summary>The new activity's slug. Taken ones are refused, not suffixed.</summary>
+        public string? Slug { get; init; }
+
+        /// <summary>
+        /// When the first round of the copy begins. Everything else dated moves
+        /// with it, by the same amount on the activity's own clock.
+        /// </summary>
+        public DateTime StartsAt { get; init; }
     }
 
     /// <summary>Assignments: attaching a library problem to a round.</summary>

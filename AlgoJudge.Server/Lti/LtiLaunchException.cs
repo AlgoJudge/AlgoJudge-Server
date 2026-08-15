@@ -57,6 +57,19 @@ namespace AlgoJudge.Server.Lti
         /// The activity is already placed in another course and nobody has
         /// accepted that it should be reachable from two.
         /// </summary>
+        /// <summary>
+        /// The activity exists and is being prepared.
+        ///
+        /// <para>
+        /// <b>Its own code rather than a general failure</b>, because the page a
+        /// participant reads inside their course has to say something true: this
+        /// is not broken, not misconfigured, and there is nothing for them to do
+        /// but come back. Everybody who may edit it launches into it normally,
+        /// which is how it gets prepared at all.
+        /// </para>
+        /// </summary>
+        public const string NotPublished = "notPublished";
+
         public const string SharingNotAcknowledged = "sharingNotAcknowledged";
     }
 }
