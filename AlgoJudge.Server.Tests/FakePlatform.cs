@@ -64,6 +64,7 @@ public sealed class FakePlatform : IDisposable
         string? contextId = null,
         string? activitySlug = "activity-slug",
         string? username = "jkowalski",
+        string? contextHistory = null,
         string? locale = "pl",
         string[]? roles = null,
         string? messageType = LtiClaims.ResourceLinkRequest,
@@ -76,6 +77,9 @@ public sealed class FakePlatform : IDisposable
         var custom = new Dictionary<string, object>();
         if (activitySlug is not null) custom["activity"] = activitySlug;
         if (username is not null) custom["username"] = username;
+        // The courses this one was copied from, newest first. Moodle sends a
+        // comma-separated list and only when there is one.
+        if (contextHistory is not null) custom["context_history"] = contextHistory;
 
         var claims = new Dictionary<string, object>
         {
