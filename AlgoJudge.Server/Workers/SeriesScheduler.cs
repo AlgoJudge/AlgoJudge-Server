@@ -115,17 +115,27 @@ namespace AlgoJudge.Server.Workers
                     && (s.StartDate == null || s.StartDate <= now)
                     && s.PausedAt == null
                     && (s.EndDate == null || s.EndDate > now))
+                .AsNoTracking()
                 .ToListAsync(ct);
 
+            var opened = 0;
             foreach (var round in due)
             {
+                var claimed = await context.Series
+                    .Where(s => s.Id == round.Id && s.StartAnnouncedAt == null)
+                    .ExecuteUpdateAsync(u => u
+                        .SetProperty(s => s.IsOpen, true)
+                        .SetProperty(s => s.StartAnnouncedAt, now), ct);
+
+                if (claimed == 0) continue;
+
+                // The copy in hand was read before that update, so it is brought
+                // level with what the database now holds — the announcement is
+                // built from it.
                 round.IsOpen = true;
                 round.StartAnnouncedAt = now;
-            }
-            if (due.Count > 0) await context.SaveChangesAsync(ct);
+                opened++;
 
-            foreach (var round in due)
-            {
                 var late = round.StartDate is { } start && now - start > Slack;
                 if (late)
                 {
@@ -136,7 +146,7 @@ namespace AlgoJudge.Server.Workers
                 await AnnounceAsync(context, events, gate, round, "opened", late, ct);
             }
 
-            return due.Count;
+            return opened;
         }
 
         private async Task<int> CloseAsync(
@@ -147,26 +157,34 @@ namespace AlgoJudge.Server.Workers
                 .Include(s => s.Activity)
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
                 .Where(s => s.EndAnnouncedAt == null && s.EndDate != null && s.EndDate <= now)
+                .AsNoTracking()
                 .ToListAsync(ct);
 
+            var closed = 0;
             foreach (var round in due)
             {
+                var claimed = await context.Series
+                    .Where(s => s.Id == round.Id && s.EndAnnouncedAt == null)
+                    .ExecuteUpdateAsync(u => u
+                        .SetProperty(s => s.IsOpen, false)
+                        .SetProperty(s => s.EndAnnouncedAt, now)
+                        // A round that ended without ever being opened — one
+                        // created wholly in the past — is still marked opened, so
+                        // nothing later tries to open it.
+                        .SetProperty(s => s.StartAnnouncedAt, s => s.StartAnnouncedAt ?? now), ct);
+
+                if (claimed == 0) continue;
+
                 round.IsOpen = false;
                 round.EndAnnouncedAt = now;
-                // A round that ended without ever being opened — one created
-                // wholly in the past — is still marked opened, so nothing later
-                // tries to open it.
                 round.StartAnnouncedAt ??= now;
-            }
-            if (due.Count > 0) await context.SaveChangesAsync(ct);
+                closed++;
 
-            foreach (var round in due)
-            {
                 var late = round.EndDate is { } end && now - end > Slack;
                 await AnnounceAsync(context, events, gate, round, "closed", late, ct);
             }
 
-            return due.Count;
+            return closed;
         }
 
         /// <summary>
@@ -180,17 +198,23 @@ namespace AlgoJudge.Server.Workers
                 .Where(s => s.WindowAnnouncedAt == null
                     && ((s.RankingVisibleFrom != null && s.RankingVisibleFrom <= now)
                         || (s.RankingVisibleFrom == null && s.StartDate != null && s.StartDate <= now)))
+                .AsNoTracking()
                 .ToListAsync(ct);
 
-            foreach (var round in due) round.WindowAnnouncedAt = now;
-            if (due.Count > 0) await context.SaveChangesAsync(ct);
-
+            var announced = 0;
             foreach (var round in due)
             {
+                var claimed = await context.Series
+                    .Where(s => s.Id == round.Id && s.WindowAnnouncedAt == null)
+                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.WindowAnnouncedAt, now), ct);
+
+                if (claimed == 0) continue;
+
+                announced++;
                 await RankingAsync(context, events, round, "windowOpened", ct);
             }
 
-            return due.Count;
+            return announced;
         }
 
         /// <summary>
@@ -204,13 +228,19 @@ namespace AlgoJudge.Server.Workers
                 .Where(s => s.UnfrozenAnnouncedAt == null
                     && s.RankingFreezeAt != null
                     && s.RankingRevealAt != null && s.RankingRevealAt <= now)
+                .AsNoTracking()
                 .ToListAsync(ct);
 
-            foreach (var round in due) round.UnfrozenAnnouncedAt = now;
-            if (due.Count > 0) await context.SaveChangesAsync(ct);
-
+            var announced = 0;
             foreach (var round in due)
             {
+                var claimed = await context.Series
+                    .Where(s => s.Id == round.Id && s.UnfrozenAnnouncedAt == null)
+                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.UnfrozenAnnouncedAt, now), ct);
+
+                if (claimed == 0) continue;
+
+                announced++;
                 await RankingAsync(context, events, round, "unfrozen", ct);
             }
 
