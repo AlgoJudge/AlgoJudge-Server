@@ -118,6 +118,35 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public DateTime? ArchivedAt { get; set; }
 
+        /// <summary>
+        /// When somebody decided this exists for the people taking part. Null
+        /// means never: it is being prepared.
+        ///
+        /// <para>
+        /// <b>The whole activity, not each round.</b> An unpublished activity
+        /// answers one question — "is there anything here yet" — and a copy of
+        /// last year's course is the case it exists for: it has rounds, dates and
+        /// problems, and none of it is meant for anybody until somebody has been
+        /// through it. Hiding rounds one by one would allow a half-published copy
+        /// that nobody chose and that reads, from outside, exactly like a
+        /// deliberate schedule.
+        /// </para>
+        ///
+        /// <para>
+        /// <b>Nothing opens while it is null.</b> `SeriesScheduler` skips the
+        /// whole activity, so a round whose window has passed does not spring
+        /// open the moment somebody copies it. Whoever may edit the activity
+        /// still reaches it — otherwise there would be no way to prepare it.
+        /// </para>
+        ///
+        /// <para>
+        /// A timestamp rather than a flag, like <see cref="ArchivedAt"/> beside
+        /// it: "since when was this visible" is a question that gets asked, and a
+        /// boolean cannot answer it.
+        /// </para>
+        /// </summary>
+        public DateTime? PublishedAt { get; set; }
+
         public ICollection<Series> Series { get; set; } = new List<Series>();
         public ICollection<Question> Questions { get; set; } = new List<Question>();
 

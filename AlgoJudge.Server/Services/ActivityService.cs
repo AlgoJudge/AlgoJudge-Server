@@ -16,6 +16,36 @@ namespace AlgoJudge.Server.Services
         Task<ActivityDto> GetAsync(string idOrSlug, CancellationToken ct);
         Task<PageDto<ManagedActivityDto>> ListManagedAsync(PageQuery paging, string? search, bool includeArchived, CancellationToken ct);
         Task<ManagedActivityDto> GetManagedAsync(string idOrSlug, CancellationToken ct);
+
+        /// <summary>
+        /// Whether this activity has been published. A fact, not a decision: who
+        /// may see an unpublished one is answered by the permission, and this
+        /// exists so a caller can ask without holding it.
+        /// </summary>
+        Task<bool> IsPublishedAsync(Guid id, CancellationToken ct);
+
+        /// <summary>
+        /// Copies an activity's shape - its rounds, the problems assigned to
+        /// them, its settings - and nothing that happened in it.
+        /// </summary>
+        /// <param name="startsAt">
+        /// When the first round of the copy begins. Everything dated moves by the
+        /// same amount, measured on the activity's own wall clock.
+        /// </param>
+        Task<ManagedActivityDto> DuplicateAsync(
+            Guid id, string slug, DateTime startsAt, CancellationToken ct);
+
+        /// <summary>
+        /// Says this exists for the people taking part, or takes that back.
+        ///
+        /// <para>
+        /// <b>Withdrawing does not undo what happened.</b> Rounds already opened
+        /// stay open in every record of them; this stops the scheduler and hides
+        /// the activity from the people it was published to, which is the most an
+        /// unpublish can honestly claim.
+        /// </para>
+        /// </summary>
+        Task<ManagedActivityDto> SetPublishedAsync(Guid id, bool published, CancellationToken ct);
         Task<ManagedActivityDto> CreateAsync(ActivityInputDto input, CancellationToken ct);
         Task<ActivityDto> EnrolAsync(string idOrSlug, EnrolInputDto input, CancellationToken ct);
         Task<Activity> ResolveAsync(string idOrSlug, CancellationToken ct);
@@ -87,9 +117,15 @@ namespace AlgoJudge.Server.Services
             var memberships = await MembershipsAsync(ct);
             var now = clock.GetUtcNow().UtcDateTime;
 
+            // **Nothing unpublished reaches this list.** The flag stops the
+            // scheduler, and stopping the scheduler alone would leave a copy of
+            // last year invisible in the timetable and reachable by anybody who
+            // knew its address - which is worse than either state on its own.
+            // Whoever may edit it reaches it through the manager's screens, which
+            // is where preparing it happens.
             var candidates = await context.Activities
                 .AsNoTracking()
-                .Where(a => a.ArchivedAt == null)
+                .Where(a => a.ArchivedAt == null && a.PublishedAt != null)
                 .ToListAsync(ct);
 
             var visible = candidates
@@ -146,6 +182,15 @@ namespace AlgoJudge.Server.Services
 
             var member = memberships.ContainsKey(activity.Id);
             var listed = !activity.Unlisted && activity.JoinPolicy != JoinPolicy.Closed;
+
+            // **Being in it does not make an unpublished activity readable.** A
+            // copy carries no members, but a rebound placement could; the only
+            // people who see one being prepared are the people preparing it.
+            if (activity.PublishedAt is null
+                && !await permissions.HasAsync(Permissions.ActivityUpdate, activity.Id, ct))
+            {
+                throw new NotFoundException("Activity");
+            }
 
             // Not 403: an activity somebody may not see must not be confirmed to
             // exist by the shape of the refusal. The address is guessable.
@@ -226,6 +271,216 @@ namespace AlgoJudge.Server.Services
                 activity, await DocumentsAsync(activity.Id, ct), seriesCount, problemCount, participantCount);
         }
 
+        public async Task<bool> IsPublishedAsync(Guid id, CancellationToken ct) =>
+            await context.Activities.AsNoTracking()
+                .Where(a => a.Id == id)
+                .Select(a => a.PublishedAt)
+                .FirstOrDefaultAsync(ct) is not null;
+
+        public async Task<ManagedActivityDto> SetPublishedAsync(
+            Guid id, bool published, CancellationToken ct)
+        {
+            var activity = await context.Activities.FirstOrDefaultAsync(a => a.Id == id, ct)
+                ?? throw new NotFoundException("Activity");
+            await permissions.RequireAsync(Permissions.ActivityUpdate, activity.Id, ct);
+
+            // Publishing twice is not an event. Keeping the first timestamp is
+            // the honest answer to "since when could people see this".
+            if (published && activity.PublishedAt is null)
+            {
+                activity.PublishedAt = clock.GetUtcNow().UtcDateTime;
+            }
+            else if (!published)
+            {
+                activity.PublishedAt = null;
+            }
+
+            await context.SaveChangesAsync(ct);
+            return await ManagedAsync(activity, ct);
+        }
+
+        public async Task<ManagedActivityDto> DuplicateAsync(
+            Guid id, string slug, DateTime startsAt, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.ActivityCreate, null, ct);
+            var source = await context.Activities
+                .Include(a => a.Series).ThenInclude(r => r.SeriesProblems)
+                .Include(a => a.AttachmentRules)
+                .FirstOrDefaultAsync(a => a.Id == id, ct)
+                ?? throw new NotFoundException("Activity");
+
+            // Being allowed to make activities is not being allowed to take this
+            // one: a copy carries the problems somebody assigned and the settings
+            // they chose.
+            await permissions.RequireAsync(Permissions.ActivityUpdate, source.Id, ct);
+
+            slug = slug.Trim();
+            if (slug.Length == 0) throw new ValidationException("A slug is required", "slug.required");
+            if (await context.Activities.AnyAsync(a => a.Slug.ToLower() == slug.ToLower(), ct))
+            {
+                throw new ConflictException(
+                    "An activity with that slug already exists", "activity.slug.taken");
+            }
+
+            var shift = ShiftFor(source, startsAt);
+
+            var copy = new Activity
+            {
+                Slug = slug,
+                Name = source.Name,
+                Type = source.Type,
+                TimeZone = source.TimeZone,
+                RankingType = source.RankingType,
+                ScoreVisibility = source.ScoreVisibility,
+                MaxUploadBytes = source.MaxUploadBytes,
+                StartDate = shift(source.StartDate),
+                EndDate = shift(source.EndDate),
+                HasQuestions = source.HasQuestions,
+                JoinPolicy = source.JoinPolicy,
+                // **Not the password.** The people who took the activity this was
+                // copied from know it, and a new cohort would be joinable by the
+                // previous one.
+                JoinPassword = null,
+                Unlisted = source.Unlisted,
+                HideEndedSeriesProblems = source.HideEndedSeriesProblems,
+                Props = source.Props,
+                Languages = [.. source.Languages],
+                MaxAttachments = source.MaxAttachments,
+                MaxSubmissionsPerProblem = source.MaxSubmissionsPerProblem,
+                // **Nothing here is for anybody yet**, which is the whole reason
+                // the column exists: a copy has rounds and dates and is not ready
+                // for the people who would otherwise land in it.
+                PublishedAt = null,
+                ArchivedAt = null,
+            };
+
+            foreach (var round in source.Series.OrderBy(r => r.Order))
+            {
+                var copied = new Series
+                {
+                    Activity = copy,
+                    Slug = round.Slug,
+                    Name = round.Name,
+                    Order = round.Order,
+                    StartDate = shift(round.StartDate),
+                    EndDate = shift(round.EndDate),
+                    RankingFreezeAt = shift(round.RankingFreezeAt),
+                    RankingRevealAt = shift(round.RankingRevealAt),
+                    RankingVisibleFrom = shift(round.RankingVisibleFrom),
+                    RankingVisibleTo = shift(round.RankingVisibleTo),
+                    HideProblemsWhilePaused = round.HideProblemsWhilePaused,
+                    RevealProblemCount = round.RevealProblemCount,
+                    // **Six fields of state are left at their defaults**, named
+                    // here because leaving them out is the point: a copy has
+                    // never opened, never closed and never announced anything.
+                    // Carrying `StartAnnouncedAt` over would make the scheduler
+                    // treat the copy as already announced and stay silent about a
+                    // round nobody was ever told about.
+                };
+
+                foreach (var assignment in round.SeriesProblems.OrderBy(a => a.Order))
+                {
+                    copied.SeriesProblems.Add(new SeriesProblem
+                    {
+                        Series = copied,
+                        Activity = copy,
+                        ProblemId = assignment.ProblemId,
+                        // A pinned version travels with the assignment. A copy
+                        // that quietly followed the newest version would set
+                        // different work from the activity it was copied from.
+                        PinnedProblemVersionId = assignment.PinnedProblemVersionId,
+                        Slug = assignment.Slug,
+                        Name = assignment.Name,
+                        Order = assignment.Order,
+                        MaxPoints = assignment.MaxPoints,
+                        Config = assignment.Config,
+                        MaxUploadBytes = assignment.MaxUploadBytes,
+                        MaxAttachments = assignment.MaxAttachments,
+                        MaxSubmissions = assignment.MaxSubmissions,
+                    });
+                }
+
+                copy.Series.Add(copied);
+            }
+
+            foreach (var rule in source.AttachmentRules)
+            {
+                copy.AttachmentRules.Add(new AttachmentRule
+                {
+                    Activity = copy,
+                    Name = rule.Name,
+                    Visibility = rule.Visibility,
+                });
+            }
+
+            context.Activities.Add(copy);
+            await context.SaveChangesAsync(ct);
+
+            return await ManagedAsync(copy, ct);
+        }
+
+        /// <summary>
+        /// How far everything dated moves, as a function that leaves nulls alone.
+        ///
+        /// <para>
+        /// <b>Measured on the activity's own wall clock, not in UTC.</b> A round
+        /// starting at 09:00 in Warsaw is expected to start at 09:00 in the copy,
+        /// and a fixed offset in absolute time moves it to 10:00 whenever the
+        /// copy crosses a daylight-saving boundary - which a copy made in
+        /// February for October does.
+        /// </para>
+        ///
+        /// <para>
+        /// The anchor is the <b>earliest round start</b>, because that is what
+        /// "when does this begin" means to whoever is copying; the activity's own
+        /// start stands in only when no round has one. With nothing dated at all
+        /// there is nothing to move.
+        /// </para>
+        /// </summary>
+        private static Func<DateTime?, DateTime?> ShiftFor(Activity source, DateTime startsAt)
+        {
+            var anchor = source.Series
+                .Select(r => r.StartDate)
+                .Where(d => d != null)
+                .OrderBy(d => d)
+                .FirstOrDefault() ?? source.StartDate;
+
+            if (anchor is null) return _ => null;
+
+            var zone = Zone(source.TimeZone);
+            var from = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(anchor.Value, DateTimeKind.Utc), zone);
+            var to = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(startsAt, DateTimeKind.Utc), zone);
+            var delta = to - from;
+
+            return moment =>
+            {
+                if (moment is null) return null;
+                var local = TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTime.SpecifyKind(moment.Value, DateTimeKind.Utc), zone) + delta;
+                return TimeZoneInfo.ConvertTimeToUtc(
+                    DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone);
+            };
+        }
+
+        /// <summary>
+        /// The activity's zone, or UTC when this installation does not know it.
+        /// Windows and Linux disagree about zone ids, and a copy refusing to
+        /// happen over that would be worse than one measured in UTC.
+        /// </summary>
+        private static TimeZoneInfo Zone(string id)
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException)
+            {
+                return TimeZoneInfo.Utc;
+            }
+        }
+
         public async Task<ManagedActivityDto> CreateAsync(ActivityInputDto input, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ActivityCreate, null, ct);
@@ -242,6 +497,12 @@ namespace AlgoJudge.Server.Services
             var policy = ParseJoinPolicy(input.JoinPolicy);
             var activity = new Activity
             {
+                // **Made deliberately, so it exists deliberately.** The
+                // unpublished state is for a copy, which nobody sat down and
+                // wrote: somebody making an activity from nothing has already
+                // decided it should be there, and asking them to say so twice
+                // would be ceremony rather than a safeguard.
+                PublishedAt = clock.GetUtcNow().UtcDateTime,
                 Slug = slug,
                 Name = input.Name?.Trim() is { Length: > 0 } name ? name : slug,
                 Type = input.Type ?? "contest@1",

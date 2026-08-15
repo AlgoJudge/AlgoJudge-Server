@@ -30,6 +30,8 @@ namespace AlgoJudge.Server.Lti.Controllers
         IIdentityResolver identities,
         ILtiEnrolmentService enrolment,
         ILaunchTickets tickets,
+        AlgoJudge.Server.Services.IActivityService activities,
+        AlgoJudge.Server.Services.IPermissionService permissions,
         SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
         Data.LtiDbContext db,
         TimeProvider clock,
@@ -143,6 +145,17 @@ namespace AlgoJudge.Server.Lti.Controllers
                             "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(link))));
 
                     case Resolution.Resolved resolved:
+                        // **Checked after the person is known**, because the
+                        // answer differs by who they are: whoever may edit the
+                        // activity is preparing it and launches into it, and
+                        // everybody else is told it is not open yet.
+                        if (!await activities.IsPublishedAsync(link.ActivityId, ct)
+                            && !await permissions.HasAsync(
+                                Permissions.ActivityUpdate, link.ActivityId, ct))
+                        {
+                            return Failed(LtiLaunchException.NotPublished);
+                        }
+
                         await enrolment.EnrolAsync(
                             link, launch.Platform.ProviderId, resolved.User.Id, launch.Roles, ct);
 
