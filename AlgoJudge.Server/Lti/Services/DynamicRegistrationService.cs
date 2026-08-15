@@ -276,11 +276,21 @@ namespace AlgoJudge.Server.Lti.Services
                     // What this tool wants to be told about a person. It asks for
                     // no more than the launch already reads.
                     ["claims"] = new[] { "sub", "iss", "name", "given_name", "family_name", "email" },
+                    // **Both, or the second one can never happen.** A platform
+                    // registered here offering only the first gets a tool that
+                    // cannot be asked what to place — measured on Moodle 5.2
+                    // (2026-08-15), where a dynamically registered tool without
+                    // this message simply has no content selection.
                     ["messages"] = new object[]
                     {
                         new Dictionary<string, object?>
                         {
                             ["type"] = "LtiResourceLinkRequest",
+                        },
+                        new Dictionary<string, object?>
+                        {
+                            ["type"] = "LtiDeepLinkingRequest",
+                            ["target_link_uri"] = api + "/lti/launch",
                         },
                     },
                     // **The parameter identity linking rests on** (§4.3), asked

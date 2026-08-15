@@ -129,6 +129,32 @@ public class LtiDynamicRegistrationTests(ServerFixture server)
         Assert.DoesNotContain("basicoutcome", scopes);
     }
 
+    /// <summary>
+    /// <b>A registration that offers only one message type is a tool half of
+    /// which cannot be reached.</b> Moodle gives a dynamically registered tool
+    /// content selection only if the registration asked for it, so a platform
+    /// admitted this way could never use deep linking — found by registering
+    /// against a real 5.2 rather than by reading the specification.
+    /// </summary>
+    [Fact]
+    public async Task The_registration_offers_both_errands_this_tool_answers()
+    {
+        var (host, registry, manager) = await BuildAsync();
+
+        await RegisterAsync(host, await InviteAsync(manager));
+
+        using var document = JsonDocument.Parse(Assert.Single(registry.Registered));
+        var messages = document.RootElement
+            .GetProperty("https://purl.imsglobal.org/spec/lti-tool-configuration")
+            .GetProperty("messages")
+            .EnumerateArray()
+            .Select(m => m.GetProperty("type").GetString())
+            .ToList();
+
+        Assert.Contains("LtiResourceLinkRequest", messages);
+        Assert.Contains("LtiDeepLinkingRequest", messages);
+    }
+
     [Fact]
     public async Task The_platforms_own_token_is_carried_back_to_it()
     {
