@@ -31,7 +31,6 @@ namespace AlgoJudge.Server.Lti.Controllers
         ILtiEnrolmentService enrolment,
         ILaunchTickets tickets,
         AlgoJudge.Server.Services.IActivityService activities,
-        AlgoJudge.Server.Services.IPermissionService permissions,
         SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
         Data.LtiDbContext db,
         TimeProvider clock,
@@ -145,13 +144,19 @@ namespace AlgoJudge.Server.Lti.Controllers
                             "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(link))));
 
                     case Resolution.Resolved resolved:
-                        // **Checked after the person is known**, because the
-                        // answer differs by who they are: whoever may edit the
-                        // activity is preparing it and launches into it, and
-                        // everybody else is told it is not open yet.
+                        // **Decided by the same role the grant is decided by.**
+                        // Whoever runs the course at the platform is the person
+                        // preparing the copy, and they launch into it; everybody
+                        // else is told it is not open yet.
+                        //
+                        // Deliberately the platform's roles rather than this
+                        // installation's permissions: the permission belongs to
+                        // an account, and nobody is signed in yet at this point
+                        // in the request - the session is established two lines
+                        // below. Trusting the role claim here trusts it for
+                        // exactly what the enrolment already trusts it for.
                         if (!await activities.IsPublishedAsync(link.ActivityId, ct)
-                            && !await permissions.HasAsync(
-                                Permissions.ActivityUpdate, link.ActivityId, ct))
+                            && !LtiRoles.RunsTheCourse(launch.Roles))
                         {
                             return Failed(LtiLaunchException.NotPublished);
                         }
