@@ -50,6 +50,7 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.INrpsClient, Services.NrpsClient>();
             services.AddScoped<Services.IRosterService, Services.RosterService>();
             services.AddScoped<Services.IDynamicRegistrationService, Services.DynamicRegistrationService>();
+            services.AddScoped<Services.IDeepLinkService, Services.DeepLinkService>();
             services.AddScoped<Controllers.ILaunchTickets, Controllers.LaunchTickets>();
             services.AddSingleton<Services.IPlatformTokens, Services.PlatformTokens>();
             services.AddHostedService<Workers.GradeSyncWorker>();
