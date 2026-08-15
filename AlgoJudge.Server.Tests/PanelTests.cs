@@ -247,7 +247,13 @@ public class PanelTests(ServerFixture server)
     public async Task Duplicating_a_problem_copies_only_the_newest_version()
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
-        var problems = await admin.GetFromJsonAsync<JsonElement>("/api/v1/problems?pageSize=50");
+        // **Asked for by name, not read off the first page.** The suite shares
+        // one database and every run creates more problems than the last; this
+        // used to take the first fifty and look for the seeded one among them,
+        // which held until the fiftieth problem existed and then failed only in
+        // a full run.
+        var problems = await admin.GetFromJsonAsync<JsonElement>(
+            "/api/v1/problems?page=1&pageSize=50&search=sum");
         var seeded = problems.GetProperty("items").EnumerateArray()
             .First(p => p.GetProperty("slug").GetString() == "sum");
 

@@ -3,6 +3,7 @@ using AlgoJudge.Server.Database;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
@@ -98,6 +99,14 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
     public HttpClient Closed() =>
         WithWebHostBuilder(builder => builder.UseSetting("Admin:Token", "")).CreateClient();
 
+    /// <summary>
+    /// The six the application registers through a factory: the drainer, the
+    /// lease reaper, the deletion sweeper, the series scheduler, the file
+    /// collector and the storage migrator. The LTI grade worker is registered by
+    /// type and does not sweep on its own timer.
+    /// </summary>
+    private const int ExpectedSweepers = 6;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Development, so the host applies migrations and seeds the data the
@@ -123,6 +132,48 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         // in for a real socket.
         builder.ConfigureServices(services =>
             services.AddSingleton<IStartupFilter>(new CallerAddress(IPAddress.Loopback)));
+
+        // **The background workers are off, in every host this fixture builds.**
+        //
+        // They sweep on their own timers — the series scheduler every fifteen
+        // seconds — against the one database the whole suite shares, and every
+        // host a test builds runs its own copy of them. So a round a test creates
+        // can be opened by a scheduler in another host: the row looks right, and
+        // the announcement the test is watching for went to that host's event hub
+        // instead. That is exactly what
+        // `Two_schedulers_at_once_announce_each_round_exactly_once` kept failing
+        // on, once per full run and never alone.
+        //
+        // Nothing here waits for a worker to act; the tests that exercise one
+        // resolve it and call `TickAsync` themselves, which is both deterministic
+        // and what they already did.
+        //
+        // **Removed by their registration shape rather than by type**, because
+        // they are registered through factories while the framework's own
+        // `GenericWebHostService` — the one that serves HTTP — is registered by
+        // type. Removing every `IHostedService` would take the server down with
+        // them. The count is asserted so that a worker registered the other way
+        // fails here loudly instead of quietly sweeping under the suite again.
+        builder.ConfigureServices(services =>
+        {
+            var sweepers = services
+                .Where(d => d.ServiceType == typeof(IHostedService)
+                            && d.ImplementationFactory is not null)
+                .ToList();
+
+            if (sweepers.Count != ExpectedSweepers)
+            {
+                throw new InvalidOperationException(
+                    $"The fixture expected to switch off {ExpectedSweepers} background workers "
+                    + $"and found {sweepers.Count}. If one was added or registered by type, say so "
+                    + "here — a worker left running sweeps the shared test database.");
+            }
+
+            foreach (var sweeper in sweepers)
+            {
+                services.Remove(sweeper);
+            }
+        });
     }
 
     /// <summary>
