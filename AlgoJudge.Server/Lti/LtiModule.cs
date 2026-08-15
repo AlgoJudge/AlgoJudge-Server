@@ -47,6 +47,8 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.IAgsClient, Services.AgsClient>();
             services.AddScoped<Services.IGradeVerifier, Services.GradeVerifier>();
             services.AddScoped<Services.IPlacementService, Services.PlacementService>();
+            services.AddScoped<Services.INrpsClient, Services.NrpsClient>();
+            services.AddScoped<Services.IRosterService, Services.RosterService>();
             services.AddScoped<Controllers.ILaunchTickets, Controllers.LaunchTickets>();
             services.AddSingleton<Services.IPlatformTokens, Services.PlatformTokens>();
             services.AddHostedService<Workers.GradeSyncWorker>();
@@ -55,6 +57,12 @@ namespace AlgoJudge.Server.Lti
                 http => http.Timeout = TimeSpan.FromSeconds(15));
             services.AddHttpClient(nameof(Services.AgsClient),
                 http => http.Timeout = TimeSpan.FromSeconds(30));
+
+            // Longer than the others: a roster is one request per page and a
+            // large course is several, against a university's Moodle rather than
+            // ours. Nobody is waiting in a redirect chain for this one.
+            services.AddHttpClient(nameof(Services.NrpsClient),
+                http => http.Timeout = TimeSpan.FromSeconds(60));
 
             // **A singleton, because the cache is the point.** A per-request
             // instance would fetch every platform's key set on every launch.

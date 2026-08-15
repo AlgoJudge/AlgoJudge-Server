@@ -113,6 +113,15 @@ public sealed class FakePlatform : IDisposable
                 },
                 ["lineitems"] = FakeGradebook.LineItemsUrl,
             },
+            // And where its roster lives. Carried by default for the same
+            // reason: a tool registered with the membership scope gets this on
+            // every launch, and a placement that never saw one has nowhere to
+            // read a course's members from.
+            [LtiClaims.NrpsService] = new Dictionary<string, object>
+            {
+                ["context_memberships_url"] = FakeRoster.MembershipsUrl,
+                ["service_versions"] = new[] { "2.0" },
+            },
         };
 
         var descriptor = new SecurityTokenDescriptor

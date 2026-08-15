@@ -72,8 +72,34 @@ namespace AlgoJudge.Server.Lti
         /// the one thing the permission model forbids everywhere else.
         /// </para>
         /// </summary>
+        /// <para>
+        /// <b>Both spellings are accepted, because platforms send both.</b> A
+        /// launch carries the full vocabulary IRI; Moodle's roster service
+        /// answers with the bare term — <c>Learner</c>, <c>Instructor</c> —
+        /// measured on 5.2.2, 2026-08-15. Matching IRIs alone would read every
+        /// instructor on a roster as a participant, silently, which is the same
+        /// shape of defect as the flattened roles claim that made every launch a
+        /// learner.
+        /// </para>
         public static bool RunsTheCourse(IEnumerable<string> roles) =>
-            roles.Any(role =>
-                role is Instructor or ContentDeveloper or Mentor or InstitutionInstructor);
+            roles.Any(role => Term(role) is "Instructor" or "ContentDeveloper" or "Mentor");
+
+        /// <summary>
+        /// The role itself, with any vocabulary in front of it removed.
+        /// <para>
+        /// <c>InstitutionInstructor</c> is the institution vocabulary's own
+        /// <c>Instructor</c>, so trimming the namespace makes the two one term —
+        /// which is what the list above wants anyway.
+        /// </para>
+        /// </summary>
+        private static string Term(string role)
+        {
+            var hash = role.LastIndexOf('#');
+            var term = hash >= 0 ? role[(hash + 1)..] : role;
+            // A context role may arrive as `Instructor#TeachingAssistant`; the
+            // part before the sub-role is the one that decides.
+            var slash = term.LastIndexOf('/');
+            return slash >= 0 ? term[(slash + 1)..] : term;
+        }
     }
 }
