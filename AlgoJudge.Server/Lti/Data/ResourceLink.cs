@@ -77,6 +77,24 @@ namespace AlgoJudge.Server.Lti.Data
         public string? AgsLineItemsUrl { get; set; }
 
         /// <summary>
+        /// Where the platform will answer with this course's roster.
+        ///
+        /// <para>
+        /// Kept for the same reason the line-item container is, and refreshed on
+        /// every launch for the same reason: a tool re-registered with the
+        /// membership scope starts carrying this, and a placement made before
+        /// that would otherwise never learn where the roster is.
+        /// </para>
+        ///
+        /// <para>
+        /// Null means the platform offered no roster — the service switched off,
+        /// or a tool registered without the scope. That is a state to report on
+        /// the screen that would have used it, not an error to retry.
+        /// </para>
+        /// </summary>
+        public string? NrpsMembershipsUrl { get; set; }
+
+        /// <summary>
         /// Which attempt becomes the grade.
         /// <para>
         /// <b>It lives here rather than on <c>Activity</c>, and that is a

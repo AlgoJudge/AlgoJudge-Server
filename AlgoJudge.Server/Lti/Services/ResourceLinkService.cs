@@ -62,6 +62,13 @@ namespace AlgoJudge.Server.Lti.Services
                     changed = true;
                 }
 
+                var roster = NrpsEndpoint.Parse(launch.NrpsJson)?.ContextMemberships;
+                if (roster is not null && existing.NrpsMembershipsUrl != roster)
+                {
+                    existing.NrpsMembershipsUrl = roster;
+                    changed = true;
+                }
+
                 if (changed) await db.SaveChangesAsync(ct);
 
                 return existing;
@@ -98,6 +105,7 @@ namespace AlgoJudge.Server.Lti.Services
                 ContextHistory = launch.ContextHistory,
                 ActivityId = activity.Id,
                 AgsLineItemsUrl = AgsEndpoint.Parse(launch.AgsEndpointJson)?.LineItems,
+                NrpsMembershipsUrl = NrpsEndpoint.Parse(launch.NrpsJson)?.ContextMemberships,
                 // True on the first placement, because there is nothing to
                 // accept. False on a later one until a manager says so.
                 SharingAcknowledged = !alreadyPlaced,

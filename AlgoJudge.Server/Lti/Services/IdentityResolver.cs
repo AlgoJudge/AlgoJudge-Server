@@ -29,6 +29,26 @@ namespace AlgoJudge.Server.Lti.Services
     public interface IIdentityResolver
     {
         Task<Resolution> ResolveAsync(LaunchedMessage launch, CancellationToken ct);
+
+        /// <summary>
+        /// The account a platform may claim under this username, or null.
+        ///
+        /// <para>
+        /// <b>The same safeguard a launch goes through, and deliberately the same
+        /// code.</b> A roster reaches this too, and a second implementation of
+        /// "may this platform have that account" is how the two drift until one
+        /// of them is wrong.
+        /// </para>
+        ///
+        /// <para>
+        /// <b>It never creates anybody.</b> A launch may, because a person is
+        /// standing there having just authenticated at the platform; a roster is
+        /// a list read on somebody else's behalf, and creating accounts from it
+        /// would invent an account for every name in a course that happens to
+        /// look like one of ours.
+        /// </para>
+        /// </summary>
+        Task<User?> MatchAsync(Platform platform, string username, CancellationToken ct);
     }
 
     /// <summary>
@@ -78,6 +98,17 @@ namespace AlgoJudge.Server.Lti.Services
                 }
 
                 existing.LastLaunchAt = clock.GetUtcNow().UtcDateTime;
+
+                // **A launch is the witness a roster never was** (§4.4). A
+                // provisional link was inferred from a list somebody else read;
+                // this person has now authenticated at the platform and arrived
+                // under the same subject, which is the evidence the link was
+                // waiting for. It is raised once and never lowered.
+                if (existing.Strength == LinkStrength.Provisional)
+                {
+                    existing.Strength = LinkStrength.Confirmed;
+                }
+
                 await db.SaveChangesAsync(ct);
                 return new Resolution.Resolved(user, existing);
             }
@@ -146,6 +177,21 @@ namespace AlgoJudge.Server.Lti.Services
             await db.SaveChangesAsync(ct);
 
             return new Resolution.Resolved(candidate, link);
+        }
+
+        public async Task<User?> MatchAsync(
+            Platform platform, string username, CancellationToken ct)
+        {
+            if (!platform.IsIdentityAuthority) return null;
+            if (string.IsNullOrWhiteSpace(platform.IdentityNamespace)) return null;
+            if (string.IsNullOrWhiteSpace(username)) return null;
+
+            var candidate = await users.FindByNameAsync(username.Trim());
+            if (candidate is null) return null;
+
+            return await BelongsToNamespaceAsync(candidate, platform.IdentityNamespace, ct)
+                ? candidate
+                : null;
         }
 
         /// <summary>

@@ -19,8 +19,40 @@ namespace AlgoJudge.Server.Lti.Controllers
     [Route("lti/placements")]
     [Authorize]
     public class LtiPlacementsController(
-        IGradeVerifier verifier, IPlacementService placements) : ControllerBase
+        IGradeVerifier verifier, IPlacementService placements, IRosterService rosters) : ControllerBase
     {
+        /// <summary>
+        /// The course's roster, as the platform describes it.
+        ///
+        /// <para>
+        /// <b>Read when somebody asks, never on a timer</b> (decided 2026-08-15).
+        /// This is a university's Moodle, and a screen that reloaded on a
+        /// schedule would be traffic they never asked for.
+        /// </para>
+        /// </summary>
+        [HttpGet("{id:guid}/roster")]
+        [ProducesResponseType<RosterView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<RosterView> Roster(Guid id, CancellationToken ct) =>
+            rosters.ReadAsync(id, ct);
+
+        /// <summary>
+        /// Puts that roster into the activity.
+        ///
+        /// <para>
+        /// Separate from reading it, and a POST, because it writes: a manager
+        /// looks first and then decides. Answers what it did and — the part worth
+        /// reading — what it declined to do and why.
+        /// </para>
+        /// </summary>
+        [HttpPost("{id:guid}/roster/enrol")]
+        [ProducesResponseType<RosterEnrolment>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<RosterEnrolment> Enrol(Guid id, CancellationToken ct) =>
+            rosters.EnrolAsync(id, ct);
+
         /// <summary>
         /// Every course link this installation knows, newest first.
         /// <para>

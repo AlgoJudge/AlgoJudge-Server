@@ -198,6 +198,42 @@ public class LtiIdentityTests(ServerFixture server)
     }
 
     /// <summary>
+    /// The same instructor, named the short way.
+    ///
+    /// <para>
+    /// <b>Platforms send both spellings.</b> A launch carries the full
+    /// vocabulary IRI; Moodle's roster service answers with the bare term —
+    /// measured on 5.2.2, 2026-08-15, where the roster came back
+    /// <c>["Learner"]</c> while the launch had said
+    /// <c>http://purl.imsglobal.org/vocab/lis/v2/membership#Learner</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Matching IRIs alone would read every instructor on a roster as a
+    /// participant — silently, and only where milestone 2 puts people in a
+    /// course without them launching. The same shape as the flattened roles
+    /// claim that once made every launch a learner.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_instructor_named_the_short_way_is_still_staff()
+    {
+        using var platform = new FakePlatform();
+        await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: ["Instructor"]);
+
+        var grant = await GrantAsync(host, user.Id);
+        Assert.NotNull(grant);
+        Assert.Equal("manager", grant!.CreatedFromTemplate);
+        Assert.True(grant.IsSystem);
+    }
+
+    /// <summary>
     /// A system role at the platform says what somebody may do in Moodle.
     /// Reading it as authority here would let a claim mint privilege, which the
     /// permission model forbids everywhere else.
