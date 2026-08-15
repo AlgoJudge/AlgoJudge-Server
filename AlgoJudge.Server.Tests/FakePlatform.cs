@@ -140,6 +140,76 @@ public sealed class FakePlatform : IDisposable
     }
 
     /// <summary>
+    /// A platform opening Deep Linking: "tell me what to place here".
+    ///
+    /// <para>
+    /// Shaped from what Moodle sends — <c>accept_types</c> is the single string
+    /// <c>ltiResourceLink</c>, and the return address carries its session key,
+    /// both measured on 4.5.13 and 5.2.2 (2026-08-15). Carries no resource link,
+    /// because there is nothing there yet.
+    /// </para>
+    /// </summary>
+    public string DeepLinkToken(
+        string nonce,
+        string? subject = null,
+        string? username = "jkowalski",
+        string? returnUrl = null,
+        string? data = "moodle-opaque-data",
+        bool acceptMultiple = true,
+        string? documentTarget = "iframe",
+        string[]? roles = null)
+    {
+        var settings = new Dictionary<string, object>
+        {
+            ["accept_types"] = new[] { "ltiResourceLink" },
+            ["accept_presentation_document_targets"] = new[] { "frame", "iframe", "window" },
+            ["accept_multiple"] = acceptMultiple,
+            ["deep_link_return_url"] =
+                returnUrl ?? Issuer + "/mod/lti/contentitem_return.php?course=2&id=7&sesskey=aBc123",
+        };
+        if (data is not null) settings["data"] = data;
+
+        var custom = new Dictionary<string, object>();
+        if (username is not null) custom["username"] = username;
+
+        var claims = new Dictionary<string, object>
+        {
+            ["sub"] = subject ?? "moodle-user-1",
+            ["nonce"] = nonce,
+            [LtiClaims.MessageType] = LtiClaims.DeepLinkingRequest,
+            [LtiClaims.Version] = LtiClaims.SupportedVersion,
+            [LtiClaims.DeploymentId] = DeploymentId,
+            [LtiClaims.Context] = new Dictionary<string, object>
+            {
+                ["id"] = "course-1",
+                ["title"] = "Algorytmy i struktury danych",
+            },
+            [LtiClaims.Roles] = roles ?? [LtiRoles.Instructor],
+            [LtiClaims.Custom] = custom,
+            [LtiClaims.DeepLinkingSettings] = settings,
+            [LtiClaims.LaunchPresentation] = new Dictionary<string, object>
+            {
+                ["document_target"] = documentTarget ?? "window",
+                ["locale"] = "pl",
+            },
+        };
+
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = Issuer,
+            Audience = ClientId,
+            Expires = DateTime.UtcNow.AddMinutes(5),
+            IssuedAt = DateTime.UtcNow,
+            NotBefore = DateTime.UtcNow.AddMinutes(-1),
+            Claims = claims,
+            SigningCredentials = new SigningCredentials(
+                new RsaSecurityKey(rsa) { KeyId = Kid }, SecurityAlgorithms.RsaSha256),
+        };
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
+
+    /// <summary>
     /// The claim value for a nested object, for a test that wants to see what
     /// the module read.
     /// </summary>

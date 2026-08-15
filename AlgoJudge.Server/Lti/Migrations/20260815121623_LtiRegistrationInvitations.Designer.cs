@@ -3,6 +3,7 @@ using System;
 using AlgoJudge.Server.Lti.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Lti.Migrations
 {
     [DbContext(typeof(LtiDbContext))]
-    partial class LtiDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260815121623_LtiRegistrationInvitations")]
+    partial class LtiRegistrationInvitations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,65 +24,6 @@ namespace AlgoJudge.Server.Lti.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("AlgoJudge.Server.Lti.Data.DeepLinkSession", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("AcceptMultiple")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ContextId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ContextTitle")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Data")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("Embedded")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Locale")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("PlatformId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ReturnUrl")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UsedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.HasIndex("PlatformId");
-
-                    b.ToTable("LtiDeepLinkSessions", (string)null);
-                });
 
             modelBuilder.Entity("AlgoJudge.Server.Lti.Data.ExternalIdentity", b =>
                 {
@@ -487,17 +431,6 @@ namespace AlgoJudge.Server.Lti.Migrations
                         .IsUnique();
 
                     b.ToTable("LtiToolKeys", (string)null);
-                });
-
-            modelBuilder.Entity("AlgoJudge.Server.Lti.Data.DeepLinkSession", b =>
-                {
-                    b.HasOne("AlgoJudge.Server.Lti.Data.Platform", "Platform")
-                        .WithMany()
-                        .HasForeignKey("PlatformId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Platform");
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Lti.Data.ExternalIdentity", b =>

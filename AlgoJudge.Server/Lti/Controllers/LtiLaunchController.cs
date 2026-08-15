@@ -31,6 +31,8 @@ namespace AlgoJudge.Server.Lti.Controllers
         ILtiEnrolmentService enrolment,
         ILaunchTickets tickets,
         SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
+        Data.LtiDbContext db,
+        TimeProvider clock,
         IConfiguration configuration) : ControllerBase
     {
         /// <summary>
@@ -100,8 +102,19 @@ namespace AlgoJudge.Server.Lti.Controllers
 
             try
             {
-                var launch = await launches.CompleteAsync(
+                var completed = await launches.CompleteAsync(
                     form["state"].FirstOrDefault(), form["id_token"].FirstOrDefault(), ct);
+
+                // **Two errands arrive here.** A platform opening Deep Linking is
+                // asking what to place, and there is nothing to run yet: no
+                // resource link, no activity, no grant. It shares everything up
+                // to this point and nothing after it.
+                if (completed is Launched.ToChoose choosing)
+                {
+                    return await ChooseAsync(choosing.Request, ct);
+                }
+
+                var launch = ((Launched.ToRun)completed).Message;
 
                 // The placement first: a launch that names no activity, or one
                 // shared into a second course without anybody accepting it, is
@@ -183,6 +196,56 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// and it has to match what was registered on the platform's side, so it
         /// is built the same way the registration screen builds it.
         /// </summary>
+        /// <summary>
+        /// Sends whoever is choosing into the application to choose.
+        ///
+        /// <para>
+        /// <b>The same identity rules as a launch, and no weaker.</b> Somebody
+        /// picking what to place is placing links into a course; if this tool
+        /// cannot say who they are, it says so rather than showing them a list of
+        /// activities. A conflict is reported the same way it is on a launch.
+        /// </para>
+        /// </summary>
+        private async Task<IActionResult> ChooseAsync(DeepLinkRequest request, CancellationToken ct)
+        {
+            var resolution = await identities.ResolveAsync(request, ct);
+
+            switch (resolution)
+            {
+                case Resolution.Conflict conflict:
+                    return Redirect(AppUrl(
+                        "/lti/conflict"
+                        + "?stored=" + Uri.EscapeDataString(conflict.Stored)
+                        + "&asserted=" + Uri.EscapeDataString(conflict.Asserted)));
+
+                case Resolution.NeedsSignIn:
+                    // Nowhere to come back to but here, and this request is spent
+                    // by then: the platform has to open Deep Linking again. Said
+                    // plainly on the page rather than looking like a failure.
+                    return Redirect(AppUrl("/lti/sign-in?returnTo="
+                        + Uri.EscapeDataString("/lti/choose-again")));
+
+                case Resolution.Resolved resolved:
+                    var embedded = string.Equals(request.DocumentTarget, "iframe",
+                        StringComparison.OrdinalIgnoreCase);
+
+                    await signIn.SignInAsync(resolved.User,
+                        EmbeddedSessions.Properties(embedded, isPersistent: true));
+
+                    var session = DeepLinkService.Begin(
+                        request, resolved.User.Id, embedded, clock.GetUtcNow().UtcDateTime);
+
+                    db.DeepLinkSessions.Add(session);
+                    await db.SaveChangesAsync(ct);
+
+                    return Redirect(AppUrl(
+                        "/lti/choose?code=" + Uri.EscapeDataString(session.Code)));
+
+                default:
+                    return Failed(LtiLaunchException.BadToken);
+            }
+        }
+
         private string RedirectUri()
         {
             var apiUrl = (configuration["PublicApiUrl"]

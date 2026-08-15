@@ -30,8 +30,42 @@ namespace AlgoJudge.Server.Lti
         public const string NrpsService =
             "https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice";
 
-        /// <summary>The only message type milestone 1 accepts.</summary>
+        /// <summary>
+        /// Deep Linking, which is its own namespace — <c>lti-dl</c>, not
+        /// <c>lti</c>. Measured in Moodle's `locallib.php` on 4.5.13 and 5.2.2
+        /// (2026-08-15), where a claim carrying the <c>dl</c> suffix is built by
+        /// appending it to the prefix the other claims share.
+        /// </summary>
+        private const string DeepLinking = "https://purl.imsglobal.org/spec/lti-dl/claim/";
+
+        /// <summary>What the platform will accept back, and where to send it.</summary>
+        public const string DeepLinkingSettings = DeepLinking + "deep_linking_settings";
+
+        /// <summary>What this tool chose, in the response.</summary>
+        public const string ContentItems = DeepLinking + "content_items";
+
+        /// <summary>
+        /// The platform's own opaque string, echoed back untouched.
+        ///
+        /// <para>
+        /// <b>Moodle reads it from inside <c>deep_linking_settings</c></b> rather
+        /// than from here, and then ignores it: `contentitem_return.php` reads
+        /// only the items, the message type and the version. Sent at the address
+        /// the specification gives, because a platform that does check it is the
+        /// one this matters to.
+        /// </para>
+        /// </summary>
+        public const string DeepLinkingData = DeepLinking + "data";
+
+        /// <summary>A line for the platform to show whoever picked.</summary>
+        public const string DeepLinkingMessage = DeepLinking + "msg";
+
+        /// <summary>The message type milestone 1 accepts.</summary>
         public const string ResourceLinkRequest = "LtiResourceLinkRequest";
+
+        /// <summary>"Choose something to place here", and what answers it.</summary>
+        public const string DeepLinkingRequest = "LtiDeepLinkingRequest";
+        public const string DeepLinkingResponse = "LtiDeepLinkingResponse";
 
         public const string SupportedVersion = "1.3.0";
     }

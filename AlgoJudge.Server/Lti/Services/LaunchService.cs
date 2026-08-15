@@ -52,6 +52,48 @@ namespace AlgoJudge.Server.Lti.Services
         public string? NrpsJson { get; init; }
     }
 
+    /// <summary>
+    /// What a platform asked for when it opened Deep Linking: not "run this",
+    /// but "tell me what to place here".
+    /// </summary>
+    public record DeepLinkRequest
+    {
+        public required Platform Platform { get; init; }
+        public required string Subject { get; init; }
+        public required string ContextId { get; init; }
+        public string? ContextTitle { get; init; }
+        public required IReadOnlyList<string> Roles { get; init; }
+        public string? AssertedUsername { get; init; }
+        public string? Locale { get; init; }
+        public string? DocumentTarget { get; init; }
+
+        /// <summary>Where the signed answer is posted. The platform's, not ours.</summary>
+        public required string ReturnUrl { get; init; }
+
+        /// <summary>Echoed back untouched, if the platform sent one.</summary>
+        public string? Data { get; init; }
+
+        public bool AcceptMultiple { get; init; }
+    }
+
+    /// <summary>
+    /// A validated launch, which is one of two different errands arriving at one
+    /// address.
+    ///
+    /// <para>
+    /// <b>A union rather than one record with optional halves.</b> A deep linking
+    /// request carries no resource link, and a shape where that field is merely
+    /// nullable invites the code that forgets to check — which would place
+    /// somebody in a course by a link the platform never sent.
+    /// </para>
+    /// </summary>
+    public abstract record Launched
+    {
+        public sealed record ToRun(LaunchedMessage Message) : Launched;
+
+        public sealed record ToChoose(DeepLinkRequest Request) : Launched;
+    }
+
     public interface ILaunchService
     {
         /// <summary>
@@ -63,7 +105,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// Validates a launch and consumes its state. Throws
         /// <see cref="LtiLaunchException"/> for every refusal.
         /// </summary>
-        Task<LaunchedMessage> CompleteAsync(string? state, string? idToken, CancellationToken ct);
+        Task<Launched> CompleteAsync(string? state, string? idToken, CancellationToken ct);
     }
 
     /// <summary>
@@ -155,7 +197,7 @@ namespace AlgoJudge.Server.Lti.Services
             return platform.AuthLoginUrl + separator + string.Join('&', parts);
         }
 
-        public async Task<LaunchedMessage> CompleteAsync(
+        public async Task<Launched> CompleteAsync(
             string? state, string? idToken, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(idToken))
@@ -293,18 +335,72 @@ namespace AlgoJudge.Server.Lti.Services
             return platform;
         }
 
-        private static LaunchedMessage Read(JsonWebToken token, Platform platform)
+        private static Launched Read(JsonWebToken token, Platform platform)
         {
-            if (Claim(token, LtiClaims.MessageType) != LtiClaims.ResourceLinkRequest)
+            var type = Claim(token, LtiClaims.MessageType);
+            if (type != LtiClaims.ResourceLinkRequest && type != LtiClaims.DeepLinkingRequest)
             {
                 throw new LtiLaunchException(LtiLaunchException.UnsupportedMessage,
-                    $"This tool accepts {LtiClaims.ResourceLinkRequest} and nothing else in this version");
+                    $"This tool accepts {LtiClaims.ResourceLinkRequest} and "
+                    + $"{LtiClaims.DeepLinkingRequest}, and this launch was neither");
             }
             if (Claim(token, LtiClaims.Version) != LtiClaims.SupportedVersion)
             {
                 throw new LtiLaunchException(LtiLaunchException.UnsupportedMessage,
                     "This tool implements LTI 1.3 and the launch declared another version");
             }
+
+            return type == LtiClaims.DeepLinkingRequest
+                ? new Launched.ToChoose(ReadDeepLink(token, platform))
+                : new Launched.ToRun(ReadResourceLink(token, platform));
+        }
+
+        /// <summary>
+        /// The half of a deep linking request this tool acts on.
+        ///
+        /// <para>
+        /// <b>The return address is required and comes only from here.</b> It
+        /// carries the platform's own session key — measured in Moodle's
+        /// `contentitem_return.php`, which calls `require_sesskey()` — so a
+        /// response posted anywhere else is refused, and a return address taken
+        /// from anywhere else is a response posted at a stranger.
+        /// </para>
+        /// </summary>
+        private static DeepLinkRequest ReadDeepLink(JsonWebToken token, Platform platform)
+        {
+            var settings = Object(token, LtiClaims.DeepLinkingSettings);
+            var context = Object(token, LtiClaims.Context);
+            var custom = Object(token, LtiClaims.Custom);
+            var presentation = Object(token, LtiClaims.LaunchPresentation);
+
+            return new DeepLinkRequest
+            {
+                Platform = platform,
+                Subject = token.Subject
+                    ?? throw new LtiLaunchException(LtiLaunchException.BadToken,
+                        "The launch token carried no subject"),
+                ContextId = String(context, "id")
+                    ?? throw new LtiLaunchException(LtiLaunchException.UnsupportedMessage,
+                        "The request carried no context, so it belongs to no course"),
+                ContextTitle = String(context, "title"),
+                Roles = Strings(token, LtiClaims.Roles),
+                AssertedUsername = String(custom, platform.UsernameClaim),
+                Locale = String(presentation, "locale"),
+                DocumentTarget = String(presentation, "document_target"),
+                // Blank counts as absent. An empty string is a claim that is
+                // present and useless, and it would otherwise carry all the way
+                // to somebody pressing a button that posts nowhere.
+                ReturnUrl = String(settings, "deep_link_return_url") is { Length: > 0 } address
+                    ? address
+                    : throw new LtiLaunchException(LtiLaunchException.UnsupportedMessage,
+                        "The request named no address to send the choice back to"),
+                Data = String(settings, "data"),
+                AcceptMultiple = Flag(settings, "accept_multiple"),
+            };
+        }
+
+        private static LaunchedMessage ReadResourceLink(JsonWebToken token, Platform platform)
+        {
 
             var resourceLink = Object(token, LtiClaims.ResourceLink);
             var context = Object(token, LtiClaims.Context);
@@ -380,6 +476,29 @@ namespace AlgoJudge.Server.Lti.Services
             && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+
+        /// <summary>
+        /// A boolean that platforms also send as a string. Moodle sends a real
+        /// JSON boolean — `locallib.php` casts it — but the specification's own
+        /// examples show <c>"true"</c>, and reading one as absent would silently
+        /// turn "several are welcome" into "one only".
+        /// </summary>
+        private static bool Flag(JsonElement? element, string property)
+        {
+            if (element?.ValueKind != JsonValueKind.Object
+                || !element.Value.TryGetProperty(property, out var value))
+            {
+                return false;
+            }
+
+            return value.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.String => string.Equals(
+                    value.GetString(), "true", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
 
         private static IReadOnlyList<string> Strings(JsonWebToken token, string name)
         {

@@ -31,6 +31,13 @@ namespace AlgoJudge.Server.Lti.Services
         Task<Resolution> ResolveAsync(LaunchedMessage launch, CancellationToken ct);
 
         /// <summary>
+        /// The same question for somebody choosing what to place. Deliberately
+        /// the same code and the same refusals: a person this tool cannot name
+        /// may not place links either.
+        /// </summary>
+        Task<Resolution> ResolveAsync(DeepLinkRequest request, CancellationToken ct);
+
+        /// <summary>
         /// The account a platform may claim under this username, or null.
         ///
         /// <para>
@@ -69,12 +76,18 @@ namespace AlgoJudge.Server.Lti.Services
         TimeProvider clock
     ) : IIdentityResolver
     {
-        public async Task<Resolution> ResolveAsync(LaunchedMessage launch, CancellationToken ct)
+        public Task<Resolution> ResolveAsync(DeepLinkRequest request, CancellationToken ct) =>
+            ResolveAsync(request.Platform, request.Subject, request.AssertedUsername, ct);
+
+        public Task<Resolution> ResolveAsync(LaunchedMessage launch, CancellationToken ct) =>
+            ResolveAsync(launch.Platform, launch.Subject, launch.AssertedUsername, ct);
+
+        private async Task<Resolution> ResolveAsync(
+            Platform platform, string subject, string? assertedUsername, CancellationToken ct)
         {
-            var platform = launch.Platform;
 
             var existing = await db.ExternalIdentities
-                .FirstOrDefaultAsync(i => i.PlatformId == platform.Id && i.Subject == launch.Subject, ct);
+                .FirstOrDefaultAsync(i => i.PlatformId == platform.Id && i.Subject == subject, ct);
 
             if (existing is not null)
             {
@@ -82,7 +95,7 @@ namespace AlgoJudge.Server.Lti.Services
                 // move** (§4.3). Following it would hand one person's history to
                 // another because somebody edited a field in Moodle — and the
                 // person losing their work would be the one who noticed.
-                if (launch.AssertedUsername is { } asserted
+                if (assertedUsername is { } asserted
                     && existing.AssertedUsername is { } stored
                     && !string.Equals(stored, asserted, StringComparison.OrdinalIgnoreCase))
                 {
@@ -119,7 +132,7 @@ namespace AlgoJudge.Server.Lti.Services
             {
                 return new Resolution.NeedsSignIn("this platform may not assert who somebody is");
             }
-            if (string.IsNullOrWhiteSpace(launch.AssertedUsername))
+            if (string.IsNullOrWhiteSpace(assertedUsername))
             {
                 return new Resolution.NeedsSignIn("the launch carried no username");
             }
@@ -131,7 +144,7 @@ namespace AlgoJudge.Server.Lti.Services
                 return new Resolution.NeedsSignIn("this platform names no namespace to assert within");
             }
 
-            var username = launch.AssertedUsername.Trim();
+            var username = assertedUsername.Trim();
             var candidate = await users.FindByNameAsync(username);
 
             if (candidate is null)
@@ -167,7 +180,7 @@ namespace AlgoJudge.Server.Lti.Services
             var link = new ExternalIdentity
             {
                 PlatformId = platform.Id,
-                Subject = launch.Subject,
+                Subject = subject,
                 UserId = candidate.Id,
                 Strength = LinkStrength.Confirmed,
                 AssertedUsername = username,
