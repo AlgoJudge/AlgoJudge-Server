@@ -3,6 +3,7 @@ using System;
 using AlgoJudge.Server.Lti.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Lti.Migrations
 {
     [DbContext(typeof(LtiDbContext))]
-    partial class LtiDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260815121623_LtiRegistrationInvitations")]
+    partial class LtiRegistrationInvitations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -40,6 +40,7 @@ namespace AlgoJudge.Server.Lti.Data
         public DbSet<LaunchState> LaunchStates => Set<LaunchState>();
         public DbSet<LtiSettings> Settings => Set<LtiSettings>();
         public DbSet<LaunchTicket> LaunchTickets => Set<LaunchTicket>();
+        public DbSet<RegistrationInvitation> RegistrationInvitations => Set<RegistrationInvitation>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -58,6 +59,12 @@ namespace AlgoJudge.Server.Lti.Data
             builder.Entity<LaunchState>().ToTable("LtiLaunchStates");
             builder.Entity<LtiSettings>().ToTable("LtiSettings");
             builder.Entity<LaunchTicket>().ToTable("LtiLaunchTickets");
+            builder.Entity<RegistrationInvitation>().ToTable("LtiRegistrationInvitations");
+
+            // The code is what the whole endpoint is gated on, so it is looked up
+            // by it on every attempt — and two rows carrying one code would make
+            // "spent" ambiguous.
+            builder.Entity<RegistrationInvitation>().HasIndex(i => i.Code).IsUnique();
 
             builder.Entity<Platform>(platform =>
             {

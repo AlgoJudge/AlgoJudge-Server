@@ -13,6 +13,27 @@ namespace AlgoJudge.Server.Lti.Services
         Task<IReadOnlyList<Platform>> ListAsync(CancellationToken ct);
         Task<Platform> GetAsync(Guid id, CancellationToken ct);
         Task<Platform> RegisterAsync(PlatformInput input, CancellationToken ct);
+
+        /// <summary>
+        /// Registers a platform that arrived through an invitation, rather than
+        /// through somebody signed in here.
+        ///
+        /// <para>
+        /// <b>The permission was checked when the invitation was created</b>, by
+        /// the manager who created it; the browser completing the registration
+        /// belongs to the platform's administrator and has no account with us at
+        /// all. Asking for <c>provider:manage</c> again would ask it of the wrong
+        /// person and refuse every dynamic registration — which is exactly what
+        /// it did, until a test said so.
+        /// </para>
+        ///
+        /// <para>
+        /// It is a separate method rather than a flag so that the one call which
+        /// skips the check is greppable, and so that the ordinary path cannot
+        /// lose its check by somebody passing <c>false</c>.
+        /// </para>
+        /// </summary>
+        Task<Platform> RegisterInvitedAsync(PlatformInput input, CancellationToken ct);
         Task<Platform> UpdateAsync(Guid id, PlatformInput input, CancellationToken ct);
         Task DeleteAsync(Guid id, CancellationToken ct);
     }
@@ -85,6 +106,14 @@ namespace AlgoJudge.Server.Lti.Services
         public async Task<Platform> RegisterAsync(PlatformInput input, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
+            return await WriteAsync(input, ct);
+        }
+
+        public Task<Platform> RegisterInvitedAsync(PlatformInput input, CancellationToken ct) =>
+            WriteAsync(input, ct);
+
+        private async Task<Platform> WriteAsync(PlatformInput input, CancellationToken ct)
+        {
             Validate(input);
 
             var issuer = input.Issuer.Trim();

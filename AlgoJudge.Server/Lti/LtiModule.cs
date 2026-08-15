@@ -49,6 +49,7 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.IPlacementService, Services.PlacementService>();
             services.AddScoped<Services.INrpsClient, Services.NrpsClient>();
             services.AddScoped<Services.IRosterService, Services.RosterService>();
+            services.AddScoped<Services.IDynamicRegistrationService, Services.DynamicRegistrationService>();
             services.AddScoped<Controllers.ILaunchTickets, Controllers.LaunchTickets>();
             services.AddSingleton<Services.IPlatformTokens, Services.PlatformTokens>();
             services.AddHostedService<Workers.GradeSyncWorker>();
@@ -63,6 +64,11 @@ namespace AlgoJudge.Server.Lti
             // ours. Nobody is waiting in a redirect chain for this one.
             services.AddHttpClient(nameof(Services.NrpsClient),
                 http => http.Timeout = TimeSpan.FromSeconds(60));
+
+            // Short: a person is watching a spinner in an iframe on somebody
+            // else's site while this runs.
+            services.AddHttpClient(nameof(Services.DynamicRegistrationService),
+                http => http.Timeout = TimeSpan.FromSeconds(20));
 
             // **A singleton, because the cache is the point.** A per-request
             // instance would fetch every platform's key set on every launch.
