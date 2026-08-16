@@ -228,6 +228,12 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Version { get; init; }
         /// <summary>Matched by equality. Never parsed.</summary>
         public required IReadOnlyList<string> ProblemTypes { get; init; }
+        /// <summary>
+        /// Whether it sends submissions outside the installation. Shown because
+        /// approval is the moment an administrator decides to trust it with
+        /// somebody else's work leaving the building.
+        /// </summary>
+        public required bool External { get; init; }
         /// <summary>Free labels an operator sets.</summary>
         public required IReadOnlyList<string> Tags { get; init; }
         /// <summary>Where the Server saw the connection come from. Never reported.</summary>
@@ -412,6 +418,24 @@ namespace AlgoJudge.Server.Api.Contracts
         /// a setting nothing can change is not a setting.
         /// </summary>
         public required bool AccountDeletionEnabled { get; init; }
+
+        /// <summary>
+        /// Whether this installation may send submissions to a service it does
+        /// not run. **Shipped off**, so the privacy paragraph it needs belongs to
+        /// whoever turns it on.
+        /// <para>
+        /// <b>Optional, where every field beside it is required, and the
+        /// difference is deliberate.</b> This endpoint replaces the whole
+        /// settings object, so a new required field would refuse every request
+        /// written before it existed — including the one this Server's own suite
+        /// sends. Making it optional-and-absent mean <i>leave it alone</i> is the
+        /// only reading that is safe in both directions: an older caller saving
+        /// an unrelated setting must not silently switch external judging off,
+        /// which is exactly what a plain <c>bool</c> defaulting to false would
+        /// have done.
+        /// </para>
+        /// </summary>
+        public bool? ExternalJudgingEnabled { get; init; }
     }
 
     public record InstanceLogoInputDto

@@ -121,6 +121,12 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         // is that everything above IBlobStore behaves identically, and a suite
         // that needed a bucket to run would be slower for no reading it gives.
         builder.UseSetting("Storage:Stores:pg:Kind", "postgres");
+
+        // A reserved slug namespace, so the rule that keeps an importer's names
+        // to itself is in force for the whole suite rather than only inside the
+        // test that asserts it. Nothing else here creates a slug starting this
+        // way, and an installation that imports nothing configures none.
+        builder.UseSetting("Problems:ReservedSlugPrefixes:0", "Imported-");
         builder.UseSetting("Storage:Default", "pg");
 
         // `TestServer` leaves `RemoteIpAddress` null, and the maintenance switch

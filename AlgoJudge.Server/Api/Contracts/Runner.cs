@@ -29,6 +29,16 @@ namespace AlgoJudge.Server.Api.Contracts
         /// parses an entry.
         /// </summary>
         public required IReadOnlyList<string> ProblemTypes { get; init; }
+        /// <summary>
+        /// Whether this Runner sends submissions outside the installation.
+        /// <para>
+        /// Optional, and absent means <c>false</c>: a Runner written before this
+        /// existed evaluates locally, which is what it always did. Declaring it
+        /// is how a Runner that forwards work says so, and the Server hands out
+        /// external work to nobody else.
+        /// </para>
+        /// </summary>
+        public bool External { get; init; }
         /// <summary>Host facts, stored opaquely and shown in the panel.</summary>
         public object? Machine { get; init; }
     }

@@ -25,6 +25,31 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public required string Type { get; set; }
 
+        /// <summary>
+        /// Whether judging this problem sends a submission outside this
+        /// installation.
+        /// <para>
+        /// <b>Set once, at creation, and permanent.</b> Versions are append-only
+        /// and a republished statement never changes where the work goes, so
+        /// this cannot move: an installation that answers "does anything here
+        /// leave the building" must not get a different answer depending on
+        /// which version is read. A local equivalent of an external problem is a
+        /// <b>new problem with its own slug</b>, not this flag turned off.
+        /// </para>
+        /// <para>
+        /// On <see cref="Problem"/> rather than <see cref="ProblemVersion"/> for
+        /// the same reason: the question is about the problem, and answering it
+        /// should be one column rather than a walk through version history.
+        /// </para>
+        /// <para>
+        /// <b>The Server knows nothing else about it.</b> It never asks which
+        /// service, never parses the type, never treats one external problem
+        /// differently from another. This is a boolean it stores, compares
+        /// against a Runner's own boolean, and otherwise leaves alone.
+        /// </para>
+        /// </summary>
+        public bool External { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         /// <summary>

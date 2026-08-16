@@ -38,9 +38,53 @@ namespace AlgoJudge.Server.Services
         IEventHub events,
         IEventAudience audience,
         IFileService files,
+        IConfiguration configuration,
         TimeProvider clock
     ) : IProblemService
     {
+        /// <summary>
+        /// Slug prefixes an importer owns, from the installation's configuration.
+        /// <para>
+        /// <b>Configuration, never a literal here.</b> Writing
+        /// <c>slug.StartsWith("Imported-")</c> in this file would put the name of one
+        /// archive into the Server, which is the one thing this product's
+        /// architecture forbids — adding a problem type must not be a Server
+        /// change, and a Server that knows a type's name by heart has already
+        /// stopped being true to that. This reads a list and compares strings; it
+        /// never parses one, and it cannot tell you what any entry means.
+        /// </para>
+        /// <para>
+        /// Empty by default, so an installation that imports nothing reserves
+        /// nothing.
+        /// </para>
+        /// </summary>
+        private string[] ReservedSlugPrefixes =>
+            configuration.GetSection("Problems:ReservedSlugPrefixes").Get<string[]>() ?? [];
+
+        /// <summary>
+        /// Refuses a slug in a namespace an importer owns, unless the caller is
+        /// allowed to import.
+        /// <para>
+        /// The point is not secrecy — it is that two problems called
+        /// <c>Imported-100</c>, one imported and one typed in by hand, is a collision
+        /// nobody can untangle afterwards. So the namespace belongs to whoever
+        /// holds <see cref="Permissions.ProblemImportExternal"/>, and everybody
+        /// else is told plainly which prefix they hit.
+        /// </para>
+        /// </summary>
+        private async Task RefuseReservedPrefixAsync(string slug, CancellationToken ct)
+        {
+            var claimed = ReservedSlugPrefixes.FirstOrDefault(prefix =>
+                prefix.Length > 0 && slug.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+            if (claimed is null) return;
+            if (await permissions.HasAsync(Permissions.ProblemImportExternal, null, ct)) return;
+
+            throw new ValidationException(
+                $"The slug prefix \"{claimed}\" is reserved for imported problems",
+                "problem.slug.reserved");
+        }
+
 
         /// <summary>
         /// Tells whoever may read the library that it changed.
@@ -135,6 +179,7 @@ namespace AlgoJudge.Server.Services
 
             var slug = input.Slug?.Trim() ?? "";
             if (slug.Length == 0) throw new ValidationException("A slug is required", "slug.required");
+            await RefuseReservedPrefixAsync(slug, ct);
             if (await context.Problems.AnyAsync(p => p.Slug.ToLower() == slug.ToLower(), ct))
             {
                 throw new ConflictException("A problem with that slug already exists", "problem.slug.taken");
@@ -147,6 +192,11 @@ namespace AlgoJudge.Server.Services
                 Type = input.Type ?? "standard-io@1",
                 OwnerUserId = user.Id,
                 Visibility = ProblemVisibility.Private,
+                // The only place this is ever written. There is no endpoint that
+                // changes it afterwards, which is the whole of how "permanent"
+                // is enforced — a rule stated in a comment and checked nowhere
+                // is a rule until somebody adds a setter.
+                External = input.External,
             };
             context.Problems.Add(problem);
             await context.SaveChangesAsync(ct);
@@ -326,6 +376,10 @@ namespace AlgoJudge.Server.Services
 
             if (input.Slug is { } raw && raw.Trim() is { Length: > 0 } slug && slug != problem.Slug)
             {
+                // Renaming into the namespace is the same act as creating in it,
+                // and a rule that only guards creation is one somebody walks
+                // around on their second try.
+                await RefuseReservedPrefixAsync(slug, ct);
                 if (await context.Problems.AnyAsync(p => p.Slug.ToLower() == slug.ToLower() && p.Id != id, ct))
                 {
                     throw new ConflictException("A problem with that slug already exists", "problem.slug.taken");
@@ -409,6 +463,10 @@ namespace AlgoJudge.Server.Services
                 Name = source.Name + " (copy)",
                 Type = source.Type,
                 OwnerUserId = user.Id,
+                // Carried, because a copy of a problem judged elsewhere is also
+                // judged elsewhere. Dropping it here would quietly produce a
+                // problem the Server believes is local and no Runner can take.
+                External = source.External,
                 // Private, whatever the original was: a copy is a draft, and
                 // inheriting an instance-wide visibility would publish it by
                 // accident.

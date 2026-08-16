@@ -26,7 +26,8 @@ namespace AlgoJudge.Server.Tests;
 public static class Build
 {
     /// <summary>An activity with one open round and one problem worth 50, ready to submit to.</summary>
-    public static async Task<(string Slug, string RoundId)> ActivityAsync(ServerFixture server)
+    public static async Task<(string Slug, string RoundId)> ActivityAsync(
+        ServerFixture server, bool external = false)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
         var slug = "T" + Guid.NewGuid().ToString("N")[..9].ToUpperInvariant();
@@ -57,6 +58,7 @@ public static class Build
             slug = "p-" + slug.ToLowerInvariant(),
             name = "Test problem",
             type = "standard-io@1",
+            external,
         });
         var problemId = problem.GetProperty("id").GetString()!;
 
@@ -162,7 +164,7 @@ public static class Build
     /// the fixture, because they are the same database either way.
     /// </param>
     public static async Task<StubRunner> RunnerAsync(
-        ServerFixture server, WebApplicationFactory<Program>? host = null)
+        ServerFixture server, WebApplicationFactory<Program>? host = null, bool external = false)
     {
         var anonymous = server.CreateClient();
 
@@ -179,6 +181,7 @@ public static class Build
             version = "0.0.1",
             publicKey = pub,
             problemTypes = new[] { "standard-io@1" },
+            external,
         });
 
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);

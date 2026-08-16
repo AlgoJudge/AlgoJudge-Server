@@ -91,6 +91,18 @@ namespace AlgoJudge.Server.Authorization
         public const string ProblemArchive = "problem:archive";
         public const string ProblemAttach = "problem:attach";
 
+        /// <summary>
+        /// May create a problem whose slug carries a reserved prefix.
+        /// <para>
+        /// A prefix is reserved so that a person cannot hand-make a problem in a
+        /// namespace an importer owns — two problems called <c>Imported-100</c>, one
+        /// imported and one typed in, is a confusion nobody can undo afterwards.
+        /// The reserved list is <b>configuration</b>, never a literal in this
+        /// code: the Server must not learn the name of any particular archive.
+        /// </para>
+        /// </summary>
+        public const string ProblemImportExternal = "problem:import:external";
+
         public const string SubmissionReadOwn = "submission:read:own";
         public const string SubmissionReadAll = "submission:read:all";
         public const string SubmissionCreate = "submission:create";
@@ -213,6 +225,7 @@ namespace AlgoJudge.Server.Authorization
             Define(ProblemShare, "problem", PermissionScope.Global),
             Define(ProblemArchive, "problem", PermissionScope.Global),
             Define(ProblemAttach, "problem", PermissionScope.Both),
+            Define(ProblemImportExternal, "problem", PermissionScope.Global),
 
             Define(SubmissionReadOwn, "submission", PermissionScope.Activity),
             Define(SubmissionReadAll, "submission", PermissionScope.Both),

@@ -316,6 +316,13 @@ namespace AlgoJudge.Server.Controllers
             instance.ShowLogo = input.ShowLogo;
             instance.ShowLocalSignIn = input.ShowLocalSignIn;
             instance.AccountDeletionEnabled = input.AccountDeletionEnabled;
+            // Absent means "leave it alone", never "turn it off": a caller that
+            // predates this field is saving something else, and reading its
+            // silence as a decision would close the door under somebody.
+            if (input.ExternalJudgingEnabled is { } externalJudging)
+            {
+                instance.ExternalJudgingEnabled = externalJudging;
+            }
             await context.SaveChangesAsync(ct);
 
             return await AnnounceAsync(ct);
