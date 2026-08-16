@@ -46,6 +46,18 @@ public class ExternalJudgingTests(ServerFixture server)
             context.Instance.Add(instance);
         }
         instance.ExternalJudgingEnabled = allowed;
+        // The list goes back to what an installation ships with, so no test here
+        // depends on what another one left behind.
+        instance.ExternalFetchHosts = ["onlinejudge.org"];
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>Names the hosts this installation will fetch from.</summary>
+    private async Task AllowHostsAsync(params string[] hosts)
+    {
+        await using var context = server.NewContext();
+        var instance = await context.Instance.FirstAsync();
+        instance.ExternalFetchHosts = [.. hosts];
         await context.SaveChangesAsync();
     }
 
@@ -337,5 +349,35 @@ public class ExternalJudgingTests(ServerFixture server)
         });
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// **The rebinding guard, exercised with a real name and no hostile DNS.**
+    /// <para>
+    /// <c>localhost</c> is a name, not an address literal, so it passes every
+    /// check a string can make — and it resolves to the loopback interface,
+    /// which is exactly the shape of a host whose owner points it inside. The
+    /// refusal therefore comes from the one place that can see it: the moment of
+    /// connecting, after the name has been resolved.
+    /// </para>
+    /// <para>
+    /// This is the test that proves the callback is wired in at all. Without it
+    /// the address checks are a function nobody calls.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_resolves_inside_is_refused_at_the_socket()
+    {
+        await AllowExternalAsync(true);
+        await AllowHostsAsync("localhost");
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var refused = await admin.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://localhost/statement.pdf",
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("fetch.host.inside", await refused.Content.ReadAsStringAsync());
     }
 }

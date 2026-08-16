@@ -77,20 +77,7 @@ namespace AlgoJudge.Server.Services
 
             using var response = await SendAsync(decision.Target!, ct);
 
-            // **A redirect is not followed and not re-checked.** Re-checking is
-            // defensible and is also how this grows a second, subtler path to
-            // the same mistake; refusing is one line and cannot rot.
-            if ((int)response.StatusCode is >= 300 and < 400)
-            {
-                throw new ValidationException(
-                    "That address redirects, and a redirect is not followed", "fetch.redirect");
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new ValidationException(
-                    $"The host answered {(int)response.StatusCode}", "fetch.status");
-            }
+            RefuseUnlessUsable(response.StatusCode);
 
             await using var body = await response.Content.ReadAsStreamAsync(ct);
             await using var counted = new CountedStream(body, MaxBytes);
@@ -102,6 +89,35 @@ namespace AlgoJudge.Server.Services
             // bytes that arrived this way.
             return await files.CommitAsync(
                 staged, NameOf(decision.Target!), MediaTypeOf(response), staged.Key.Sha256, ct);
+        }
+
+        /// <summary>
+        /// What the far end answered, and whether it is something to store.
+        /// <para>
+        /// <b>A redirect is refused rather than followed or re-checked.</b>
+        /// Re-checking the new address is defensible and is also how this grows
+        /// a second, subtler path to the same mistake — every guard above was
+        /// made about the address the caller gave, and a redirect is one the far
+        /// end chose afterwards. Refusing is one line and cannot rot.
+        /// </para>
+        /// <para>
+        /// Public so it can be tested for what it is: a decision, not a network
+        /// call. Everything else on this path needs a socket to exercise, which
+        /// is exactly why this part does not.
+        /// </para>
+        /// </summary>
+        public static void RefuseUnlessUsable(HttpStatusCode status)
+        {
+            if ((int)status is >= 300 and < 400)
+            {
+                throw new ValidationException(
+                    "That address redirects, and a redirect is not followed", "fetch.redirect");
+            }
+
+            if ((int)status is < 200 or >= 300)
+            {
+                throw new ValidationException($"The host answered {(int)status}", "fetch.status");
+            }
         }
 
         private static async Task<HttpResponseMessage> SendAsync(Uri target, CancellationToken ct)
@@ -207,64 +223,5 @@ namespace AlgoJudge.Server.Services
 
         private sealed class InsideTheNetworkException(string host)
             : Exception($"{host} resolves only to addresses inside this network");
-    }
-
-    /// <summary>
-    /// A stream that stops at a ceiling.
-    /// <para>
-    /// <b>Counted while reading, never taken from a header.</b>
-    /// <c>Content-Length</c> is something the sender says, and a sender that
-    /// wanted to fill this disk would say whatever got past the check.
-    /// </para>
-    /// </summary>
-    internal sealed class CountedStream(Stream inner, long ceiling) : Stream
-    {
-        private long read;
-
-        public override async ValueTask<int> ReadAsync(
-            Memory<byte> buffer, CancellationToken ct = default)
-        {
-            var got = await inner.ReadAsync(buffer, ct);
-            Count(got);
-            return got;
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            var got = inner.Read(buffer, offset, count);
-            Count(got);
-            return got;
-        }
-
-        private void Count(int got)
-        {
-            read += got;
-            if (read > ceiling)
-            {
-                throw new ValidationException(
-                    $"That document is larger than {ceiling} bytes", "fetch.tooLarge");
-            }
-        }
-
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position
-        {
-            get => read;
-            set => throw new NotSupportedException();
-        }
-
-        public override void Flush() { }
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing) inner.Dispose();
-            base.Dispose(disposing);
-        }
     }
 }
