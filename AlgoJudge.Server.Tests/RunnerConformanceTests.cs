@@ -399,4 +399,59 @@ public class RunnerConformanceTests(ServerFixture server)
         var runnerRow = await context.Runners.FirstAsync(r => r.Id == stored.RunnerId);
         Assert.Equal(0, runnerRow.CompletedJobs);
     }
+    /// <summary>
+    /// A Runner says what it awarded **and** what it awarded it out of, and both
+    /// are read.
+    /// <para>
+    /// Every reader but the grade export assumed a scale of a hundred, so a
+    /// Runner marking out of one — which is what a problem judged elsewhere does,
+    /// since an external judge gives no partial information — had its accepted
+    /// answer rescaled as `round(1 / 100 × 50)`. That is zero. The export
+    /// meanwhile sent fifty, so a board and a gradebook showed two different
+    /// truths about one submission.
+    /// </para>
+    /// <para>
+    /// Found on 2026-08-16 by the second Runner implementation, which is what
+    /// `PROJECT_CONTEXT.md` §32 asks for one for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_runner_marking_out_of_one_is_not_read_as_a_hundredth()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(3)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submissionId);
+
+        var reported = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{Guid.Parse(job.GetProperty("jobId").GetString()!)}/report",
+            new
+            {
+                leaseToken = job.GetProperty("leaseToken").GetString(),
+                score = 1.0,
+                maxScore = 1.0,
+                verdict = "Accepted",
+            });
+        await Sign.Succeeded(reported);
+
+        var read = await participant.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/activities/{slug}/submissions/{submissionId}");
+
+        Assert.Equal(50, read.GetProperty("score").GetDouble());
+        Assert.Equal(50, read.GetProperty("maxScore").GetDouble());
+
+        // And the whole of the scale is a solve, not a partial: the assignment's
+        // point value must not decide what "solved" means.
+        var rounds = await participant.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/activities/{slug}/series");
+        var mine = rounds.EnumerateArray()
+            .SelectMany(round => round.GetProperty("problems").EnumerateArray())
+            .First(problem => problem.GetProperty("slug").GetString() == "A");
+        Assert.Equal("solved", mine.GetProperty("status").GetString());
+        Assert.Equal(50, mine.GetProperty("bestScore").GetDouble());
+    }
+
 }

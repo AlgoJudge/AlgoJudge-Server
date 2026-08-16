@@ -82,7 +82,7 @@ namespace AlgoJudge.Server.Services
                 SubmittedAt = Wire.At(submission.CreatedDate),
                 Language = submission.Language,
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
-                Score = Scoring.Rescale(current?.Result?.Score, maxPoints),
+                Score = Scoring.Rescale(Scoring.Fraction(current?.Result), maxPoints),
                 MaxScore = current?.Result?.Score is null ? null : maxPoints,
                 Verdict = current?.Result?.Verdict,
             };

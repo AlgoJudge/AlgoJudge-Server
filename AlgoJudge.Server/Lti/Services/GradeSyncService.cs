@@ -131,7 +131,7 @@ namespace AlgoJudge.Server.Lti.Services
 
             foreach (var entry in desired)
             {
-                var score = Scoring.Rescale(entry.Score, maxPoints, entry.MaxScore ?? Scoring.RunnerScale)
+                var score = Scoring.Rescale(Scoring.Fraction(entry.Score, entry.MaxScore), maxPoints)
                     ?? 0;
 
                 var existing = await db.GradeSyncStates.FirstOrDefaultAsync(
