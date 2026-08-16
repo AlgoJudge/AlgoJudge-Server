@@ -259,4 +259,83 @@ public class ExternalJudgingTests(ServerFixture server)
         });
         await Sign.Succeeded(imported);
     }
+
+    // ── Fetching content from a host the installation named ─────────────────
+
+    /// <summary>
+    /// **The switch governs both directions.** It decides whether work may go
+    /// out, and it decides whether content may be pulled in — one decision, so
+    /// an operator cannot close one door and leave the other standing open
+    /// without noticing.
+    /// </summary>
+    [Fact]
+    public async Task Nothing_is_fetched_while_external_judging_is_off()
+    {
+        await AllowExternalAsync(false);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var refused = await admin.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://onlinejudge.org/external/1/100.pdf",
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("fetch.disabled", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// A host nobody put on the list, refused before a packet is sent. The
+    /// address here is deliberately one that <b>ends with</b> an allowed name.
+    /// </summary>
+    [Fact]
+    public async Task A_host_the_installation_never_named_is_refused()
+    {
+        await AllowExternalAsync(true);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var refused = await admin.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://onlinejudge.org.example.invalid/100.pdf",
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("fetch.host.notAllowed", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// An address literal names a machine the list never mentioned.
+    [Fact]
+    public async Task An_address_literal_is_refused_before_anything_is_sent()
+    {
+        await AllowExternalAsync(true);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var refused = await admin.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://169.254.169.254/latest/meta-data/",
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("fetch.url.address", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// Fetching is a grant, not something every manager has. Checked before the
+    /// switch, so somebody without it cannot learn the installation's setting by
+    /// reading which refusal came back.
+    /// </summary>
+    [Fact]
+    public async Task Fetching_needs_the_import_permission()
+    {
+        await AllowExternalAsync(true);
+
+        var login = "fetcher-" + Guid.NewGuid().ToString("N")[..8];
+        var person = await Sign.NewAccountAsync(server, login);
+
+        var refused = await person.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://onlinejudge.org/external/1/100.pdf",
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
 }
