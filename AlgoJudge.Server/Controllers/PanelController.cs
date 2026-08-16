@@ -313,6 +313,97 @@ namespace AlgoJudge.Server.Controllers
         /// somebody is owed.
         /// </para>
         /// </summary>
+        /// <summary>Which named secrets this installation holds. Names only.</summary>
+        [HttpGet("access-keys")]
+        [ProducesResponseType<IReadOnlyList<AccessKeyDto>>(StatusCodes.Status200OK)]
+        public async Task<IReadOnlyList<AccessKeyDto>> AccessKeys(CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+
+            return await context.AccessKeys
+                .AsNoTracking()
+                .OrderBy(k => k.Name)
+                .Select(k => new AccessKeyDto { Name = k.Name, UpdatedAt = Wire.At(k.UpdatedAt)! })
+                .ToListAsync(ct);
+        }
+
+        /// <summary>
+        /// Sets one, or removes it when the value is empty.
+        /// <para>
+        /// <b>Write-only through this endpoint</b>, like every other secret here:
+        /// the answer says a key is set and when, never what it is. That it can
+        /// be read at all is the separate, deliberate exception below.
+        /// </para>
+        /// </summary>
+        [HttpPut("access-keys/{name}")]
+        [ProducesResponseType<IReadOnlyList<AccessKeyDto>>(StatusCodes.Status200OK)]
+        public async Task<IReadOnlyList<AccessKeyDto>> SetAccessKey(
+            string name, [FromBody] AccessKeyInputDto input, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+
+            var key = Named(name);
+            var existing = await context.AccessKeys.FirstOrDefaultAsync(k => k.Name == key, ct);
+            var value = input.Value.Trim();
+
+            if (value.Length == 0)
+            {
+                if (existing is not null) context.AccessKeys.Remove(existing);
+            }
+            else if (existing is null)
+            {
+                context.AccessKeys.Add(new Database.Models.AccessKey { Name = key, Value = value });
+            }
+            else
+            {
+                existing.Value = value;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync(ct);
+            return await AccessKeys(ct);
+        }
+
+        /// <summary>
+        /// Hands a named secret to a caller that needs it.
+        /// <para>
+        /// <b>The one place a stored secret comes back out</b>, and it exists
+        /// because the thing that needs this one runs in a manager's browser.
+        /// </para>
+        /// <para>
+        /// <b>Today there is one key and one gate.</b> `uvaexplorer` is handed to
+        /// whoever may import problems, because that is what it is for. A second
+        /// key must bring its own gate rather than inherit this one — a model
+        /// provider's credential given out because somebody may import problems
+        /// is a mistake nobody would notice until the bill arrived.
+        /// </para>
+        /// </summary>
+        [HttpGet("access-keys/{name}/value")]
+        [ProducesResponseType<AccessKeyValueDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
+        public async Task<AccessKeyValueDto> RequestAccessKey(string name, CancellationToken ct)
+        {
+            var key = Named(name);
+
+            await permissions.RequireAsync(key switch
+            {
+                "uvaexplorer" => Permissions.ProblemImportExternal,
+                // Unknown names are nobody's to read. Falling back to a manager
+                // permission would make every future key readable the day it is
+                // added and before anyone had decided who may read it.
+                _ => Permissions.SystemAdministrator,
+            }, null, ct);
+
+            var stored = await context.AccessKeys.AsNoTracking()
+                .FirstOrDefaultAsync(k => k.Name == key, ct)
+                ?? throw new NotFoundException($"The key {key}");
+
+            return new AccessKeyValueDto { Name = stored.Name, Value = stored.Value };
+        }
+
+        /// <summary>One spelling, so a name cannot be set twice in two cases.</summary>
+        private static string Named(string name) => name.Trim().ToLowerInvariant();
+
         [HttpGet("external-content")]
         [ProducesResponseType<ExternalContentDto>(StatusCodes.Status200OK)]
         public async Task<ExternalContentDto> ExternalContent(CancellationToken ct)

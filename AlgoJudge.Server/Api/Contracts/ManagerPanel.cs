@@ -408,6 +408,33 @@ namespace AlgoJudge.Server.Api.Contracts
     /// all. Manager-only — the destinations are operational detail, unlike the
     /// boolean, which every screen may read.
     /// </summary>
+    /// <summary>
+    /// A named secret is set, and when. <b>Never its value.</b> An administrator
+    /// needs to know one is configured, which is a different question from what
+    /// it is.
+    /// </summary>
+    public record AccessKeyDto
+    {
+        public required string Name { get; init; }
+        public required string UpdatedAt { get; init; }
+    }
+
+    public record AccessKeyInputDto
+    {
+        /// <summary>Empty removes it, which is how an installation stops holding a secret.</summary>
+        public required string Value { get; init; }
+    }
+
+    /// <summary>
+    /// The one answer that carries a secret. Handed only to a caller whose
+    /// permission covers what the key is for.
+    /// </summary>
+    public record AccessKeyValueDto
+    {
+        public required string Name { get; init; }
+        public required string Value { get; init; }
+    }
+
     public record ExternalContentDto
     {
         /// <summary>The instance switch. Read-only here; it is set with the rest of the settings.</summary>

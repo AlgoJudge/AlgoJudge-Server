@@ -8,6 +8,7 @@ namespace AlgoJudge.Server.Database
     public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<User>(options)
     {
         public DbSet<Instance> Instance { get; set; }
+        public DbSet<Models.AccessKey> AccessKeys { get; set; }
         public DbSet<MaintenanceState> Maintenance { get; set; }
         public DbSet<File> Files { get; set; }
         public DbSet<FileReference> FileReferences { get; set; }
@@ -65,6 +66,14 @@ namespace AlgoJudge.Server.Database
                     "CK_Instance_Singleton",
                     $"\"Id\" = '{Models.Instance.SingletonId}'"));
                 e.Property(i => i.ExternalFetchHosts).HasColumnType("text[]");
+            });
+
+            builder.Entity<Models.AccessKey>(e =>
+            {
+                e.ToTable("AccessKeys");
+                // The name is the identity: there is one key per name, and
+                // setting it again replaces it rather than adding a second.
+                e.HasKey(k => k.Name);
             });
 
             builder.Entity<MaintenanceState>(e =>
