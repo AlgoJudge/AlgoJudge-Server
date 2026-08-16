@@ -114,6 +114,10 @@ namespace AlgoJudge.Server.Services
                 existing.Product = input.Product;
                 existing.Version = input.Version;
                 existing.ProblemTypes = input.ProblemTypes.ToList();
+                // A capability like any other, and it may change: a Runner
+                // reconfigured to forward work says so on its next registration
+                // rather than keeping the answer it gave when it first started.
+                existing.External = input.External;
                 existing.Machine = input.Machine is null ? null : JsonSerializer.Serialize(input.Machine);
                 existing.Address = address;
                 existing.LastSeenAt = clock.GetUtcNow().UtcDateTime;
@@ -130,6 +134,7 @@ namespace AlgoJudge.Server.Services
                 Fingerprint = fingerprint,
                 State = RunnerState.PendingApproval,
                 ProblemTypes = input.ProblemTypes.ToList(),
+                External = input.External,
                 Machine = input.Machine is null ? null : JsonSerializer.Serialize(input.Machine),
                 // Read from the connection, never reported. A machine is a bad
                 // witness to how it is reached.
@@ -287,6 +292,21 @@ namespace AlgoJudge.Server.Services
                 return null;
             }
 
+            // **An installation that has not chosen to send work outside sends
+            // none**, and says so the same way a drained Server does: an empty
+            // queue. A Runner that forwards submissions is not refused, revoked
+            // or told off — it is simply given nothing, and the work waits for
+            // the switch rather than failing against it.
+            //
+            // Read here rather than cached: it is one row, on a path that is
+            // already doing a transaction and a locking read, and an operator
+            // turning the switch on expects the queue to start draining rather
+            // than to drain after a restart.
+            if (runner.External && !await ExternalJudgingAllowedAsync(ct))
+            {
+                return null;
+            }
+
             var now = clock.GetUtcNow().UtcDateTime;
             var lease = leaseSeconds is { } seconds
                 ? TimeSpan.FromSeconds(Math.Clamp(seconds, 60, MaxLease.TotalSeconds))
@@ -305,6 +325,19 @@ namespace AlgoJudge.Server.Services
             // thing. One parameter carrying the whole array is what is wanted.
             var types = (object)runner.ProblemTypes.ToArray();
 
+            // **The whole of the Server's knowledge about external judging, in
+            // one comparison.** An external problem goes to an external Runner
+            // and a local one does not — equality, not a rule with an exception,
+            // so neither half can leak into the other. The Server does not read
+            // the problem type to decide this, does not know which service is on
+            // the far end, and treats every external problem alike.
+            //
+            // The equality matters in both directions. A local problem reaching
+            // a forwarding Runner would send somebody's work out of the building
+            // without anyone having chosen that, which is worse than the case
+            // this was written for.
+            var external = (object)runner.External;
+
             // The lock is taken on the id alone, and the row is loaded through EF
             // afterwards inside the same transaction.
             //
@@ -321,10 +354,11 @@ namespace AlgoJudge.Server.Services
                     JOIN "Problems" p ON p."Id" = sp."ProblemId"
                     WHERE j."State" = 0
                       AND p."Type" = ANY({0})
+                      AND p."External" = {1}
                     ORDER BY j."CreatedAt"
                     FOR UPDATE OF j SKIP LOCKED
                     LIMIT 1
-                    """, types)
+                    """, types, external)
                 .ToListAsync(ct);
 
             if (claimedId.Count == 0)
@@ -812,6 +846,22 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>How many times a job may be handed out before it is given up on.</summary>
         public static int DeliveryCap => MaxDeliveries;
+
+        /// <summary>
+        /// Whether this installation has chosen to send work to a service it
+        /// does not run.
+        /// <para>
+        /// Absent row reads as <c>false</c>. An installation whose singleton has
+        /// not been written yet has chosen nothing, and "nothing chosen" is the
+        /// off position for this one — the safe direction is the one where
+        /// nobody's submission leaves the building by default.
+        /// </para>
+        /// </summary>
+        private async Task<bool> ExternalJudgingAllowedAsync(CancellationToken ct) =>
+            await context.Instance
+                .AsNoTracking()
+                .Select(i => i.ExternalJudgingEnabled)
+                .FirstOrDefaultAsync(ct);
 
         /// <summary>How long a fresh lease runs when the Runner does not ask.</summary>
         public static TimeSpan DefaultLeaseTime => DefaultLease;

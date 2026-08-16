@@ -92,6 +92,7 @@ namespace AlgoJudge.Server.Services
                 LocalRegistrationEnabled = instance.LocalRegistrationEnabled,
                 RequireEmail = instance.RequireEmail,
                 RequireConfirmedEmail = instance.RequireConfirmedEmail,
+                ExternalJudgingEnabled = instance.ExternalJudgingEnabled,
                 Documents = documents,
                 Logo = defaultLogo is null ? null : Logo(defaultLogo),
                 LogoTranslations = logos

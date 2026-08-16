@@ -719,6 +719,7 @@ namespace AlgoJudge.Server.Services
                 Product = runner.Product ?? "",
                 Version = runner.Version ?? "",
                 ProblemTypes = runner.ProblemTypes,
+                External = runner.External,
                 Tags = runner.Tags,
                 Address = runner.Address ?? "",
                 PublicKey = runner.PublicKey,

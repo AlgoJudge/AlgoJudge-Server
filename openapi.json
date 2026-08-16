@@ -11027,6 +11027,9 @@
           "requireConfirmedEmail": {
             "type": "boolean"
           },
+          "externalJudgingEnabled": {
+            "type": "boolean"
+          },
           "documents": {
             "type": "array",
             "items": {
@@ -11123,6 +11126,10 @@
           },
           "accountDeletionEnabled": {
             "type": "boolean"
+          },
+          "externalJudgingEnabled": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11531,6 +11538,9 @@
             "type": "string",
             "nullable": true
           },
+          "external": {
+            "type": "boolean"
+          },
           "ownerUserId": {
             "type": "string",
             "nullable": true
@@ -11759,6 +11769,9 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "external": {
+            "type": "boolean"
           },
           "tags": {
             "type": "array",
@@ -12849,6 +12862,9 @@
           "type": {
             "type": "string",
             "nullable": true
+          },
+          "external": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -13575,6 +13591,9 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "external": {
+            "type": "boolean"
           },
           "machine": {
             "nullable": true

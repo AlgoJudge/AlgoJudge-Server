@@ -50,6 +50,25 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public List<string> ProblemTypes { get; set; } = [];
 
+        /// <summary>
+        /// Whether this Runner sends submissions outside the installation.
+        /// <para>
+        /// Reported by the Runner, like almost everything else here, and taken
+        /// at its word — a Runner that lied about this would be a Runner an
+        /// administrator approved, which is a trust decision made earlier and by
+        /// a person.
+        /// </para>
+        /// <para>
+        /// It exists so the Server can pair work with a worker on <b>one
+        /// comparison of two booleans</b>: external problems go to external
+        /// Runners and local problems do not, without the Server ever reading a
+        /// problem type or knowing which service is on the other end. It also
+        /// gives an administrator the fact at approval time, which is when it
+        /// matters.
+        /// </para>
+        /// </summary>
+        public bool External { get; set; }
+
         /// <summary>Free labels an operator sets, e.g. <c>gpu</c>, <c>slow</c>.</summary>
         public List<string> Tags { get; set; } = [];
 

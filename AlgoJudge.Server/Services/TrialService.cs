@@ -147,6 +147,17 @@ namespace AlgoJudge.Server.Services
                 return null;
             }
 
+            // A trial means "run this package here and time it", which a Runner
+            // that forwards submissions cannot do: it has no sandbox, and the
+            // service on the far end judges a submission rather than measuring
+            // somebody's model solutions. A guard rather than a filter — nothing
+            // creates a trial for an external problem — and it costs one
+            // comparison to make that true rather than merely likely.
+            if (runner.External)
+            {
+                return null;
+            }
+
             var now = clock.GetUtcNow().UtcDateTime;
             var lease = leaseSeconds is { } seconds
                 ? TimeSpan.FromSeconds(Math.Clamp(seconds, 60, MaxLease.TotalSeconds))

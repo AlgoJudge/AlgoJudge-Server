@@ -99,6 +99,18 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool LocalRegistrationEnabled { get; init; }
         public required bool RequireEmail { get; init; }
         public required bool RequireConfirmedEmail { get; init; }
+        /// <summary>
+        /// Whether this installation may send submissions to a service it does
+        /// not run. Shipped off.
+        /// <para>
+        /// Public, like every other instance setting, and that is a choice worth
+        /// stating: it is the fact a privacy notice is written from, so an
+        /// installation that forwards somebody's work should not be the only
+        /// party that knows. It names no service and no address — only whether
+        /// the door is open.
+        /// </para>
+        /// </summary>
+        public required bool ExternalJudgingEnabled { get; init; }
         public required IReadOnlyList<InstanceDocumentRefDto> Documents { get; init; }
         public InstanceLogoDto? Logo { get; init; }
         public IReadOnlyList<LocalisedLogoDto>? LogoTranslations { get; init; }

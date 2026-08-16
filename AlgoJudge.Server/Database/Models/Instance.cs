@@ -49,6 +49,27 @@ namespace AlgoJudge.Server.Database.Models
         public bool ShowLogo { get; set; } = true;
 
         /// <summary>
+        /// Whether this installation may send submissions to a service it does
+        /// not run.
+        /// <para>
+        /// <b>Shipped off</b>, and that is the decision rather than an accident
+        /// of defaulting. Sending somebody's work to a third party is a thing an
+        /// operator should choose, because the privacy paragraph it needs is
+        /// then the duty of whoever turned it on rather than of every
+        /// installation from the day it is deployed.
+        /// </para>
+        /// <para>
+        /// While this is off the Server hands out no work from a
+        /// <see cref="Problem"/> marked external. It does not hide such problems
+        /// and it does not refuse a submission — those already exist and would
+        /// simply stop being judged, which is a state the queue already has a
+        /// meaning for. Nothing is lost: turning the switch on lets the queue
+        /// drain.
+        /// </para>
+        /// </summary>
+        public bool ExternalJudgingEnabled { get; set; }
+
+        /// <summary>
         /// Whether the sign-in screen offers the login-and-password form.
         /// <para>
         /// **Presentation, and the name says so.** Switching it off hides the

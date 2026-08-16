@@ -320,6 +320,7 @@ namespace AlgoJudge.Server.Api
                 Slug = problem.Slug,
                 Name = problem.Name,
                 Type = problem.Type,
+                External = problem.External,
                 OwnerUserId = problem.OwnerUserId,
                 OwnerName = ownerName,
                 Visibility = Wire(problem.Visibility),

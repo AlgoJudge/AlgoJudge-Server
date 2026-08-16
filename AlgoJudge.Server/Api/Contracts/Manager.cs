@@ -192,6 +192,11 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Slug { get; init; }
         public required string Name { get; init; }
         public required string Type { get; init; }
+        /// <summary>
+        /// Whether judging it sends the submission outside this installation.
+        /// Set at creation and permanent.
+        /// </summary>
+        public required bool External { get; init; }
         public required string OwnerUserId { get; init; }
         public required string OwnerName { get; init; }
         /// <summary>`private` | `shared` | `instance`.</summary>
@@ -210,6 +215,17 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Slug { get; init; }
         public required string Name { get; init; }
         public required string Type { get; init; }
+
+        /// <summary>
+        /// Whether judging it sends the submission outside this installation.
+        /// <para>
+        /// Read at creation and never again — there is no endpoint that changes
+        /// it. A local equivalent of an external problem is a new problem with
+        /// its own slug, which is a thing somebody decides rather than a
+        /// checkbox they clear.
+        /// </para>
+        /// </summary>
+        public bool External { get; init; }
     }
 
     public record ProblemFileDto
