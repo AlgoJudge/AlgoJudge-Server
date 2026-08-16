@@ -215,6 +215,19 @@ namespace AlgoJudge.Server.Api.Contracts
 
     // ── Files ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// An address to fetch into a file.
+    /// <para>
+    /// Just the address. Neither a name nor a media type is accepted from the
+    /// caller: both come from what actually arrived, and taking them here would
+    /// let somebody label bytes as something they are not.
+    /// </para>
+    /// </summary>
+    public record FetchFileInputDto
+    {
+        public required string Url { get; init; }
+    }
+
     public record UploadedFileDto
     {
         public required string Id { get; init; }

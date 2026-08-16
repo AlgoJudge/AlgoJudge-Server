@@ -184,6 +184,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<Storage.IStorageMigrations, Storage.StorageMigrations>();
 
             builder.Services.AddScoped<IFileService, FileService>();
+            builder.Services.AddScoped<IExternalFetchService, ExternalFetchService>();
             builder.Services.AddScoped<IInstanceService, InstanceService>();
             builder.Services.AddScoped<IActivityService, ActivityService>();
             builder.Services.AddScoped<ISeriesService, SeriesService>();

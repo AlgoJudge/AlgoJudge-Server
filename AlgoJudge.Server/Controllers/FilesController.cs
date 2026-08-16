@@ -16,8 +16,36 @@ namespace AlgoJudge.Server.Controllers
     [ApiController]
     [Route("files")]
     [Authorize]
-    public class FilesController(IFileService files) : ControllerBase
+    public class FilesController(IFileService files, IExternalFetchService fetching) : ControllerBase
     {
+        /// <summary>
+        /// Fetches an address the installation allows, and answers with the file
+        /// it became.
+        /// <para>
+        /// <b>The same file as an upload, by the same route.</b> The bytes are
+        /// staged and committed exactly as somebody's browser would have done
+        /// it, addressed by a checksum this Server computed. Nothing downstream
+        /// can tell how a file arrived, and nothing should be able to.
+        /// </para>
+        /// <para>
+        /// It exists because one thing cannot be done from a browser: a host that
+        /// sends no <c>Access-Control-Allow-Origin</c> cannot be read by a
+        /// manager's page, however willing the manager. Everything else about
+        /// importing happens in the Client.
+        /// </para>
+        /// </summary>
+        [HttpPost("fetch")]
+        [ProducesResponseType<UploadedFileDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<ActionResult<UploadedFileDto>> Fetch(
+            [FromBody] FetchFileInputDto input, CancellationToken ct)
+        {
+            var stored = await fetching.FetchAsync(input.Url, ct);
+            var dto = Projections.Uploaded(stored);
+            return Created($"/api/v1/files/{dto.Id}", dto);
+        }
+
         /// <summary>
         /// Stores bytes and answers with what they became.
         /// <para>
