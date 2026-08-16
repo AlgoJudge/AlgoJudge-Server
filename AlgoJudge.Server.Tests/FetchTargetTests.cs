@@ -98,10 +98,26 @@ public class FetchTargetTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("not a url")]
-    [InlineData("/relative/path.pdf")]
     public void Something_that_is_not_an_address_is_refused(string? url)
     {
         Assert.Equal("fetch.url.malformed", FetchTarget.Check(url, Allowed).Refusal);
+    }
+
+    /// <summary>
+    /// A path with no host, refused — and **the refusal is asserted, not the
+    /// reason for it**.
+    /// <para>
+    /// `Uri.TryCreate` disagrees with itself across platforms here:
+    /// Windows says this is not an absolute address at all, Linux reads it as
+    /// `file:///relative/path.pdf` and it fails the scheme check instead. Both
+    /// refuse it, which is the property that matters; pinning the code pinned
+    /// the operating system the suite happened to run on, and CI said so.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_path_with_no_host_is_refused_whatever_the_platform_calls_it()
+    {
+        Assert.False(FetchTarget.Check("/relative/path.pdf", Allowed).Allowed);
     }
 
     /// <summary>
