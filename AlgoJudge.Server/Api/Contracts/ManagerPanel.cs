@@ -403,6 +403,24 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool ExtendEnd { get; init; }
     }
 
+    /// <summary>
+    /// Where this installation may fetch a document from, and whether it may at
+    /// all. Manager-only — the destinations are operational detail, unlike the
+    /// boolean, which every screen may read.
+    /// </summary>
+    public record ExternalContentDto
+    {
+        /// <summary>The instance switch. Read-only here; it is set with the rest of the settings.</summary>
+        public required bool Enabled { get; init; }
+        public required IReadOnlyList<string> Hosts { get; init; }
+    }
+
+    public record ExternalContentInputDto
+    {
+        /// <summary>The whole list. An empty one means this installation fetches nothing.</summary>
+        public required IReadOnlyList<string> Hosts { get; init; }
+    }
+
     public record InstanceSettingsInputDto
     {
         public string? Name { get; init; }

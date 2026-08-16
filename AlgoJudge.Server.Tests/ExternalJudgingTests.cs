@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using System.Net.Http.Json;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
@@ -379,5 +380,76 @@ public class ExternalJudgingTests(ServerFixture server)
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
         Assert.Contains("fetch.host.inside", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// The list an operator edits, read back as they left it.
+    [Fact]
+    public async Task The_allowlist_is_readable_and_replaceable_by_a_manager()
+    {
+        await AllowExternalAsync(true);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var shipped = await admin.GetFromJsonAsync<JsonElement>("/api/v1/instance/external-content");
+        Assert.True(shipped.GetProperty("enabled").GetBoolean());
+        Assert.Contains(
+            "onlinejudge.org",
+            shipped.GetProperty("hosts").EnumerateArray().Select(h => h.GetString()));
+
+        // Tidied only in ways that cannot change which host is meant: blanks
+        // dropped, whitespace trimmed, the same host named twice collapsed.
+        var saved = await admin.PutAsJsonAsync("/api/v1/instance/external-content", new
+        {
+            hosts = new[] { "  example.invalid  ", "", "EXAMPLE.invalid", "second.invalid" },
+        });
+        await Sign.Succeeded(saved);
+
+        var back = await admin.GetFromJsonAsync<JsonElement>("/api/v1/instance/external-content");
+        var hosts = back.GetProperty("hosts").EnumerateArray().Select(h => h.GetString()).ToArray();
+        Assert.Equal(["example.invalid", "second.invalid"], hosts);
+
+        // And the list is what fetching consults, not a copy of it.
+        var refused = await admin.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://onlinejudge.org/external/1/100.pdf",
+        });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("fetch.host.notAllowed", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// An installation that allows nothing fetches nothing — the empty list has
+    /// to mean what it says, because it is the state an operator reaches by
+    /// removing what the product shipped.
+    /// </summary>
+    [Fact]
+    public async Task An_emptied_allowlist_fetches_nothing()
+    {
+        await AllowExternalAsync(true);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PutAsJsonAsync(
+            "/api/v1/instance/external-content", new { hosts = Array.Empty<string>() }));
+
+        var refused = await admin.PostAsJsonAsync("/api/v1/files/fetch", new
+        {
+            url = "https://onlinejudge.org/external/1/100.pdf",
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("fetch.host.notAllowed", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// The destinations are not something every signed-in person may read.
+    [Fact]
+    public async Task Reading_the_allowlist_needs_the_instance_permission()
+    {
+        await AllowExternalAsync(true);
+
+        var person = await Sign.NewAccountAsync(
+            server, "curious-" + Guid.NewGuid().ToString("N")[..8]);
+        var refused = await person.GetAsync("/api/v1/instance/external-content");
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
     }
 }

@@ -301,6 +301,68 @@ namespace AlgoJudge.Server.Controllers
         Realtime.IEventHub events
     ) : ControllerBase
     {
+        /// <summary>
+        /// The hosts this installation may fetch a document from.
+        /// <para>
+        /// <b>Its own pair of endpoints, and manager-only.</b> Every other
+        /// instance setting travels on <c>getInstanceInfo</c>, which anybody may
+        /// read — and that is right for the boolean, because whether work leaves
+        /// the building is the fact a privacy notice is written from. The list of
+        /// destinations is not the same thing: it enumerates what an installation
+        /// integrates with, which is operational detail rather than a disclosure
+        /// somebody is owed.
+        /// </para>
+        /// </summary>
+        [HttpGet("external-content")]
+        [ProducesResponseType<ExternalContentDto>(StatusCodes.Status200OK)]
+        public async Task<ExternalContentDto> ExternalContent(CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+
+            return new ExternalContentDto
+            {
+                Enabled = instance.ExternalJudgingEnabled,
+                Hosts = instance.ExternalFetchHosts,
+            };
+        }
+
+        /// <summary>
+        /// Replaces the list, whole.
+        /// <para>
+        /// A replace rather than an add-and-remove pair: the list is short, an
+        /// operator edits it as a list, and two endpoints would need an answer
+        /// for what happens when the same host arrives twice.
+        /// </para>
+        /// </summary>
+        [HttpPut("external-content")]
+        [ProducesResponseType<ExternalContentDto>(StatusCodes.Status200OK)]
+        public async Task<ExternalContentDto> SetExternalContent(
+            [FromBody] ExternalContentInputDto input, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+
+            // Tidied only in the ways that cannot change which host is meant:
+            // blank entries dropped, whitespace trimmed, duplicates collapsed.
+            // Case is left as typed — the comparison is already insensitive, and
+            // a list that rewrites what an operator entered is one they cannot
+            // predict.
+            instance.ExternalFetchHosts = input.Hosts
+                .Select(h => h.Trim())
+                .Where(h => h.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            await context.SaveChangesAsync(ct);
+
+            return new ExternalContentDto
+            {
+                Enabled = instance.ExternalJudgingEnabled,
+                Hosts = instance.ExternalFetchHosts,
+            };
+        }
+
         [HttpPut]
         [ProducesResponseType<InstanceInfoDto>(StatusCodes.Status200OK)]
         public async Task<InstanceInfoDto> Update(
