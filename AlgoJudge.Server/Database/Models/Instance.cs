@@ -70,6 +70,29 @@ namespace AlgoJudge.Server.Database.Models
         public bool ExternalJudgingEnabled { get; set; }
 
         /// <summary>
+        /// The hosts this Server may fetch a file from on somebody's say-so.
+        /// <para>
+        /// <b>Data, and the whole of the Server's opinion about them.</b> It
+        /// stores strings and compares them; it never parses one, never asks
+        /// what a host serves, and cannot tell you why any entry is here. That
+        /// is what keeps "fetching content from elsewhere" a facility rather
+        /// than an integration with a named service.
+        /// </para>
+        /// <para>
+        /// <b>Compared on the whole host, never on a suffix.</b> Matching by
+        /// ending would admit <c>onlinejudge.org.example.invalid</c>, which is a
+        /// host somebody else owns — the classic way past a list like this.
+        /// </para>
+        /// <para>
+        /// Ships with <c>onlinejudge.org</c>, the archive the product actually
+        /// integrates with, and it is inert until
+        /// <see cref="ExternalJudgingEnabled"/> is turned on. An operator who
+        /// wants none removes it; nothing in the code knows it went.
+        /// </para>
+        /// </summary>
+        public List<string> ExternalFetchHosts { get; set; } = ["onlinejudge.org"];
+
+        /// <summary>
         /// Whether the sign-in screen offers the login-and-password form.
         /// <para>
         /// **Presentation, and the name says so.** Switching it off hides the

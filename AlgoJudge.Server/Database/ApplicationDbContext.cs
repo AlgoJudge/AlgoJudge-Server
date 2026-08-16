@@ -64,6 +64,7 @@ namespace AlgoJudge.Server.Database
                 e.ToTable(t => t.HasCheckConstraint(
                     "CK_Instance_Singleton",
                     $"\"Id\" = '{Models.Instance.SingletonId}'"));
+                e.Property(i => i.ExternalFetchHosts).HasColumnType("text[]");
             });
 
             builder.Entity<MaintenanceState>(e =>
