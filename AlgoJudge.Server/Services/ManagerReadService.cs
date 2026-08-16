@@ -196,7 +196,7 @@ namespace AlgoJudge.Server.Services
                 Language = submission.Language,
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
                 Verdict = current?.Result?.Verdict,
-                Score = Scoring.Rescale(current?.Result?.Score, maxPoints),
+                Score = Scoring.Rescale(Scoring.Fraction(current?.Result), maxPoints),
                 MaxScore = current?.Result?.Score is null ? null : maxPoints,
                 Attempts = submission.Jobs.Count,
             };

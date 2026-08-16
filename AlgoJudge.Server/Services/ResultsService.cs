@@ -219,7 +219,7 @@ namespace AlgoJudge.Server.Services
             var current = Scoring.Current(submission);
             return basic with
             {
-                Points = Scoring.Rescale(current?.Result?.Score, Scoring.MaxPoints(assignment)),
+                Points = Scoring.Rescale(Scoring.Fraction(current?.Result), Scoring.MaxPoints(assignment)),
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
                 Extra = Projections.Opaque(current?.Result?.Extra),
             };
