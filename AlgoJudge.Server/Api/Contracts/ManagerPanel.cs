@@ -433,6 +433,25 @@ namespace AlgoJudge.Server.Api.Contracts
     {
         public required string Name { get; init; }
         public required string Value { get; init; }
+
+        /// <summary>
+        /// When this value stops working, if it ever does.
+        /// <para>
+        /// <b>Absent today, and present here on purpose.</b> Every key this
+        /// installation holds is one an administrator typed, shared by everyone
+        /// who may read it, and good until somebody changes it — so nothing sets
+        /// this yet.
+        /// </para>
+        /// <para>
+        /// It is in the answer already because the direction is known: keys
+        /// minted per person, for one call, with a life. That changes what
+        /// stands behind a name, not the question asked of it — but a caller
+        /// written without this field would cache a value past its death and
+        /// have no way to find out. **A reader must not use the value after
+        /// this instant, and must ask again rather than assume.**
+        /// </para>
+        /// </summary>
+        public string? ExpiresAt { get; init; }
     }
 
     public record ExternalContentDto
