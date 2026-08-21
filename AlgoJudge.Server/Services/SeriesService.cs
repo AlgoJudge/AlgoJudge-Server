@@ -280,7 +280,7 @@ namespace AlgoJudge.Server.Services
                 Slug = slug,
                 Name = input.Name,
                 Order = order,
-                Config = input.Config is null ? null : JsonSerializer.Serialize(input.Config),
+                Config = Opaque.Store(input.Config, "config"),
                 MaxPoints = input.MaxPoints,
                 MaxUploadBytes = input.MaxUploadBytes,
                 MaxAttachments = input.MaxAttachments,

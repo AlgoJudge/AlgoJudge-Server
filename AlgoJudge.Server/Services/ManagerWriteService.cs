@@ -520,7 +520,7 @@ namespace AlgoJudge.Server.Services
             assignment.MaxUploadBytes = input.MaxUploadBytes;
             assignment.MaxAttachments = input.MaxAttachments;
             assignment.MaxSubmissions = input.MaxSubmissions;
-            assignment.Config = input.Config is null ? null : JsonSerializer.Serialize(input.Config);
+            assignment.Config = Opaque.Store(input.Config, "config");
 
             if (input.PinnedProblemVersionId is { } rawPin)
             {

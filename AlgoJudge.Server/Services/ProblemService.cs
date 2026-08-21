@@ -245,9 +245,11 @@ namespace AlgoJudge.Server.Services
                 Version = (previous?.Version ?? 0) + 1,
                 CreatedByUserId = user.Id,
                 Note = input.Note,
+                // An absent config carries the previous version's forward; a
+                // present one is checked before it replaces it.
                 Config = input.Config is null
                     ? previous?.Config
-                    : JsonSerializer.Serialize(input.Config),
+                    : Opaque.Store(input.Config, "config"),
             };
             context.ProblemVersions.Add(version);
 

@@ -501,15 +501,35 @@ namespace AlgoJudge.Server.Services
 
             var now = clock.GetUtcNow().UtcDateTime;
 
-            if (report.Extra is not null)
+            // The board's ceiling, not a document's: `extra` rides the results
+            // feed once per submission per contestant. Checked here rather than
+            // inline since 2026-08-22, so that the envelope rule reaches it too.
+            var extra = Opaque.Store(report.Extra, "extra", OpaqueLimits.Board);
+
+            // **A judged result has a verdict; a failure has none, and that is
+            // not the same kind of absence.** An infrastructure failure is not a
+            // judgement — it already carries no score and no maximum — so the
+            // column stays nullable and the obligation lands here, on the path
+            // that claims to have judged something.
+            //
+            // Required from 2026-08-22. Before that a Runner could report a
+            // completed evaluation with no word for what happened, and every
+            // screen showed a blank where the outcome belongs.
+            if (!report.InfrastructureFailure)
             {
-                var size = JsonSerializer.SerializeToUtf8Bytes(report.Extra).Length;
-                if (size > 2048)
+                if (string.IsNullOrWhiteSpace(report.Verdict))
                 {
-                    // Refused, never truncated: half a document is worse than
-                    // none, because something will try to parse it.
                     throw new ValidationException(
-                        "`extra` is over the 2 kB ceiling", "opaque.tooLarge");
+                        "A judged result must carry a verdict", "result.verdict.missing");
+                }
+                // The column is `varchar(64)`. Unchecked, a longer one reached
+                // the database as an unhandled error rather than as an answer
+                // the Runner could act on.
+                if (report.Verdict.Length > 64)
+                {
+                    throw new ValidationException(
+                        $"`verdict` is {report.Verdict.Length} characters, over the 64 the column holds",
+                        "result.verdict.tooLong");
                 }
             }
 
@@ -522,7 +542,7 @@ namespace AlgoJudge.Server.Services
                 Score = report.InfrastructureFailure ? null : report.Score,
                 MaxScore = report.InfrastructureFailure ? null : report.MaxScore,
                 Verdict = report.Verdict,
-                Extra = report.Extra is null ? null : JsonSerializer.Serialize(report.Extra),
+                Extra = extra,
                 RunnerVersion = report.RunnerVersion ?? runner.Version,
             };
             context.Results.Add(result);

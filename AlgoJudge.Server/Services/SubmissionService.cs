@@ -216,6 +216,23 @@ namespace AlgoJudge.Server.Services
             var maxBytes = assignment.MaxUploadBytes ?? activity.MaxUploadBytes;
             if (staged.SizeBytes > maxBytes) throw new PayloadTooLargeException(maxBytes);
 
+            // **The third of the three limits the Server exists to enforce, and
+            // the one that was never enforced.** It was stored, projected,
+            // editable in the panel and read by nothing — a promise the code did
+            // not keep, against a specification that names the attachment count
+            // as a column precisely *because* the Server polices it.
+            //
+            // A submission carries exactly one attachment today, so what this
+            // rejects is an assignment configured to accept none. It is the wall
+            // that becomes load-bearing the day the form carries more, and it
+            // costs one comparison to have it standing already.
+            var maxAttachments = assignment.MaxAttachments ?? activity.MaxAttachments;
+            if (maxAttachments < 1)
+            {
+                throw new ForbiddenActionException(
+                    "This problem accepts no attachments", "submission.attachments");
+            }
+
             var version = await ((ProblemService)problems).ResolveVersionAsync(assignment, ct)
                 ?? throw new ConflictException("This problem has no published version", "problem.noVersion");
 
