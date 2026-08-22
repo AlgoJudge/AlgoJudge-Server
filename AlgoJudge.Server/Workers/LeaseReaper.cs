@@ -102,6 +102,7 @@ namespace AlgoJudge.Server.Workers
                 // overwrite whoever has the job now.
                 job.LeaseToken = null;
                 job.LeaseExpiresAt = null;
+                job.LeaseSeconds = null;
                 job.RunnerId = null;
                 job.ClaimedAt = null;
 

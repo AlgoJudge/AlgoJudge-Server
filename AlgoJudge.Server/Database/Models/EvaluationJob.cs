@@ -69,6 +69,23 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? ClaimedAt { get; set; }
         public DateTime? LeaseExpiresAt { get; set; }
+
+        /// <summary>
+        /// How long the lease on this job is, in seconds, as granted at claim.
+        /// <para>
+        /// Kept because <see cref="LeaseExpiresAt"/> cannot be read backwards:
+        /// every renewal moves it, so the duration the Runner was granted is
+        /// gone after the first one. Without it a heartbeat had nothing to renew
+        /// <i>by</i> and used the Server's own default — which silently replaced
+        /// an eighty-second lease with a ten-minute one a fraction of a second
+        /// after granting it, and told the Runner nothing.
+        /// </para>
+        /// <para>
+        /// Null on a job claimed before this column existed, and on one nobody
+        /// holds. The default applies to both.
+        /// </para>
+        /// </summary>
+        public int? LeaseSeconds { get; set; }
         public DateTime? FinishedAt { get; set; }
 
         /// <summary>

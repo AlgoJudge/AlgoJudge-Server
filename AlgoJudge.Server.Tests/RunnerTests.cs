@@ -393,6 +393,55 @@ public class RunnerTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Conflict, twice.StatusCode);
     }
 
+    /// <summary>
+    /// Saying "still working" renews the lease this job was granted, not the
+    /// Server's own default.
+    /// <para>
+    /// <b>It used to substitute the default, and nothing on either side said
+    /// so.</b> A Runner asking for three hundred seconds was granted three
+    /// hundred, was <i>told</i> three hundred in the claim answer, and held six
+    /// hundred the moment it reported progress. Found from the far end on
+    /// 2026-08-22: <c>AlgoJudge-Runner-UVa</c> reports progress the instant it
+    /// takes a job, so every lease it ever held was ten minutes, and its own
+    /// start-up guards — a lease that must outlast the archive timeout, a poll
+    /// interval that must fit four times inside it — were arithmetic on a number
+    /// this Server had already overridden.
+    /// </para>
+    /// <para>
+    /// The harm is not a shortened deadline: <c>Later</c> forbids that. It is a
+    /// Runner reasoning about a lease it does not have.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Reporting_progress_renews_by_the_lease_the_job_was_granted()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(7)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var runner = await Build.RunnerAsync(server);
+        // The helper asks for three hundred seconds, which is the point: it is
+        // under the ten-minute default, so a default applied here is visible.
+        var job = await runner.ClaimUntilAsync(submissionId);
+        var jobId = Guid.Parse(job.GetProperty("jobId").GetString()!);
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        var progress = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/progress", new { leaseToken });
+        await Sign.Succeeded(progress);
+
+        await using var context = server.NewContext();
+        var stored = await context.EvaluationJobs.FirstAsync(j => j.Id == jobId);
+
+        Assert.Equal(300, stored.LeaseSeconds);
+        var held = stored.LeaseExpiresAt!.Value - DateTime.UtcNow;
+        Assert.True(
+            held < TimeSpan.FromSeconds(330),
+            $"progress pushed the deadline {held.TotalSeconds:F0}s out on a 300s lease, "
+                + "so the Runner is holding a lease it never asked for and cannot see");
+    }
+
     [Fact]
     public async Task Revoking_a_runner_gives_back_what_it_was_holding()
     {
