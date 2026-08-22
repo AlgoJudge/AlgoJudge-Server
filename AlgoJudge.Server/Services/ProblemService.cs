@@ -245,11 +245,6 @@ namespace AlgoJudge.Server.Services
                 Version = (previous?.Version ?? 0) + 1,
                 CreatedByUserId = user.Id,
                 Note = input.Note,
-                // An absent config carries the previous version's forward; a
-                // present one is checked before it replaces it.
-                Config = input.Config is null
-                    ? previous?.Config
-                    : Opaque.Store(input.Config, "config"),
             };
             context.ProblemVersions.Add(version);
 
@@ -490,7 +485,6 @@ namespace AlgoJudge.Server.Services
                     Version = 1,
                     CreatedByUserId = user.Id,
                     Note = $"Copied from {source.Slug} v{newest.Version}",
-                    Config = newest.Config,
                 };
                 context.ProblemVersions.Add(version);
 
@@ -687,7 +681,13 @@ namespace AlgoJudge.Server.Services
                 BestScore = Scoring.Rescale(scale, maxPoints),
                 MaxScore = mine.Count == 0 ? null : maxPoints,
                 Attempts = mine.Count,
-                Languages = activity.Languages,
+                // The three documents, each to the reader it is for. The Server
+                // reads none of them: it checked the envelope and the ceiling
+                // when a manager wrote them, and that is the whole of its
+                // involvement.
+                Config = Projections.Opaque(assignment.Config),
+                Spec = Projections.Opaque(assignment.Spec),
+                Props = Projections.Opaque(assignment.Props),
                 MaxUploadBytes = assignment.MaxUploadBytes ?? activity.MaxUploadBytes,
                 SubmitFields =
                 [

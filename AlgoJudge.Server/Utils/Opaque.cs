@@ -55,9 +55,27 @@ namespace AlgoJudge.Server.Utils
         public static string? Store(object? value, string field, int ceiling = OpaqueLimits.Document)
         {
             if (value is null) return null;
+            return Checked(JsonSerializer.SerializeToUtf8Bytes(value), field, ceiling);
+        }
 
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
+        /// <summary>
+        /// The same gate, for a document that arrived as <b>text</b>.
+        /// <para>
+        /// A submission is multipart, because the bytes travel with it, and every
+        /// part of a multipart form is a string — including the one carrying a
+        /// JSON document. So this one may also fail to parse, which a value bound
+        /// from a JSON body never can.
+        /// </para>
+        /// </summary>
+        public static string? StoreText(string? json, string field, int ceiling = OpaqueLimits.Document)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            return Checked(System.Text.Encoding.UTF8.GetBytes(json), field, ceiling);
+        }
 
+        /// <summary>The two rules, in one place, whichever door the value came through.</summary>
+        private static string Checked(byte[] bytes, string field, int ceiling)
+        {
             // **Over the ceiling is refused, never truncated.** Half a JSON
             // document is not a document, and a Server that trimmed one would be
             // storing something no renderer can read while reporting success.
@@ -68,18 +86,30 @@ namespace AlgoJudge.Server.Utils
                     "opaque.tooLarge");
             }
 
+            JsonDocument parsed;
+            try
+            {
+                parsed = JsonDocument.Parse(bytes);
+            }
+            catch (JsonException e)
+            {
+                throw new ValidationException($"`{field}` is not JSON: {e.Message}", "opaque.notJson");
+            }
+
             // An object, or absent. Not a scalar, not an array — every reader
             // guards the shape before using it, and the guard should match what
             // can actually arrive.
-            using var parsed = JsonDocument.Parse(bytes);
-            if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+            using (parsed)
             {
-                throw new ValidationException(
-                    $"`{field}` must be an object or absent, not {Named(parsed.RootElement.ValueKind)}",
-                    "opaque.notAnObject");
-            }
+                if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    throw new ValidationException(
+                        $"`{field}` must be an object or absent, not {Named(parsed.RootElement.ValueKind)}",
+                        "opaque.notAnObject");
+                }
 
-            return JsonSerializer.Serialize(value);
+                return JsonSerializer.Serialize(parsed.RootElement);
+            }
         }
 
         /// <summary>What a caller called it, rather than what .NET calls it.</summary>

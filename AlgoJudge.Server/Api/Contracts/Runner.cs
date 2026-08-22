@@ -118,10 +118,22 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string PackageFileId { get; init; }
         public required string PackageSha256 { get; init; }
         public required IReadOnlyList<SubmissionFileDto> Files { get; init; }
-        public string? Language { get; init; }
         /// <summary>
-        /// The merged configuration chain — package, then problem version, then
-        /// assignment. Opaque here: the Server merged documents it never read.
+        /// What the participant declared beside the bytes, the language among it.
+        /// <b>Opaque</b>: the Server passes it through without reading a member.
+        /// <para>
+        /// It was a `language` field the Server read, so the allowed set was
+        /// checked here and a file extension for pasted source came from a table
+        /// of seven languages compiled into a controller. The Runner decides both
+        /// now — it is what knows a language catalogue — and the Server needs no
+        /// release when one is added.
+        /// </para>
+        /// </summary>
+        public object? Props { get; init; }
+        /// <summary>
+        /// The assignment's configuration, laid over the package's own by the
+        /// Runner. Opaque here: the Server never read it and now merges nothing —
+        /// `ProblemVersion.Config` is gone and the chain is two layers.
         /// </summary>
         public object? Config { get; init; }
     }
@@ -158,6 +170,17 @@ namespace AlgoJudge.Server.Api.Contracts
         /// rides in a list — over it is refused, never truncated.
         /// </summary>
         public object? Extra { get; init; }
+
+        /// <summary>
+        /// What the type wants shown beside <b>this</b> participant's own result —
+        /// the toolchain that compiled it, a per-language note.
+        /// <para>
+        /// The pair to <see cref="Extra"/>, and the difference is the audience,
+        /// not the content: <c>extra</c> is on a board everyone reads, so it is
+        /// bounded at a hundredth of this one and nothing private belongs in it.
+        /// </para>
+        /// </summary>
+        public object? Props { get; init; }
 
         /// <summary>
         /// Named attachments for this attempt — `log`, `details`. Already

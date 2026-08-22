@@ -402,9 +402,6 @@ namespace AlgoJudge.Server.Services
                     r => r.ProblemVersionId == job.ProblemVersionId
                         && r.Name == PackageNames.Archive, ct);
 
-            var version = await context.ProblemVersions.AsNoTracking()
-                .FirstAsync(v => v.Id == job.ProblemVersionId, ct);
-
             return new ClaimedJobDto
             {
                 JobId = Wire.Id(job.Id),
@@ -417,71 +414,27 @@ namespace AlgoJudge.Server.Services
                 PackageFileId = package is null ? "" : Wire.Id(package.FileId),
                 PackageSha256 = package?.File?.Sha256 ?? "",
                 Files = submission.Files.Select(Projections.SubmissionFile).ToList(),
-                Language = submission.Language,
-                // The chain, merged: package, then version, then assignment. The
-                // Server merged two documents it never read.
-                Config = MergeConfig(version.Config, assignment.Config),
+                Props = Projections.Opaque(submission.Props),
+                // **One layer, handed over whole.** The chain was package →
+                // version → assignment and the Server merged the last two for a
+                // Runner that then laid the result over the package. The middle
+                // layer is gone (2026-08-22), so there is nothing left to merge:
+                // the assignment's document travels as it was stored and the
+                // Runner performs the one merge that remains.
+                Config = Projections.Opaque(assignment.Config),
             };
         }
 
-        /// <summary>
-        /// The later layer wins, member by member and **in depth**.
-        /// <para>
-        /// The Server understands neither document; it only knows that the
-        /// assignment's entries override the version's. Merging two objects is
-        /// structural and needs no such understanding — which is why this stopped
-        /// replacing whole top-level members on 2026-08-22, so that an assignment
-        /// narrowing a time limit no longer drops the memory limit the version
-        /// stated beside it.
-        /// </para>
-        /// <para>
-        /// <b>It has to agree with the Runner, which merges this result over the
-        /// package.</b> `Config::overlaid` in `aj-package` is the other half; two
-        /// merges disagreeing would lose exactly the members that appear in both
-        /// layers, silently. Arrays replace here as they do there — the Runner's
-        /// one exception, an array keyed by a distinct `group`, is the format's
-        /// business and the Server has no way to know which arrays those are.
-        /// </para>
-        /// </summary>
-        private static object? MergeConfig(string? version, string? assignment)
-        {
-            var lower = Projections.Opaque(version) as JsonElement?;
-            var upper = Projections.Opaque(assignment) as JsonElement?;
-            if (lower is null) return upper;
-            if (upper is null) return lower;
-
-            return Deepen(lower.Value, upper.Value);
-        }
-
-        /// <summary>
-        /// One value laid over another: objects in depth, anything else replaced.
-        /// <para>
-        /// Leaves stay <c>JsonElement</c> rather than being converted — they are
-        /// on their way back out as JSON, and re-materialising them into .NET
-        /// types would be the Server reading a document it is not allowed to
-        /// understand.
-        /// </para>
-        /// </summary>
-        private static object Deepen(JsonElement below, JsonElement above)
-        {
-            if (below.ValueKind != JsonValueKind.Object || above.ValueKind != JsonValueKind.Object)
-            {
-                return above;
-            }
-
-            var merged = new Dictionary<string, object>();
-            foreach (var member in below.EnumerateObject())
-            {
-                merged[member.Name] = member.Value;
-            }
-            foreach (var member in above.EnumerateObject())
-            {
-                merged[member.Name] = below.TryGetProperty(member.Name, out var existing)
-                    ? Deepen(existing, member.Value)
-                    : member.Value;
-            }
-            return merged;
-        }
+        // **`MergeConfig` and `Deepen` were here, and there is nothing left
+        // for them to do.** They laid the assignment's configuration over the
+        // problem version's, in depth — a fix made on 2026-08-22 so that an
+        // assignment narrowing a time limit stopped dropping the memory limit
+        // beside it. The middle layer went the same week, and one layer needs no
+        // merge.
+        //
+        // The deep merge itself is not lost: `Config::overlaid` in the Runner's
+        // `aj-package` is the surviving half, and it is the half that was always
+        // load-bearing, because it is what lays an assignment over a package.
 
         /// <summary>
         /// Records a verdict, once.
@@ -540,6 +493,11 @@ namespace AlgoJudge.Server.Services
             // inline since 2026-08-22, so that the envelope rule reaches it too.
             var extra = Opaque.Store(report.Extra, "extra", OpaqueLimits.Board);
 
+            // A document's ceiling, not the board's: this one travels with a
+            // single result to a single reader, so the multiplication that sets
+            // `extra`'s 2 kB does not apply to it.
+            var props = Opaque.Store(report.Props, "props");
+
             // **A judged result has a verdict; a failure has none, and that is
             // not the same kind of absence.** An infrastructure failure is not a
             // judgement — it already carries no score and no maximum — so the
@@ -577,6 +535,7 @@ namespace AlgoJudge.Server.Services
                 MaxScore = report.InfrastructureFailure ? null : report.MaxScore,
                 Verdict = report.Verdict,
                 Extra = extra,
+                Props = props,
                 RunnerVersion = report.RunnerVersion ?? runner.Version,
             };
             context.Results.Add(result);

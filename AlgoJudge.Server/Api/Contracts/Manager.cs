@@ -63,7 +63,8 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string ScoreVisibility { get; init; }
         /// <summary>One row per name. <b>A name with no row is `managersOnly`.</b></summary>
         public required IReadOnlyList<AttachmentRuleDto> AttachmentVisibility { get; init; }
-        public required IReadOnlyList<string> Languages { get; init; }
+        /// <summary>Display metadata. Opaque — absent means none, never `{}`.</summary>
+        public object? Props { get; init; }
         public required string JoinPolicy { get; init; }
         public required bool Unlisted { get; init; }
         /// <summary>A join code, not a credential. A manager reads it back on purpose.</summary>
@@ -91,7 +92,12 @@ namespace AlgoJudge.Server.Api.Contracts
         public ActivityModulesDto? Modules { get; init; }
         public string? ScoreVisibility { get; init; }
         public IReadOnlyList<AttachmentRuleDto>? AttachmentVisibility { get; init; }
-        public IReadOnlyList<string>? Languages { get; init; }
+        /// <summary>
+        /// Display metadata, and the <b>first</b> way of writing it: this field
+        /// did not exist, so `Activity.Props` was readable by participants and
+        /// writable by nobody.
+        /// </summary>
+        public object? Props { get; init; }
         public string? JoinPolicy { get; init; }
         public bool? Unlisted { get; init; }
         /// <summary>Absent or empty removes it. Meaningful only under `password`.</summary>
@@ -121,8 +127,15 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool HasPackage { get; init; }
         /// <summary>Detaching is refused above zero.</summary>
         public required int SubmissionCount { get; init; }
-        /// <summary>Opaque. Absent means none — never `{}`.</summary>
+        /// <summary>
+        /// Anything that changes the verdict — limits, the allowed languages.
+        /// Opaque; absent means none, never `{}`.
+        /// </summary>
         public object? Config { get; init; }
+        /// <summary>What the Client draws and validates the submit form from.</summary>
+        public object? Spec { get; init; }
+        /// <summary>Display only. Wrong here means an ugly screen and nothing else.</summary>
+        public object? Props { get; init; }
         /// <summary>A point value, not a multiplier. Absent keeps the problem's own scale.</summary>
         public int? MaxPoints { get; init; }
         public long? MaxUploadBytes { get; init; }
@@ -180,6 +193,8 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Name { get; init; }
         public string? PinnedProblemVersionId { get; init; }
         public object? Config { get; init; }
+        public object? Spec { get; init; }
+        public object? Props { get; init; }
         public int? MaxPoints { get; init; }
         public long? MaxUploadBytes { get; init; }
         public int? MaxAttachments { get; init; }
@@ -246,7 +261,6 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string CreatedAt { get; init; }
         public string? CreatedByName { get; init; }
         public string? Note { get; init; }
-        public object? Config { get; init; }
         public required bool HasPackage { get; init; }
         public required IReadOnlyList<ProblemFileDto> Files { get; init; }
     }
@@ -285,7 +299,6 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Note { get; init; }
         /// <summary>Absent carries the previous forward. An empty array is refused.</summary>
         public IReadOnlyList<NewStatementDto>? Statements { get; init; }
-        public object? Config { get; init; }
         public IReadOnlyList<NewProblemFileDto>? Files { get; init; }
         public IReadOnlyList<string>? RemovedFiles { get; init; }
         public NewProblemPackageDto? Package { get; init; }

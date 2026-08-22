@@ -235,21 +235,8 @@ namespace AlgoJudge.Server.Api
             Modules = new ActivityModulesDto { Questions = activity.HasQuestions },
             // Deliberately absent from the participant's model: the join
             // password, the attachment table, every ceiling, and the counts.
-            Props = ParseProps(activity.Props),
+            Props = Opaque(activity.Props),
         };
-
-        private static IReadOnlyList<ActivityPropDto> ParseProps(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return [];
-            try
-            {
-                return JsonSerializer.Deserialize<List<ActivityPropDto>>(json, Relaxed) ?? [];
-            }
-            catch (JsonException)
-            {
-                return [];
-            }
-        }
 
         public static ManagedActivityDto ManagedActivity(
             Activity activity,
@@ -273,7 +260,7 @@ namespace AlgoJudge.Server.Api
                     .OrderBy(r => r.Name, StringComparer.Ordinal)
                     .Select(r => new AttachmentRuleDto { Name = r.Name, Visibility = Wire(r.Visibility) })
                     .ToList(),
-                Languages = activity.Languages,
+                Props = Opaque(activity.Props),
                 JoinPolicy = Wire(activity.JoinPolicy),
                 Unlisted = activity.Unlisted,
                 JoinPassword = activity.JoinPolicy == Database.Models.JoinPolicy.Password ? activity.JoinPassword : null,
@@ -340,7 +327,6 @@ namespace AlgoJudge.Server.Api
                 CreatedAt = Contracts.Wire.At(version.CreatedAt),
                 CreatedByName = createdByName,
                 Note = version.Note,
-                Config = Opaque(version.Config),
                 HasPackage = version.Files.Any(f => f.Name == PackageNames.Archive),
                 Files = version.Files
                     .OrderBy(f => f.Name, StringComparer.Ordinal)

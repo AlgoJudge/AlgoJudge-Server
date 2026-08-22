@@ -22,11 +22,6 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool Questions { get; init; }
     }
 
-    public record ActivityPropDto
-    {
-        public required string Key { get; init; }
-        public required string Value { get; init; }
-    }
 
     public record ActivityDto
     {
@@ -64,7 +59,11 @@ namespace AlgoJudge.Server.Api.Contracts
         public required ActivityModulesDto Modules { get; init; }
         public double? FinalScore { get; init; }
         public double? MaxScore { get; init; }
-        public required IReadOnlyList<ActivityPropDto> Props { get; init; }
+        /// <summary>
+        /// Display metadata, opaque. Typed `{ key, value }[]` until 2026-08-22 —
+        /// a shape the Server invented for a value it does not read.
+        /// </summary>
+        public object? Props { get; init; }
     }
 
     /// <summary>
@@ -174,8 +173,17 @@ namespace AlgoJudge.Server.Api.Contracts
         public double? BestScore { get; init; }
         public double? MaxScore { get; init; }
         public required int Attempts { get; init; }
-        /// <summary>The activity's list. Narrowing it leaves earlier submissions alone.</summary>
-        public required IReadOnlyList<string> Languages { get; init; }
+        /// <summary>
+        /// Anything that changes the verdict — the limits, the languages that may
+        /// be submitted. <b>Reaches the participant deliberately</b>: none of it
+        /// is secret, and it is what a problem page has to show. The package's own
+        /// `config.yml` stays unpublished, because it names the checker.
+        /// </summary>
+        public object? Config { get; init; }
+        /// <summary>What the submit form is drawn and validated from.</summary>
+        public object? Spec { get; init; }
+        /// <summary>Display only — captions, the languages written out for a header.</summary>
+        public object? Props { get; init; }
         public required long MaxUploadBytes { get; init; }
         public required IReadOnlyList<SubmitFieldDto> SubmitFields { get; init; }
         /// <summary>Absent means unlimited.</summary>
@@ -190,7 +198,11 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string ProblemName { get; init; }
         public required string SeriesId { get; init; }
         public required string SubmittedAt { get; init; }
-        public string? Language { get; init; }
+        /// <summary>
+        /// What the participant declared beside the bytes — the language among it.
+        /// Opaque: the Client's renderer for the type reads it, the Server does not.
+        /// </summary>
+        public object? Props { get; init; }
         /// <summary>`queued` | `running` | `completed` | `failed` | `cancelled`.</summary>
         public required string State { get; init; }
         /// <summary>Rescaled into the assignment's scale. Absent while unjudged.</summary>
@@ -210,6 +222,12 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string State { get; init; }
         public string? Verdict { get; init; }
         public double? Score { get; init; }
+        /// <summary>
+        /// What the problem type wants shown beside <b>this</b> result — the
+        /// toolchain that compiled it, a per-language note. Opaque, and the pair
+        /// to the board's `extra`: the difference between them is the audience.
+        /// </summary>
+        public object? Props { get; init; }
         /// <summary>
         /// Carries only what the reader may see. An empty list means nothing was
         /// attached <b>or</b> nothing here is for this reader, and the screen has

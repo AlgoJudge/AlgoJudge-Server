@@ -206,7 +206,11 @@ namespace AlgoJudge.Server.Services
                     activity = s.SeriesProblem?.Activity?.Slug,
                     problem = s.SeriesProblem?.Slug,
                     submittedAt = Wire.At(s.CreatedDate),
-                    language = s.Language,
+                    // Whatever the participant declared, as they declared it. The
+                    // language is in there; this export does not know which
+                    // member it is, and an export that guessed would be wrong
+                    // for the first problem type that names it differently.
+                    props = Projections.Opaque(s.Props),
                     attempts = s.Jobs.Count,
                     score = Scoring.Current(s)?.Result?.Score,
                     verdict = Scoring.Current(s)?.Result?.Verdict,

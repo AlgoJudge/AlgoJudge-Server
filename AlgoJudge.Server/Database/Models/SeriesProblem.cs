@@ -86,16 +86,56 @@ namespace AlgoJudge.Server.Database.Models
         public int? MaxPoints { get; set; }
 
         /// <summary>
-        /// Per-assignment configuration — time and memory limits, whatever a
-        /// problem type needs. Stored as <c>jsonb</c> and <b>opaque to the
-        /// Server</b>: it is written by a manager and read by the Client and the
-        /// Runner. Anything the Server itself must enforce belongs in a column.
+        /// <b>Anything that changes the verdict</b> — time and memory limits, the
+        /// set of languages that may be submitted, whatever else the problem type
+        /// enforces. Laid over the package's own <c>config.yml</c>, and since
+        /// 2026-08-22 the <b>only</b> layer over it: <c>ProblemVersion.Config</c>
+        /// is gone and the chain is two.
+        /// <para>
+        /// Stored as <c>jsonb</c> and <b>opaque to the Server</b>: written by a
+        /// manager, read by the Runner. Anything the Server itself must enforce
+        /// belongs in a column instead — it cannot police what it does not read.
+        /// </para>
+        /// <para>
+        /// <b>It reaches the participant too</b>, deliberately, and that is a
+        /// change: nothing in an assignment-level override is secret — limits and
+        /// language ids are exactly what a problem page should show. The
+        /// package's own <c>config.yml</c> stays unpublished, because it names
+        /// the checker.
+        /// </para>
         /// <para>
         /// Null means none. There is no <c>{}</c> here — an empty object beside
         /// null would be two ways of saying the same nothing.
         /// </para>
         /// </summary>
         public string? Config { get; set; }
+
+        /// <summary>
+        /// <b>What the Client needs to draw and validate the submit form</b> —
+        /// which fields it has, which languages the select offers, what each is
+        /// called. Read by the Client and by nothing else.
+        /// <para>
+        /// Separate from <see cref="Config"/> because they fail differently. A
+        /// wrong <c>config</c> is a wrong result; a wrong <c>spec</c> is a broken
+        /// form. <b>Where the two disagree about languages, <c>config</c> wins</b>
+        /// — the Runner refuses whatever the assignment did not allow, whatever
+        /// the form happened to offer.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
+        /// </summary>
+        public string? Spec { get; set; }
+
+        /// <summary>
+        /// <b>Display only</b> — captions, an extra note, the languages written
+        /// out for the header above the statement. If it is wrong the screen is
+        /// ugly; nothing is judged differently and no form breaks.
+        /// <para>
+        /// Reaches everyone who may see the problem, so nothing goes in it that is
+        /// not meant to be read.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
+        /// </summary>
+        public string? Props { get; set; }
 
         /// <summary>
         /// Limits the <b>Server</b> enforces, narrowing the activity's. Null inherits.

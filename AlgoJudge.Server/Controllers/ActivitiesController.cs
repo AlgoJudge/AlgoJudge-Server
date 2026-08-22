@@ -160,7 +160,7 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         [Consumes("multipart/form-data")]
         // The file is optional: a submission may be pasted source instead.
-        [Api.MultipartForm(File = "file", Fields = ["language", "code", "sha256"])]
+        [Api.MultipartForm(File = "file", Fields = ["props", "code", "fileName", "sha256"])]
         [RequestSizeLimit(UploadLimits.Submission)]
         [DisableFormValueModelBinding]
         public async Task<ActionResult<SubmissionSummaryDto>> Submit(
@@ -172,7 +172,10 @@ namespace AlgoJudge.Server.Controllers
                 Request, UploadLimits.Submission,
                 (content, _, _, token) => files.StageAsync(content, token), ct);
 
-            var language = upload.Fields.TryGetValue("language", out var chosen) ? chosen : null;
+            // **What the participant declared, as one opaque document.** It was
+            // a `language` field the Server read; the language is one member of
+            // this now and the Server does not know which. See `Submission.Props`.
+            var declared = upload.Fields.TryGetValue("props", out var props) ? props : null;
             var code = upload.Fields.TryGetValue("code", out var pasted) ? pasted : null;
 
             // One of the two, never both: the form offers an editor or a file
@@ -188,14 +191,26 @@ namespace AlgoJudge.Server.Controllers
                 ?? await files.StageAsync(
                     new MemoryStream(System.Text.Encoding.UTF8.GetBytes(code!)), ct);
 
+            // **The Client names pasted source, because only it can.** The name
+            // was built here from a table of seven languages — `cpp` → `cpp`,
+            // `python` → `py` — which meant a Server release for every language
+            // anybody added, and which could not survive the language becoming a
+            // member of a document the Server does not read.
+            //
+            // There is no default: `main.txt` would be a name the Runner refuses
+            // for every toolchain in the catalogue, so a wrong guess here is a
+            // compilation error on somebody's correct solution.
             var name = upload.FileName is { Length: > 0 } uploaded
                 ? uploaded
-                : $"main.{Extension(language)}";
+                : upload.Fields.TryGetValue("fileName", out var named) && named is { Length: > 0 }
+                    ? named
+                    : throw new ValidationException(
+                        "Pasted source needs a file name", "submission.fileName.missing");
 
             try
             {
                 var result = await submissions.SubmitAsync(
-                    idOrSlug, problemSlug, language, staged, name, upload.Field("sha256"), ct);
+                    idOrSlug, problemSlug, declared, staged, name, upload.Field("sha256"), ct);
 
                 return Created($"/api/v1/activities/{idOrSlug}/submissions/{result.Id}", result);
             }
@@ -210,20 +225,5 @@ namespace AlgoJudge.Server.Controllers
             }
         }
 
-        /// <summary>
-        /// A plausible file name for pasted source. Cosmetic — the Runner is told
-        /// the language, and the extension is what a person downloading it reads.
-        /// </summary>
-        private static string Extension(string? language) => language switch
-        {
-            "cpp" or "c++" => "cpp",
-            "c" => "c",
-            "python" => "py",
-            "java" => "java",
-            "csharp" => "cs",
-            "rust" => "rs",
-            "go" => "go",
-            _ => "txt",
-        };
     }
 }

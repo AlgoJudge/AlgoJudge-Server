@@ -31,22 +31,15 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>Free note explaining what changed, shown to managers only.</summary>
         public string? Note { get; set; }
 
-        /// <summary>
-        /// Limits and scoring for this version, as <c>jsonb</c> and <b>opaque to
-        /// the Server</b>, which stores it and never reads it.
-        /// <para>
-        /// It is the middle of three layers: the package's own defaults, then
-        /// this, then <see cref="SeriesProblem.Config"/>. Each overrides the one
-        /// before, and the Client and the Runner both parse the result — the
-        /// Client to show limits and draw a result, the Runner to enforce them.
-        /// </para>
-        /// <para>
-        /// Null means none; never <c>{}</c>. Nothing the Server has to enforce
-        /// belongs here — a limit it cannot read is a limit it cannot police, so
-        /// those are explicit columns instead.
-        /// </para>
-        /// </summary>
-        public string? Config { get; set; }
+        // **`Config` was here, and it is gone (2026-08-22).** It was the middle
+        // of three layers — package, version, assignment — and the middle one
+        // earned nothing: a version that wants different limits is a version
+        // with a different package, because the limits are calibrated against
+        // the tests that version ships. Two layers say the same thing with one
+        // fewer place for them to disagree.
+        //
+        // Nothing migrated the values out. Nothing had written any: the field
+        // was reachable through `ProblemVersionInputDto` and no screen sent it.
 
         /// <summary>
         /// Everything this version is made of — the statement and its

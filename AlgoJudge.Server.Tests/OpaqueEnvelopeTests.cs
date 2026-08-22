@@ -194,22 +194,19 @@ public class OpaqueEnvelopeTests(ServerFixture server)
     /// An assignment that narrows one option keeps the version's others.
     ///
     /// <para>
-    /// <b>The merge went deep on 2026-08-22.</b> It used to replace whole
-    /// top-level members, so an assignment saying <c>limits.timeMs</c> dropped
-    /// the <c>memoryBytes</c> the version had stated beside it — and the Runner
-    /// then read a document with a member missing. The two merges have to agree:
-    /// this one composes the version and the assignment, and `Config::overlaid`
-    /// in the Runner lays the result over the package.
+    /// <b>Rewritten 2026-08-22, an hour after it was written.</b> It proved a
+    /// deep merge in the Server, of the problem version's configuration under
+    /// the assignment's. There is no version layer any more: the chain is the
+    /// package and the assignment, the Runner performs the one merge that
+    /// remains, and what this can still prove — and has to — is that the
+    /// Server hands the document over <b>whole</b>.
     /// </para>
     /// </summary>
     [Fact]
-    public async Task An_assignment_narrowing_one_option_keeps_the_versions_others()
+    public async Task An_assignments_configuration_reaches_the_runner_entire()
     {
         var (slug, roundId) = await Build.ActivityAsync(server);
-        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        // The version states both; the assignment narrows one of them.
-        //
         // Scoped to this round rather than taken with `FirstAsync()`: the suite
         // shares a database, and an unfiltered first row is whichever test ran
         // before this one.
@@ -217,14 +214,7 @@ public class OpaqueEnvelopeTests(ServerFixture server)
         await using (var context = server.NewContext())
         {
             var assignment = await context.SeriesProblems.FirstAsync(sp => sp.SeriesId == round);
-            assignment.Config = """{"limits":{"timeMs":250}}""";
-
-            var version = await context.ProblemVersions
-                .Where(v => v.ProblemId == assignment.ProblemId)
-                .OrderByDescending(v => v.Version)
-                .FirstAsync();
-            version.Config = """{"limits":{"timeMs":2000,"memoryBytes":536870912}}""";
-
+            assignment.Config = """{"limits":{"timeMs":250,"memoryBytes":536870912},"languages":["python3"]}""";
             await context.SaveChangesAsync();
         }
 
@@ -233,11 +223,42 @@ public class OpaqueEnvelopeTests(ServerFixture server)
         var runner = await Build.RunnerAsync(server);
         var job = await runner.ClaimUntilAsync(submission.GetProperty("id").GetString()!);
 
-        var limits = job.GetProperty("config").GetProperty("limits");
+        var config = job.GetProperty("config");
+        var limits = config.GetProperty("limits");
         Assert.Equal(250, limits.GetProperty("timeMs").GetInt32());
+        Assert.Equal(536870912, limits.GetProperty("memoryBytes").GetInt64());
+
+        // Not a member the Server knows anything about, which is the point: it
+        // arrives because nothing here reads or rebuilds the document.
         Assert.Equal(
-            536870912,
-            limits.GetProperty("memoryBytes").GetInt64());
+            new[] { "python3" },
+            config.GetProperty("languages").EnumerateArray().Select(l => l.GetString()).ToArray());
+    }
+
+    /// <summary>
+    /// The language left the Server on 2026-08-22, and this is what took its
+    /// place: whatever the participant declared travels to the Runner unread.
+    ///
+    /// <para>
+    /// The Server used to refuse a language the activity did not list. It cannot
+    /// — the language is one member of an opaque document now — and the refusal
+    /// is the Runner's, against the allowed set in the assignment's `config`.
+    /// What must not happen is the document being lost on the way.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task What_the_participant_declared_reaches_the_runner_unread()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submission = await Build.SubmitAsync(participant, slug, "print(1)\n");
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submission.GetProperty("id").GetString()!);
+
+        var props = job.GetProperty("props");
+        Assert.Equal("python3", props.GetProperty("language").GetString());
+        Assert.Equal("standard-io@1", props.GetProperty("type").GetString());
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
@@ -279,7 +300,8 @@ public class OpaqueEnvelopeTests(ServerFixture server)
 
         using var content = new MultipartFormDataContent
         {
-            { new StringContent("python"), "language" },
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(source), "code" },
             { new StringContent(checksum), "sha256" },
         };

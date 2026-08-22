@@ -96,8 +96,9 @@ public static class Sign
 
         using var content = new MultipartFormDataContent
         {
-            { new StringContent(language), "language" },
+            { new StringContent($$"""{"type":"standard-io@1","language":"{{language}}"}"""), "props" },
             { new StringContent(source), "code" },
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(checksum), "sha256" },
         };
 

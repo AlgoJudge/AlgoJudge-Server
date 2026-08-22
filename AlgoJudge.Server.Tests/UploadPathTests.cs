@@ -89,7 +89,8 @@ public class UploadPathTests(ServerFixture server)
 
         using var content = new MultipartFormDataContent
         {
-            { new StringContent("python"), "language" },
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
+            { new StringContent("main.py"), "fileName" },
             { new ByteArrayContent(oversized), "file", "big.py" },
             { new StringContent(Sha256Of(oversized)), "sha256" },
         };
@@ -121,18 +122,34 @@ public class UploadPathTests(ServerFixture server)
 
         using var content = new MultipartFormDataContent
         {
-            // A language the activity does not accept.
-            { new StringContent("brainfuck"), "language" },
+            // **A refusal that happens after the bytes are staged.** It used
+            // to be a language the activity did not accept; the Server stopped
+            // reading languages on 2026-08-22, and what still refuses on this
+            // side of staging is the envelope rule — a document that is not a
+            // document.
+            { new StringContent("[1, 2, 3]"), "props" },
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(source), "code" },
             { new StringContent(Sha256Of(bytes)), "sha256" },
         };
 
-        var before = await BlobCountAsync();
+        var blobsBefore = await BlobCountAsync();
+        var rowsBefore = await FileRowCountAsync();
+
         var response = await participant.PostAsync(
             $"/api/v1/activities/{slug}/problems/A/submissions", content);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal(before, await BlobCountAsync());
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal(blobsBefore, await BlobCountAsync());
+
+        // **The row, as well as the bytes.** Counting blobs alone made this test
+        // blind to the failure it exists to catch: `CommitAsync` writes a `Files`
+        // row and saves it, while the controller's `catch` deletes only the blob.
+        // A refusal after that point therefore left a row pointing at bytes that
+        // no longer exist — and every assertion here still passed. Proven by
+        // moving the check back after the commit, which this now fails on and
+        // did not before.
+        Assert.Equal(rowsBefore, await FileRowCountAsync());
     }
 
     /// <summary>
@@ -144,6 +161,13 @@ public class UploadPathTests(ServerFixture server)
     /// the Server branches on it.
     /// </para>
     /// </summary>
+    /// <summary>Rows in `Files`, which is not the same question as how many blobs.</summary>
+    private async Task<long> FileRowCountAsync()
+    {
+        await using var context = server.NewContext();
+        return await context.Files.LongCountAsync();
+    }
+
     private async Task<long> BlobCountAsync()
     {
         await using var context = server.NewContext();

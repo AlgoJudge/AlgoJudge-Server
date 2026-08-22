@@ -409,7 +409,6 @@ public class PanelTests(ServerFixture server)
             rankingType = "icpc",
             timeZone = "Europe/Warsaw",
             joinPolicy = "open",
-            languages = new[] { "python" },
         });
         return slug;
     }

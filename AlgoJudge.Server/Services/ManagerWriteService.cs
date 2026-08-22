@@ -154,7 +154,7 @@ namespace AlgoJudge.Server.Services
             if (input.Modules is { } modules) activity.HasQuestions = modules.Questions;
             if (input.ScoreVisibility is { } visibility) activity.ScoreVisibility = ParseScoreVisibility(visibility);
             if (input.HideEndedSeriesProblems is { } hide) activity.HideEndedSeriesProblems = hide;
-            if (input.Languages is { } languages) activity.Languages = languages.ToList();
+            if (input.Props is not null) activity.Props = Opaque.Store(input.Props, "props");
             if (input.MaxUploadBytes is { } upload) activity.MaxUploadBytes = upload;
             if (input.MaxAttachments is { } attachments) activity.MaxAttachments = attachments;
             activity.MaxSubmissionsPerProblem = input.MaxSubmissionsPerProblem;
@@ -521,6 +521,8 @@ namespace AlgoJudge.Server.Services
             assignment.MaxAttachments = input.MaxAttachments;
             assignment.MaxSubmissions = input.MaxSubmissions;
             assignment.Config = Opaque.Store(input.Config, "config");
+            assignment.Spec = Opaque.Store(input.Spec, "spec");
+            assignment.Props = Opaque.Store(input.Props, "props");
 
             if (input.PinnedProblemVersionId is { } rawPin)
             {

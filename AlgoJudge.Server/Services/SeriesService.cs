@@ -281,6 +281,8 @@ namespace AlgoJudge.Server.Services
                 Name = input.Name,
                 Order = order,
                 Config = Opaque.Store(input.Config, "config"),
+                Spec = Opaque.Store(input.Spec, "spec"),
+                Props = Opaque.Store(input.Props, "props"),
                 MaxPoints = input.MaxPoints,
                 MaxUploadBytes = input.MaxUploadBytes,
                 MaxAttachments = input.MaxAttachments,

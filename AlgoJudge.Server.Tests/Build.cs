@@ -40,7 +40,6 @@ public static class Build
             rankingType = "icpc",
             timeZone = "Europe/Warsaw",
             joinPolicy = "open",
-            languages = new[] { "python" },
             attachmentVisibility = new[] { new { name = "source", visibility = "participant" } },
         });
 
@@ -121,8 +120,12 @@ public static class Build
 
         using var content = new MultipartFormDataContent
         {
-            { new StringContent("python"), "language" },
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
             { new StringContent(source), "code" },
+            // Required for pasted source since 2026-08-22: the Server no longer
+            // owns a table of language extensions, so only the sender can name
+            // the file, and a name the Runner refuses is worse than no name.
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(checksum), "sha256" },
         };
 

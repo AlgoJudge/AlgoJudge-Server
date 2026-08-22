@@ -64,6 +64,21 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public string? Extra { get; set; }
 
+        /// <summary>
+        /// What the problem type wants <b>this participant</b> to be shown beside
+        /// their own result — the toolchain that compiled it, a per-language note,
+        /// whatever the type's renderer draws.
+        /// <para>
+        /// The pair to <see cref="Extra"/>, and the distinction is the audience,
+        /// not the content. <c>Extra</c> is on a board everyone reads, so its
+        /// ceiling is a hundredth of this one and nothing private may go in it.
+        /// This one travels with one submission to one reader, under the
+        /// activity's own attachment rules.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
+        /// </summary>
+        public string? Props { get; set; }
+
         /// <summary>Which Runner build produced this, for reproducing a disputed result.</summary>
         public string? RunnerVersion { get; set; }
     }

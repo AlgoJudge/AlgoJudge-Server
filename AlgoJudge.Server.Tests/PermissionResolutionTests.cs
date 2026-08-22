@@ -411,7 +411,6 @@ public class PermissionResolutionTests(ServerFixture server)
             rankingType = "icpc",
             timeZone = "Europe/Warsaw",
             joinPolicy = "open",
-            languages = new[] { "python" },
         });
         await Sign.Succeeded(created);
         return slug;
