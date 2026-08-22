@@ -178,6 +178,7 @@ namespace AlgoJudge.Server.Database
                     .WithMany(p => p.Versions)
                     .HasForeignKey(v => v.ProblemId)
                     .OnDelete(DeleteBehavior.Cascade);
+                e.Property(v => v.Props).HasColumnType("jsonb");
                 e.HasOne(v => v.CreatedBy)
                     .WithMany()
                     .HasForeignKey(v => v.CreatedByUserId)

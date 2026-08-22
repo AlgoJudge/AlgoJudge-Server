@@ -327,6 +327,7 @@ namespace AlgoJudge.Server.Api
                 CreatedAt = Contracts.Wire.At(version.CreatedAt),
                 CreatedByName = createdByName,
                 Note = version.Note,
+                Props = Opaque(version.Props),
                 HasPackage = version.Files.Any(f => f.Name == PackageNames.Archive),
                 Files = version.Files
                     .OrderBy(f => f.Name, StringComparer.Ordinal)

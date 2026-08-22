@@ -245,6 +245,13 @@ namespace AlgoJudge.Server.Services
                 Version = (previous?.Version ?? 0) + 1,
                 CreatedByUserId = user.Id,
                 Note = input.Note,
+                // An absent document carries the previous version's forward; a
+                // present one is checked before it replaces it. A problem's
+                // identity does not change because somebody fixed a typo in its
+                // statement.
+                Props = input.Props is null
+                    ? previous?.Props
+                    : Opaque.Store(input.Props, "props"),
             };
             context.ProblemVersions.Add(version);
 
@@ -485,6 +492,7 @@ namespace AlgoJudge.Server.Services
                     Version = 1,
                     CreatedByUserId = user.Id,
                     Note = $"Copied from {source.Slug} v{newest.Version}",
+                    Props = newest.Props,
                 };
                 context.ProblemVersions.Add(version);
 

@@ -261,6 +261,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string CreatedAt { get; init; }
         public string? CreatedByName { get; init; }
         public string? Note { get; init; }
+        /// <summary>
+        /// What the problem type needs about this version — `uva@1`'s archive
+        /// problem number, for instance. Opaque; absent means none, never `{}`.
+        /// <b>Not a configuration layer</b>: the chain is the package and the
+        /// assignment.
+        /// </summary>
+        public object? Props { get; init; }
         public required bool HasPackage { get; init; }
         public required IReadOnlyList<ProblemFileDto> Files { get; init; }
     }
@@ -299,6 +306,8 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Note { get; init; }
         /// <summary>Absent carries the previous forward. An empty array is refused.</summary>
         public IReadOnlyList<NewStatementDto>? Statements { get; init; }
+        /// <summary>Absent carries the previous version's forward.</summary>
+        public object? Props { get; init; }
         public IReadOnlyList<NewProblemFileDto>? Files { get; init; }
         public IReadOnlyList<string>? RemovedFiles { get; init; }
         public NewProblemPackageDto? Package { get; init; }

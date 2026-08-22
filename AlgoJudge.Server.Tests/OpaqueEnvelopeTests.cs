@@ -261,6 +261,57 @@ public class OpaqueEnvelopeTests(ServerFixture server)
         Assert.Equal("standard-io@1", props.GetProperty("type").GetString());
     }
 
+    /// <summary>
+    /// A version's own document reaches the Runner, beside the assignment's.
+    ///
+    /// <para>
+    /// This is what `uva@1` needs: the archive's problem number is a fact about
+    /// the problem, not about one activity's use of it, so it travels with the
+    /// version rather than being copied onto every assignment that attaches it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Three opaque documents reach a Runner and none of them is the same
+    /// thing</b> — what the participant declared, what the version is, what the
+    /// assignment overrides. A job that carried the wrong one under the right
+    /// name would be judged against somebody else's settings, so each is
+    /// asserted by a member only it has.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_versions_own_document_reaches_the_runner_beside_the_assignments()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+
+        var round = Guid.Parse(roundId);
+        await using (var context = server.NewContext())
+        {
+            var assignment = await context.SeriesProblems.FirstAsync(sp => sp.SeriesId == round);
+            assignment.Config = """{"limits":{"timeMs":250}}""";
+
+            var version = await context.ProblemVersions
+                .Where(v => v.ProblemId == assignment.ProblemId)
+                .OrderByDescending(v => v.Version)
+                .FirstAsync();
+            version.Props = """{"type":"uva@1","uva":{"problemNumber":100}}""";
+
+            await context.SaveChangesAsync();
+        }
+
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submission = await Build.SubmitAsync(participant, slug, "print(1)\n");
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submission.GetProperty("id").GetString()!);
+
+        Assert.Equal(
+            100,
+            job.GetProperty("problemVersionProps").GetProperty("uva").GetProperty("problemNumber").GetInt32());
+
+        // The other two, under their own names and unmixed.
+        Assert.Equal("python3", job.GetProperty("props").GetProperty("language").GetString());
+        Assert.Equal(250, job.GetProperty("config").GetProperty("limits").GetProperty("timeMs").GetInt32());
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /// <summary>

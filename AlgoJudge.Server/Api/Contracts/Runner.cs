@@ -131,9 +131,25 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </summary>
         public object? Props { get; init; }
         /// <summary>
+        /// What the problem type needs about the pinned <b>version</b> — `uva@1`'s
+        /// archive problem number, for instance.
+        /// <para>
+        /// <b>Identity, not settings.</b> It is not a layer of the configuration
+        /// chain, which is the package and then the assignment; it says which
+        /// problem this is, and no assignment should have to restate that.
+        /// </para>
+        /// <para>
+        /// Absent where the type needs none. A Runner that needs it and finds
+        /// none reports an infrastructure failure naming what is missing — the
+        /// Server cannot check, because it does not read this and must not
+        /// branch on a problem type.
+        /// </para>
+        /// </summary>
+        public object? ProblemVersionProps { get; init; }
+        /// <summary>
         /// The assignment's configuration, laid over the package's own by the
-        /// Runner. Opaque here: the Server never read it and now merges nothing —
-        /// `ProblemVersion.Config` is gone and the chain is two layers.
+        /// Runner. Opaque here: the Server never read it and merges nothing —
+        /// the chain is two layers.
         /// </summary>
         public object? Config { get; init; }
     }

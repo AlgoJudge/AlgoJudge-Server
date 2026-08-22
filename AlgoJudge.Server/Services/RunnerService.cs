@@ -402,6 +402,12 @@ namespace AlgoJudge.Server.Services
                     r => r.ProblemVersionId == job.ProblemVersionId
                         && r.Name == PackageNames.Archive, ct);
 
+            // Read for its `props` alone, which says which problem this is —
+            // `uva@1`'s archive number lives there. Not a configuration layer:
+            // the chain is the package and then the assignment.
+            var version = await context.ProblemVersions.AsNoTracking()
+                .FirstAsync(v => v.Id == job.ProblemVersionId, ct);
+
             return new ClaimedJobDto
             {
                 JobId = Wire.Id(job.Id),
@@ -415,6 +421,7 @@ namespace AlgoJudge.Server.Services
                 PackageSha256 = package?.File?.Sha256 ?? "",
                 Files = submission.Files.Select(Projections.SubmissionFile).ToList(),
                 Props = Projections.Opaque(submission.Props),
+                ProblemVersionProps = Projections.Opaque(version.Props),
                 // **One layer, handed over whole.** The chain was package →
                 // version → assignment and the Server merged the last two for a
                 // Runner that then laid the result over the package. The middle
