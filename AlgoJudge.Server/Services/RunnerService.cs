@@ -374,6 +374,9 @@ namespace AlgoJudge.Server.Services
             job.LeaseToken = Uuid.New();
             job.ClaimedAt = now;
             job.LeaseExpiresAt = now.Add(lease);
+            // Kept as well as applied: a heartbeat has to renew by the lease this
+            // job was granted, and the deadline alone cannot say what that was.
+            job.LeaseSeconds = (int)lease.TotalSeconds;
             job.Deliveries += 1;
 
             runner.LastSeenAt = now;
@@ -554,6 +557,7 @@ namespace AlgoJudge.Server.Services
             job.FinishedAt = now;
             job.LeaseToken = null;
             job.LeaseExpiresAt = null;
+            job.LeaseSeconds = null;
 
             foreach (var attachment in report.Files ?? [])
             {
@@ -643,7 +647,18 @@ namespace AlgoJudge.Server.Services
             // Same rule as renewing, for the same reason: saying "still working"
             // must never bring the deadline closer — and it loses the same race,
             // so it goes through the same place.
-            await ExtendAsync(runner, jobId, leaseToken, DefaultLease, ct);
+            //
+            // **By the job's own lease, not by this Server's default.** Passing
+            // the default here meant a Runner that asked for eighty seconds, was
+            // granted eighty and was told eighty, held six hundred the moment it
+            // reported progress — which `Runner::take` in the UVa Runner does
+            // immediately. Nothing said so on either side: the claim answer was
+            // honest and the row disagreed with it a fraction of a second later.
+            //
+            // The effect was not a shortened lease — `Later` forbids that — but a
+            // silently lengthened one, and a Runner computing its own timing
+            // against a number the Server had already overridden.
+            await ExtendAsync(runner, jobId, leaseToken, null, ct);
         }
 
         /// <summary>
@@ -676,8 +691,13 @@ namespace AlgoJudge.Server.Services
         /// the write is simply tried again.
         /// </para>
         /// </summary>
+        /// <param name="lease">
+        /// How far out to push the deadline, or <c>null</c> for the lease this
+        /// job was granted at claim — falling back to the Server's default for a
+        /// job claimed before that was recorded.
+        /// </param>
         private async Task<EvaluationJob> ExtendAsync(
-            DbRunner runner, Guid jobId, string leaseToken, TimeSpan lease, CancellationToken ct)
+            DbRunner runner, Guid jobId, string leaseToken, TimeSpan? lease, CancellationToken ct)
         {
             // Two attempts, not a loop without an end: the second read is against
             // a row somebody has just written, so a further conflict would mean
@@ -687,7 +707,12 @@ namespace AlgoJudge.Server.Services
             {
                 var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
 
-                job.LeaseExpiresAt = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(lease));
+                var by = lease
+                    ?? (job.LeaseSeconds is { } granted
+                        ? TimeSpan.FromSeconds(granted)
+                        : DefaultLease);
+
+                job.LeaseExpiresAt = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(by));
                 runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
 
                 try
