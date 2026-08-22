@@ -212,7 +212,13 @@ namespace AlgoJudge.Server.Services
                     // for the first problem type that names it differently.
                     props = Projections.Opaque(s.Props),
                     attempts = s.Jobs.Count,
-                    score = Scoring.Current(s)?.Result?.Score,
+                    // **The number this person was shown**, not the Runner's
+                    // own. It was raw here while every screen rescaled, so an
+                    // export of somebody's own data disagreed with the pages
+                    // they had been reading — on a document produced precisely
+                    // so they can check what is held about them.
+                    score = Scoring.Reported(s.SeriesProblem!, Scoring.Current(s)?.Result).Score,
+                    maxScore = Scoring.Reported(s.SeriesProblem!, Scoring.Current(s)?.Result).MaxScore,
                     verdict = Scoring.Current(s)?.Result?.Verdict,
                 }),
                 questions = questions.Select(q => new

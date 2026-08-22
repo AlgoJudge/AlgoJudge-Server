@@ -667,8 +667,8 @@ namespace AlgoJudge.Server.Services
                 .Include(s => s.Jobs).ThenInclude(j => j.Result)
                 .ToListAsync(ct);
 
-            var scale = Scoring.Best(mine);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            var (scale, outOf) = Scoring.BestOf(mine);
+            var maxPoints = Scoring.Scale(assignment, outOf);
             var ceiling = assignment.MaxSubmissions ?? activity.MaxSubmissionsPerProblem;
 
             return new ProblemDetailDto

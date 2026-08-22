@@ -261,12 +261,24 @@ public sealed class StubRunner(
     public async Task<string> UploadAsync(string name, string text) =>
         await Build.UploadAsync(Client, "/api/v1/runner/files", name, text);
 
+    /// <summary>
+    /// Reports a result.
+    ///
+    /// <para>
+    /// <b>`maxScore` is a parameter, and it has to be.</b> It defaulted to 100
+    /// and nothing ever passed anything else, so every test in this suite
+    /// reported on the one scale where a raw score and a percentage are the same
+    /// number — which is the scale on which none of the scoring defects is
+    /// visible.
+    /// </para>
+    /// </summary>
     public async Task<JsonElement> ReportAsync(
-        string jobId, string leaseToken, double score = 100, string verdict = "Accepted")
+        string jobId, string leaseToken, double score = 100, string verdict = "Accepted",
+        double maxScore = 100)
     {
         var response = await Client.PostAsJsonAsync($"/api/v1/runner/jobs/{jobId}/report", new
         {
-            leaseToken, score, maxScore = 100, verdict, runnerVersion = "0.0.1",
+            leaseToken, score, maxScore, verdict, runnerVersion = "0.0.1",
         });
         await Sign.Succeeded(response);
         return await response.Content.ReadFromJsonAsync<JsonElement>();

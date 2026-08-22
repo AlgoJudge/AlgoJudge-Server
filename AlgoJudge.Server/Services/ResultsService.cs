@@ -117,13 +117,32 @@ namespace AlgoJudge.Server.Services
                 .ToListAsync(ct);
 
             var byRound = visible.ToDictionary(r => r.Id);
+
+            // **One scale per problem, worked out once.** Every number on a board
+            // has to be on the same scale as the column it sits under, or the
+            // board is arithmetic about nothing. Where the assignment states a
+            // point value that is the scale; where it does not, the scale is the
+            // package's own — which the Server learns from a result, because it
+            // never opens a package.
+            var scales = submissions
+                .Where(s => s.SeriesProblem is not null)
+                .GroupBy(s => s.SeriesProblemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => Scoring.Scale(
+                        g.First().SeriesProblem!,
+                        g.Select(s => Scoring.Current(s)?.Result?.MaxScore)
+                            .FirstOrDefault(m => m is not null)));
+
             var results = new List<ContestantResultDto>(submissions.Count);
 
             foreach (var submission in submissions)
             {
                 var assignment = submission.SeriesProblem!;
                 if (!byRound.TryGetValue(assignment.SeriesId, out var round)) continue;
-                results.Add(Disclose(submission, assignment, round, now, unfrozen));
+                results.Add(Disclose(
+                    submission, assignment, round, now, unfrozen,
+                    scales.GetValueOrDefault(assignment.Id)));
             }
 
             return new ActivityResultsDto
@@ -142,7 +161,10 @@ namespace AlgoJudge.Server.Services
                             Id = Wire.Id(sp.Id),
                             Slug = sp.Slug,
                             Name = sp.Name ?? sp.Problem?.Name ?? sp.Slug,
-                            MaxPoints = Scoring.MaxPoints(sp),
+                            // Nothing judged and no point value stated: there
+                            // is no scale, and no result to place on one either.
+                            // A hundred is what an empty column reads as.
+                            MaxPoints = scales.GetValueOrDefault(sp.Id) ?? Scoring.RunnerScale,
                         })
                         .ToList(),
                 }).ToList(),
@@ -198,7 +220,8 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         private static ContestantResultDto Disclose(
-            Submission submission, SeriesProblem assignment, Series round, DateTime now, bool unfrozen)
+            Submission submission, SeriesProblem assignment, Series round, DateTime now, bool unfrozen,
+            double? scale)
         {
             var withheld = Frozen(round, now, unfrozen)
                 && round.RankingFreezeAt is { } freeze
@@ -219,7 +242,7 @@ namespace AlgoJudge.Server.Services
             var current = Scoring.Current(submission);
             return basic with
             {
-                Points = Scoring.Rescale(Scoring.Fraction(current?.Result), Scoring.MaxPoints(assignment)),
+                Points = Scoring.Rescale(Scoring.Fraction(current?.Result), scale),
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
                 Extra = Projections.Opaque(current?.Result?.Extra),
             };
@@ -257,8 +280,11 @@ namespace AlgoJudge.Server.Services
 
             var now = clock.GetUtcNow().UtcDateTime;
 
-            var withFreeze = Disclose(submission, assignment, round, now, unfrozen: false);
-            var withoutFreeze = Disclose(submission, assignment, round, now, unfrozen: true);
+            // One submission, so its own result is the only scale there is.
+            var scale = Scoring.Scale(assignment, Scoring.Current(submission)?.Result?.MaxScore);
+
+            var withFreeze = Disclose(submission, assignment, round, now, unfrozen: false, scale);
+            var withoutFreeze = Disclose(submission, assignment, round, now, unfrozen: true, scale);
             var windowOpen = WindowOpen(round, now);
 
             var grants = await context.Grants.AsNoTracking()

@@ -113,11 +113,59 @@ public class LtiGradeSyncTests(ServerFixture server)
     }
 
     /// <summary>
+    /// <b>The best attempt is the best fraction, not the biggest number.</b>
+    ///
+    /// <para>
+    /// A gradebook column takes one grade per person and §6.2 says it is their
+    /// best attempt. That was chosen by ordering on the raw score, which
+    /// compares numbers marked out of different maxima — a package republished
+    /// with more tests, or an external judge marking out of one. So 70 out of
+    /// 100 beat 1 out of 1, and the platform was sent the **worse** of somebody's
+    /// two attempts.
+    /// </para>
+    ///
+    /// <para>
+    /// Every other reader in the product had already been moved to fractions
+    /// when the same defect was found on 2026-08-16. This query was missed, and
+    /// no test could see it while every attempt in this file was marked out of a
+    /// hundred.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_best_attempt_is_the_best_fraction_and_not_the_biggest_number()
+    {
+        var world = await BuildAsync();
+        await world.SweepAsync();
+
+        var first = world.Gradebook.Held[world.Subject].Score;
+
+        // A perfect answer on a scale of one. Its raw number is smaller than
+        // anything already there and its fraction is the largest there can be.
+        await world.AttemptAsync(score: 1, outOf: 1);
+        await world.SweepAsync();
+
+        // The setup judged the first attempt 50 out of 100 — half marks. The
+        // second is 1 out of 1, whose raw number is fifty times smaller and
+        // whose fraction is twice as good, so the grade must go **up**.
+        // Ordering on the raw score leaves it exactly where it was.
+        var sent = world.Gradebook.Held[world.Subject].Score;
+        Assert.True(sent > first, $"the gradebook kept {first} and was sent {sent}");
+    }
+
+    /// <summary>
     /// <b>A synchronised grade is not sent again, and this is the test that was
     /// missing.</b> Until it existed, every sweep moved every synchronised row
     /// back to pending — so every grade in the installation was reposted every
     /// minute, for ever, against somebody else's Moodle. It looked like working
     /// software.
+    ///
+    /// <para>
+    /// <b>Counted for this world's own person, not across every URL.</b> It
+    /// counted them all until 2026-08-22 and went red two runs in three: the
+    /// sweep is global, so it posts whatever an earlier test left pending, and
+    /// it posts it through the stub belonging to whichever test is sweeping.
+    /// The claim here is about <i>this</i> grade, and now so is the measurement.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task A_settled_grade_is_not_posted_again_on_every_sweep()
@@ -125,12 +173,13 @@ public class LtiGradeSyncTests(ServerFixture server)
         var world = await BuildAsync();
         await world.SweepAsync();
 
-        var after = world.Gradebook.Urls.Count(u => u.Contains("/scores"));
+        var after = world.Gradebook.Posts.GetValueOrDefault(world.Subject);
+        Assert.Equal(1, after);
 
         await world.SweepAsync();
         await world.SweepAsync();
 
-        Assert.Equal(after, world.Gradebook.Urls.Count(u => u.Contains("/scores")));
+        Assert.Equal(after, world.Gradebook.Posts.GetValueOrDefault(world.Subject));
     }
 
     [Fact]
@@ -233,8 +282,62 @@ public class LtiGradeSyncTests(ServerFixture server)
             return await response.Content.ReadFromJsonAsync<JsonElement>();
         }
 
-        /// <summary>A new, better result for the same submission.</summary>
-        public async Task RejudgeAsync(double newScore)
+        /// <summary>
+        /// <b>A second attempt, the way a rejudge actually makes one</b>: a new
+        /// job with its own result, so both attempts survive and the selection
+        /// rule has something to select between.
+        ///
+        /// <para>
+        /// `RejudgeAsync` below adds a result to the *existing* job and leaves
+        /// one attempt standing, which is fine for the tests that use it and
+        /// useless for this one — a test written against it passed whichever way
+        /// the best attempt was chosen, because there was only ever one.
+        /// </para>
+        /// </summary>
+        public async Task AttemptAsync(double score, double outOf)
+        {
+            using var scope = Host.Services.CreateScope();
+            var core = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var existing = await core.EvaluationJobs
+                .Where(j => j.SubmissionId == SubmissionId)
+                .OrderByDescending(j => j.Attempt)
+                .FirstAsync();
+            var version = (await core.Results.FirstAsync(r => r.EvaluationJobId == existing.Id))
+                .ProblemVersionId;
+
+            var job = new EvaluationJob
+            {
+                SubmissionId = SubmissionId,
+                Attempt = existing.Attempt + 1,
+                ProblemVersionId = version,
+                State = EvaluationJobState.Completed,
+                FinishedAt = DateTime.UtcNow,
+            };
+            core.EvaluationJobs.Add(job);
+            core.Results.Add(new Result
+            {
+                EvaluationJobId = job.Id,
+                ProblemVersionId = version,
+                Score = score,
+                MaxScore = outOf,
+                Verdict = "OK",
+            });
+            await core.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// A new result for the same submission.
+        ///
+        /// <para>
+        /// <b>`outOf` is a parameter now.</b> It was fixed at 100, so every
+        /// attempt in these tests was marked on one scale — which is the one
+        /// scale on which comparing raw scores and comparing fractions give the
+        /// same answer, and therefore the one scale on which the selection rule
+        /// cannot be tested.
+        /// </para>
+        /// </summary>
+        public async Task RejudgeAsync(double newScore, double outOf = 100)
         {
             using var scope = Host.Services.CreateScope();
             var core = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -246,7 +349,7 @@ public class LtiGradeSyncTests(ServerFixture server)
                 ProblemVersionId = (await core.Results
                     .FirstAsync(r => r.EvaluationJobId == job.Id)).ProblemVersionId,
                 Score = newScore,
-                MaxScore = 100,
+                MaxScore = outOf,
                 Verdict = "OK",
             });
             await core.SaveChangesAsync();

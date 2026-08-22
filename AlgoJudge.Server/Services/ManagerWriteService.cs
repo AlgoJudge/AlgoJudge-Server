@@ -516,6 +516,7 @@ namespace AlgoJudge.Server.Services
             }
 
             assignment.Name = input.Name;
+            CheckMaxPoints(input.MaxPoints);
             assignment.MaxPoints = input.MaxPoints;
             assignment.MaxUploadBytes = input.MaxUploadBytes;
             assignment.MaxAttachments = input.MaxAttachments;
@@ -593,5 +594,30 @@ namespace AlgoJudge.Server.Services
             "managersOnly" => ScoreVisibility.ManagersOnly,
             _ => ScoreVisibility.Everyone,
         };
-    }
+    
+        /// <summary>
+        /// A point value, or nothing. <b>Never zero and never negative.</b>
+        /// <para>
+        /// Zero was accepted and is not a problem worth nothing — it is a
+        /// problem whose every number is <c>0 / 0</c>, which a board reads as
+        /// full marks because zero out of zero is the whole of it. A problem
+        /// nobody should score is a problem nobody should attach.
+        /// </para>
+        /// <para>
+        /// Checked on both write paths rather than on one: an assignment is
+        /// created by attaching and changed by editing, and a rule enforced on
+        /// the first alone is a rule the second removes.
+        /// </para>
+        /// </summary>
+        private static void CheckMaxPoints(int? maxPoints)
+        {
+            if (maxPoints is { } value && value <= 0)
+            {
+                throw new ValidationException(
+                    $"A problem is worth {value} points here, which is not a value anything can be scored against",
+                    "assignment.maxPoints.invalid");
+            }
+        }
+
+}
 }

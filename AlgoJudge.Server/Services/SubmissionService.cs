@@ -70,7 +70,10 @@ namespace AlgoJudge.Server.Services
             // The newest attempt is what the submission currently says. Older
             // ones are history and stay readable, but they do not speak for it.
             var current = Scoring.Current(submission);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            // **Both numbers from one place.** Reading the score here and the
+            // maximum somewhere else is how a raw attempt score ended up beside
+            // a rescaled maximum on the same screen.
+            var (score, maxScore) = Scoring.Reported(assignment, current?.Result);
 
             return new SubmissionSummaryDto
             {
@@ -82,8 +85,8 @@ namespace AlgoJudge.Server.Services
                 SubmittedAt = Wire.At(submission.CreatedDate),
                 Props = Projections.Opaque(submission.Props),
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
-                Score = Scoring.Rescale(Scoring.Fraction(current?.Result), maxPoints),
-                MaxScore = current?.Result?.Score is null ? null : maxPoints,
+                Score = score,
+                MaxScore = maxScore,
                 Verdict = current?.Result?.Verdict,
             };
         }
@@ -147,7 +150,12 @@ namespace AlgoJudge.Server.Services
                         FinishedAt = Wire.At(job.FinishedAt),
                         State = Projections.Wire(job.State),
                         Verdict = job.Result?.Verdict,
-                        Score = job.Result?.Score,
+                        // **Rescaled, like the submission above it.** This was
+                        // the Runner's raw number while the enclosing summary
+                        // was the assignment's — 70 in the attempt list and 35
+                        // in the header, on one screen, and neither expression
+                        // looked wrong on its own.
+                        Score = Scoring.Reported(submission.SeriesProblem!, job.Result).Score,
                         Props = Projections.Opaque(job.Result?.Props),
                         Files = job.Files.Where(Readable).Select(Projections.SubmissionFile).ToList(),
                     })
@@ -347,8 +355,8 @@ namespace AlgoJudge.Server.Services
 
             // `Scoring` reads submissions, not the jobs under them: the best of
             // what somebody sent, and how many times they sent it.
-            var best = Scoring.Best(mine);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            var (best, outOf) = Scoring.BestOf(mine);
+            var maxPoints = Scoring.Scale(assignment, outOf);
 
             await events.SendToUserAsync(submission.UserId, EventTypes.ProblemStatusChanged, new
             {

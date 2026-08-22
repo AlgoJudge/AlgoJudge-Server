@@ -64,8 +64,11 @@ namespace AlgoJudge.Server.Services
                     .Select(assignment =>
                     {
                         var attempts = byAssignment.GetValueOrDefault(assignment.Id) ?? [];
-                        var best = Scoring.Best(attempts);
-                        var maxPoints = Scoring.MaxPoints(assignment);
+                        var (best, outOf) = Scoring.BestOf(attempts);
+                        // Where the assignment states no point value, the scale
+                        // is the package's own — which the Server learns from a
+                        // result, because it never opens a package.
+                        var maxPoints = Scoring.Scale(assignment, outOf);
                         return new ProblemSummaryDto
                         {
                             Id = Wire.Id(assignment.Id),
@@ -267,6 +270,8 @@ namespace AlgoJudge.Server.Services
                     .FirstOrDefaultAsync(ct);
             }
 
+            CheckMaxPoints(input.MaxPoints);
+
             var order = await context.SeriesProblems.CountAsync(sp => sp.SeriesId == seriesId, ct) + 1;
 
             context.SeriesProblems.Add(new SeriesProblem
@@ -296,5 +301,30 @@ namespace AlgoJudge.Server.Services
                 .FirstAsync(s => s.Id == seriesId, ct);
             return Projections.ManagedSeries(stored, await AssignmentsAsync(stored, ct));
         }
-    }
+    
+        /// <summary>
+        /// A point value, or nothing. <b>Never zero and never negative.</b>
+        /// <para>
+        /// Zero was accepted and is not a problem worth nothing — it is a
+        /// problem whose every number is <c>0 / 0</c>, which a board reads as
+        /// full marks because zero out of zero is the whole of it. A problem
+        /// nobody should score is a problem nobody should attach.
+        /// </para>
+        /// <para>
+        /// Checked on both write paths rather than on one: an assignment is
+        /// created by attaching and changed by editing, and a rule enforced on
+        /// the first alone is a rule the second removes.
+        /// </para>
+        /// </summary>
+        private static void CheckMaxPoints(int? maxPoints)
+        {
+            if (maxPoints is { } value && value <= 0)
+            {
+                throw new ValidationException(
+                    $"A problem is worth {value} points here, which is not a value anything can be scored against",
+                    "assignment.maxPoints.invalid");
+            }
+        }
+
+}
 }

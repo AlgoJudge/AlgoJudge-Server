@@ -176,7 +176,7 @@ namespace AlgoJudge.Server.Services
         {
             var assignment = submission.SeriesProblem!;
             var current = Scoring.Current(submission);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            var (score, maxScore) = Scoring.Reported(assignment, current?.Result);
 
             return new ManagedSubmissionDto
             {
@@ -196,8 +196,8 @@ namespace AlgoJudge.Server.Services
                 Props = Projections.Opaque(submission.Props),
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
                 Verdict = current?.Result?.Verdict,
-                Score = Scoring.Rescale(Scoring.Fraction(current?.Result), maxPoints),
-                MaxScore = current?.Result?.Score is null ? null : maxPoints,
+                Score = score,
+                MaxScore = maxScore,
                 Attempts = submission.Jobs.Count,
             };
         }

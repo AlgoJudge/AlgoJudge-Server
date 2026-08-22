@@ -76,6 +76,19 @@ namespace AlgoJudge.Server.Database.Models
         /// <c>round(score / maxScore × MaxPoints)</c>. Null keeps the Runner's
         /// own scale. An ICPC board is unaffected — it counts solves and penalty
         /// minutes, and a point value has nowhere to land in it.
+        /// <para>
+        /// <b>"Null keeps the Runner's own scale" became true on 2026-08-22.</b>
+        /// It said so from the day it was written and the code substituted 100,
+        /// so a package marking out of 70 reported a full solve as 100 / 100 —
+        /// the problem's own scoring, which is fixed to the problem, replaced by
+        /// a convention nobody chose. The scale is now the result's own maximum
+        /// wherever this is null; see <see cref="Services.Scoring.Scale"/>.
+        /// </para>
+        /// <para>
+        /// <b>Zero and negative are refused.</b> Zero is not a problem worth
+        /// nothing: it is a problem whose every number is <c>0 / 0</c>, which a
+        /// board reads as full marks.
+        /// </para>
         /// </para>
         /// <para>
         /// A column rather than an entry in <see cref="Config"/> for the standing
