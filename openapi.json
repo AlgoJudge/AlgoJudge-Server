@@ -1324,10 +1324,13 @@
                     "type": "string",
                     "format": "binary"
                   },
-                  "language": {
+                  "props": {
                     "type": "string"
                   },
                   "code": {
+                    "type": "string"
+                  },
+                  "fileName": {
                     "type": "string"
                   },
                   "sha256": {
@@ -10101,10 +10104,6 @@
             "nullable": true
           },
           "props": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ActivityPropDto"
-            },
             "nullable": true
           }
         },
@@ -10180,11 +10179,7 @@
             },
             "nullable": true
           },
-          "languages": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
+          "props": {
             "nullable": true
           },
           "joinPolicy": {
@@ -10226,20 +10221,6 @@
         "properties": {
           "questions": {
             "type": "boolean"
-          }
-        },
-        "additionalProperties": false
-      },
-      "ActivityPropDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "nullable": true
-          },
-          "value": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10560,8 +10541,10 @@
             },
             "nullable": true
           },
-          "language": {
-            "type": "string",
+          "props": {
+            "nullable": true
+          },
+          "problemVersionProps": {
             "nullable": true
           },
           "config": {
@@ -10907,6 +10890,9 @@
           "score": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          },
+          "props": {
             "nullable": true
           },
           "files": {
@@ -11794,11 +11780,7 @@
             },
             "nullable": true
           },
-          "languages": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
+          "props": {
             "nullable": true
           },
           "joinPolicy": {
@@ -12039,7 +12021,7 @@
             "type": "string",
             "nullable": true
           },
-          "config": {
+          "props": {
             "nullable": true
           },
           "hasPackage": {
@@ -12401,6 +12383,12 @@
           "config": {
             "nullable": true
           },
+          "spec": {
+            "nullable": true
+          },
+          "props": {
+            "nullable": true
+          },
           "maxPoints": {
             "type": "integer",
             "format": "int32",
@@ -12471,8 +12459,7 @@
             "type": "string",
             "nullable": true
           },
-          "language": {
-            "type": "string",
+          "props": {
             "nullable": true
           },
           "state": {
@@ -12565,8 +12552,7 @@
             "type": "string",
             "nullable": true
           },
-          "language": {
-            "type": "string",
+          "props": {
             "nullable": true
           },
           "state": {
@@ -13112,9 +13098,6 @@
             },
             "nullable": true
           },
-          "limits": {
-            "$ref": "#/components/schemas/ProblemLimitsDto"
-          },
           "samples": {
             "type": "array",
             "items": {
@@ -13140,11 +13123,13 @@
             "type": "integer",
             "format": "int32"
           },
-          "languages": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
+          "config": {
+            "nullable": true
+          },
+          "spec": {
+            "nullable": true
+          },
+          "props": {
             "nullable": true
           },
           "maxUploadBytes": {
@@ -13277,20 +13262,6 @@
         },
         "additionalProperties": false
       },
-      "ProblemLimitsDto": {
-        "type": "object",
-        "properties": {
-          "timeMs": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "memoryBytes": {
-            "type": "integer",
-            "format": "int64"
-          }
-        },
-        "additionalProperties": false
-      },
       "ProblemSampleDto": {
         "type": "object",
         "properties": {
@@ -13359,7 +13330,7 @@
             },
             "nullable": true
           },
-          "config": {
+          "props": {
             "nullable": true
           },
           "files": {
@@ -13651,6 +13622,9 @@
             "nullable": true
           },
           "extra": {
+            "nullable": true
+          },
+          "props": {
             "nullable": true
           },
           "files": {
@@ -14189,6 +14163,12 @@
           "config": {
             "nullable": true
           },
+          "spec": {
+            "nullable": true
+          },
+          "props": {
+            "nullable": true
+          },
           "maxPoints": {
             "type": "integer",
             "format": "int32",
@@ -14407,8 +14387,7 @@
             "type": "string",
             "nullable": true
           },
-          "language": {
-            "type": "string",
+          "props": {
             "nullable": true
           },
           "state": {
@@ -14511,8 +14490,7 @@
             "type": "string",
             "nullable": true
           },
-          "language": {
-            "type": "string",
+          "props": {
             "nullable": true
           },
           "state": {
