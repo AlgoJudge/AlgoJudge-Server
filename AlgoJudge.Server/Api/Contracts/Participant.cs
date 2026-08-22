@@ -116,17 +116,6 @@ namespace AlgoJudge.Server.Api.Contracts
         public IReadOnlyList<ProblemSummaryDto>? Problems { get; init; }
     }
 
-    public record ProblemLimitsDto
-    {
-        public required int TimeMs { get; init; }
-        /// <summary>
-        /// **Bytes**, as everywhere in the product since 2026-08-09. Long
-        /// rather than int: a limit above 2 GiB is expressible and an int
-        /// would silently wrap it.
-        /// </summary>
-        public required long MemoryBytes { get; init; }
-    }
-
     public record ProblemSampleDto
     {
         public required string Input { get; init; }
@@ -167,7 +156,15 @@ namespace AlgoJudge.Server.Api.Contracts
         public required IReadOnlyList<StatementRefDto> Statements { get; init; }
         /// <summary>Everything scoped to participants. Well-known `content.*` files excluded.</summary>
         public required IReadOnlyList<AttachmentDto> Attachments { get; init; }
-        public ProblemLimitsDto? Limits { get; init; }
+        // **`Limits` was here from the day this contract was written, and it
+        // was never once filled.** `SERVER_CONTRACT.md` called it "declared and
+        // unfillable" and was right: the limits live inside a document the
+        // Server stores and does not read, so there was no value it could put
+        // here without becoming a reader of a problem type's vocabulary.
+        //
+        // The badges a participant saw rendered against the Client's fake alone.
+        // They come from `config` below now, which reaches this screen for
+        // exactly this reason.
         public IReadOnlyList<ProblemSampleDto>? Samples { get; init; }
         public required string Status { get; init; }
         public double? BestScore { get; init; }
