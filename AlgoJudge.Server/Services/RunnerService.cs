@@ -425,11 +425,22 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// The later layer wins, member by member at the top level.
+        /// The later layer wins, member by member and **in depth**.
         /// <para>
-        /// The Server does not understand either document — it only knows that
-        /// the assignment's entries override the version's. A deeper merge would
-        /// require knowing what the members mean.
+        /// The Server understands neither document; it only knows that the
+        /// assignment's entries override the version's. Merging two objects is
+        /// structural and needs no such understanding — which is why this stopped
+        /// replacing whole top-level members on 2026-08-22, so that an assignment
+        /// narrowing a time limit no longer drops the memory limit the version
+        /// stated beside it.
+        /// </para>
+        /// <para>
+        /// <b>It has to agree with the Runner, which merges this result over the
+        /// package.</b> `Config::overlaid` in `aj-package` is the other half; two
+        /// merges disagreeing would lose exactly the members that appear in both
+        /// layers, silently. Arrays replace here as they do there — the Runner's
+        /// one exception, an array keyed by a distinct `group`, is the format's
+        /// business and the Server has no way to know which arrays those are.
         /// </para>
         /// </summary>
         private static object? MergeConfig(string? version, string? assignment)
@@ -438,14 +449,37 @@ namespace AlgoJudge.Server.Services
             var upper = Projections.Opaque(assignment) as JsonElement?;
             if (lower is null) return upper;
             if (upper is null) return lower;
-            if (lower.Value.ValueKind != JsonValueKind.Object || upper.Value.ValueKind != JsonValueKind.Object)
+
+            return Deepen(lower.Value, upper.Value);
+        }
+
+        /// <summary>
+        /// One value laid over another: objects in depth, anything else replaced.
+        /// <para>
+        /// Leaves stay <c>JsonElement</c> rather than being converted — they are
+        /// on their way back out as JSON, and re-materialising them into .NET
+        /// types would be the Server reading a document it is not allowed to
+        /// understand.
+        /// </para>
+        /// </summary>
+        private static object Deepen(JsonElement below, JsonElement above)
+        {
+            if (below.ValueKind != JsonValueKind.Object || above.ValueKind != JsonValueKind.Object)
             {
-                return upper;
+                return above;
             }
 
-            var merged = new Dictionary<string, JsonElement>();
-            foreach (var member in lower.Value.EnumerateObject()) merged[member.Name] = member.Value;
-            foreach (var member in upper.Value.EnumerateObject()) merged[member.Name] = member.Value;
+            var merged = new Dictionary<string, object>();
+            foreach (var member in below.EnumerateObject())
+            {
+                merged[member.Name] = member.Value;
+            }
+            foreach (var member in above.EnumerateObject())
+            {
+                merged[member.Name] = below.TryGetProperty(member.Name, out var existing)
+                    ? Deepen(existing, member.Value)
+                    : member.Value;
+            }
             return merged;
         }
 
