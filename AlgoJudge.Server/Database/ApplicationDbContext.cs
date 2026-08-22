@@ -100,10 +100,6 @@ namespace AlgoJudge.Server.Database
                 e.Property(a => a.Type).HasMaxLength(64);
                 e.Property(a => a.RankingType).HasMaxLength(64);
                 e.Property(a => a.TimeZone).HasMaxLength(64);
-                // A real array column, not a document: the Server refuses a
-                // language that is not in it, and `text[]` is a value Postgres
-                // can constrain and index if that is ever needed.
-                e.Property(a => a.Languages).HasColumnType("text[]");
                 e.Property(a => a.Props).HasColumnType("jsonb");
                 // Listing filters on it on every arrival at the activity list.
                 e.HasIndex(a => new { a.Unlisted, a.ArchivedAt });
@@ -182,7 +178,7 @@ namespace AlgoJudge.Server.Database
                     .WithMany(p => p.Versions)
                     .HasForeignKey(v => v.ProblemId)
                     .OnDelete(DeleteBehavior.Cascade);
-                e.Property(v => v.Config).HasColumnType("jsonb");
+                e.Property(v => v.Props).HasColumnType("jsonb");
                 e.HasOne(v => v.CreatedBy)
                     .WithMany()
                     .HasForeignKey(v => v.CreatedByUserId)
@@ -194,7 +190,13 @@ namespace AlgoJudge.Server.Database
                 e.ToTable("SeriesProblems");
                 e.Property(sp => sp.Slug).HasMaxLength(32);
                 e.Property(sp => sp.Name).HasMaxLength(200);
+                // Three documents, three audiences: `config` decides the
+                // verdict, `spec` draws the form, `props` is display. See the
+                // entity — the split is what stops them being one field that
+                // means three things.
                 e.Property(sp => sp.Config).HasColumnType("jsonb");
+                e.Property(sp => sp.Spec).HasColumnType("jsonb");
+                e.Property(sp => sp.Props).HasColumnType("jsonb");
                 e.HasOne(sp => sp.Series)
                     .WithMany(s => s.SeriesProblems)
                     .HasForeignKey(sp => sp.SeriesId)
@@ -325,6 +327,7 @@ namespace AlgoJudge.Server.Database
             builder.Entity<Submission>(e =>
             {
                 e.ToTable("Submissions");
+                e.Property(s => s.Props).HasColumnType("jsonb");
                 // Every participant screen asks "my submissions for this
                 // assignment, newest first", and the submission-count ceiling is
                 // the same query.
@@ -395,6 +398,7 @@ namespace AlgoJudge.Server.Database
             {
                 e.ToTable("Results");
                 e.Property(r => r.Extra).HasColumnType("jsonb");
+                e.Property(r => r.Props).HasColumnType("jsonb");
                 e.Property(r => r.Verdict).HasMaxLength(64);
                 // One result per completed job. Retries and rejudges add jobs,
                 // not results, which is what keeps "which one counts" answerable.

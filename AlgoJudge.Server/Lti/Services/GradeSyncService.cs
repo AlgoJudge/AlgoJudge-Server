@@ -34,6 +34,17 @@ namespace AlgoJudge.Server.Lti.Services
     public class GradeSyncService(
         LtiDbContext db, ApplicationDbContext core, TimeProvider clock) : IGradeSyncService
     {
+        /// <summary>
+        /// What a gradebook column is worth where the assignment states no point
+        /// value of its own.
+        /// <para>
+        /// A percentage column, and deliberately: LTI requires a
+        /// <c>scoreMaximum</c> on the line item, it is fixed when the column is
+        /// created, and a platform cannot be told "whatever the package said".
+        /// </para>
+        /// </summary>
+        public const double PercentageColumn = 100d;
+
         public async Task<int> RefreshAsync(ResourceLink link, CancellationToken ct)
         {
             var activity = await core.Activities.AsNoTracking()
@@ -78,7 +89,16 @@ namespace AlgoJudge.Server.Lti.Services
             IReadOnlyDictionary<string, string> linked,
             CancellationToken ct)
         {
-            var maxPoints = Scoring.MaxPoints(assignment);
+            // **A gradebook column is a fixed scale, by definition**, and this
+            // is the one place in the product that genuinely needs a number
+            // where the assignment states none: LTI's `scoreMaximum` is
+            // required, and it is set once when the line item is created rather
+            // than per submission.
+            //
+            // So a hundred here, and a percentage column is what that means.
+            // Everywhere else `?? 100` was a lie about the problem's own
+            // scoring; here it is a decision about a column somebody else owns.
+            var maxPoints = assignment.MaxPoints ?? PercentageColumn;
 
             var item = await db.LineItems.FirstOrDefaultAsync(
                 i => i.ResourceLinkId == link.Id && i.SeriesProblemId == assignment.Id, ct);
@@ -120,9 +140,18 @@ namespace AlgoJudge.Server.Lti.Services
                 .Where(x => x.Score != null)
                 .ToListAsync(ct);
 
+            // **Best by fraction, not by raw score.** Ordering on `Score` alone
+            // compares numbers marked out of different maxima — a package
+            // republished with more tests, or a type marking out of one — so
+            // 70 out of 100 beat 1 out of 1, and the gradebook was sent the
+            // worse of somebody's two attempts. Every other reader in the
+            // product had already been fixed to compare fractions; this one
+            // was missed.
             var desired = best
                 .GroupBy(x => x.UserId)
-                .Select(g => g.OrderByDescending(x => x.Score).First())
+                .Select(g => g
+                    .OrderByDescending(x => Scoring.Fraction(x.Score, x.MaxScore) ?? -1)
+                    .First())
                 .ToList();
 
             var state = ScoreState(activity, assignment);

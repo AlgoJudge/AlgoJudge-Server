@@ -36,6 +36,21 @@ public sealed class FakeGradebook : HttpMessageHandler
     /// <summary>The scores the platform ended up holding, per person.</summary>
     public Dictionary<string, (double Score, DateTime At)> Held { get; } = [];
 
+    /// <summary>
+    /// How many score postings each person has had.
+    ///
+    /// <para>
+    /// <b>Per person, because counting them all does not work.</b> The grade
+    /// sweep is global: it walks every pending row in the database, and the
+    /// tests share one. So a sweep started by one test posts whatever an earlier
+    /// test left behind — through <i>this</i> stub, because it is the handler
+    /// registered on the host doing the sweeping. A test counting every
+    /// <c>/scores</c> URL is therefore counting other tests' leftovers, and goes
+    /// red depending on what ran before it.
+    /// </para>
+    /// </summary>
+    public Dictionary<string, int> Posts { get; } = [];
+
     /// <summary>What every line item request will be answered with.</summary>
     public string LineItemUrl { get; set; } =
         "https://platform.invalid/mod/lti/services.php/2/lineitems/7/lineitem?type_id=1";
@@ -79,6 +94,7 @@ public sealed class FakeGradebook : HttpMessageHandler
 
             using var document = JsonDocument.Parse(body);
             var user = document.RootElement.GetProperty("userId").GetString()!;
+            Posts[user] = Posts.GetValueOrDefault(user) + 1;
             var score = document.RootElement.GetProperty("scoreGiven").GetDouble();
             var stamp = document.RootElement.GetProperty("timestamp").GetDateTime();
 

@@ -15,7 +15,7 @@ namespace AlgoJudge.Server.Services
         Task<PageDto<SubmissionSummaryDto>> ListAsync(string activityIdOrSlug, PageQuery paging, CancellationToken ct);
         Task<SubmissionDetailDto> GetAsync(string activityIdOrSlug, Guid submissionId, CancellationToken ct);
         Task<SubmissionSummaryDto> SubmitAsync(
-            string activityIdOrSlug, string problemSlug, string? language, StagedBytes staged,
+            string activityIdOrSlug, string problemSlug, string? props, StagedBytes staged,
             string fileName, string declaredSha256, CancellationToken ct);
 
         /// <summary>Tells everyone who may read it that a submission moved.</summary>
@@ -70,7 +70,10 @@ namespace AlgoJudge.Server.Services
             // The newest attempt is what the submission currently says. Older
             // ones are history and stay readable, but they do not speak for it.
             var current = Scoring.Current(submission);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            // **Both numbers from one place.** Reading the score here and the
+            // maximum somewhere else is how a raw attempt score ended up beside
+            // a rescaled maximum on the same screen.
+            var (score, maxScore) = Scoring.Reported(assignment, current?.Result);
 
             return new SubmissionSummaryDto
             {
@@ -80,10 +83,10 @@ namespace AlgoJudge.Server.Services
                 ProblemName = assignment.Name ?? assignment.Problem?.Name ?? assignment.Slug,
                 SeriesId = Wire.Id(assignment.SeriesId),
                 SubmittedAt = Wire.At(submission.CreatedDate),
-                Language = submission.Language,
+                Props = Projections.Opaque(submission.Props),
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
-                Score = Scoring.Rescale(Scoring.Fraction(current?.Result), maxPoints),
-                MaxScore = current?.Result?.Score is null ? null : maxPoints,
+                Score = score,
+                MaxScore = maxScore,
                 Verdict = current?.Result?.Verdict,
             };
         }
@@ -130,7 +133,7 @@ namespace AlgoJudge.Server.Services
                 ProblemName = summary.ProblemName,
                 SeriesId = summary.SeriesId,
                 SubmittedAt = summary.SubmittedAt,
-                Language = summary.Language,
+                Props = summary.Props,
                 State = summary.State,
                 Score = summary.Score,
                 MaxScore = summary.MaxScore,
@@ -147,7 +150,13 @@ namespace AlgoJudge.Server.Services
                         FinishedAt = Wire.At(job.FinishedAt),
                         State = Projections.Wire(job.State),
                         Verdict = job.Result?.Verdict,
-                        Score = job.Result?.Score,
+                        // **Rescaled, like the submission above it.** This was
+                        // the Runner's raw number while the enclosing summary
+                        // was the assignment's — 70 in the attempt list and 35
+                        // in the header, on one screen, and neither expression
+                        // looked wrong on its own.
+                        Score = Scoring.Reported(submission.SeriesProblem!, job.Result).Score,
+                        Props = Projections.Opaque(job.Result?.Props),
                         Files = job.Files.Where(Readable).Select(Projections.SubmissionFile).ToList(),
                     })
                     .ToList(),
@@ -164,7 +173,7 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         public async Task<SubmissionSummaryDto> SubmitAsync(
-            string activityIdOrSlug, string problemSlug, string? language, StagedBytes staged,
+            string activityIdOrSlug, string problemSlug, string? props, StagedBytes staged,
             string fileName, string declaredSha256, CancellationToken ct)
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
@@ -188,13 +197,17 @@ namespace AlgoJudge.Server.Services
                 throw new ForbiddenActionException("This series is not accepting submissions", "series.closed");
             }
 
-            if (!string.IsNullOrWhiteSpace(language)
-                && activity.Languages.Count > 0
-                && !activity.Languages.Contains(language))
-            {
-                throw new ForbiddenActionException(
-                    $"This activity does not accept {language}", "submission.language");
-            }
+            // **The language check was here, and it is the Runner's now.**
+            // The Server read `language` off the form and compared it against a
+            // list on the activity. It cannot: the language is one member of an
+            // opaque document, and a Server that reached into it would be
+            // reading a problem type's vocabulary — the thing the whole opaque
+            // arrangement exists to prevent.
+            //
+            // The allowed set lives in the assignment's `config` and travels with
+            // the job, so the refusal happens where the catalogue is understood.
+            // Nothing is lost: the check ran on a string the Server could not
+            // validate the meaning of either.
 
             var ceiling = assignment.MaxSubmissions ?? activity.MaxSubmissionsPerProblem;
             if (ceiling is { } limit)
@@ -216,6 +229,30 @@ namespace AlgoJudge.Server.Services
             var maxBytes = assignment.MaxUploadBytes ?? activity.MaxUploadBytes;
             if (staged.SizeBytes > maxBytes) throw new PayloadTooLargeException(maxBytes);
 
+            // **The third of the three limits the Server exists to enforce, and
+            // the one that was never enforced.** It was stored, projected,
+            // editable in the panel and read by nothing — a promise the code did
+            // not keep, against a specification that names the attachment count
+            // as a column precisely *because* the Server polices it.
+            //
+            // A submission carries exactly one attachment today, so what this
+            // rejects is an assignment configured to accept none. It is the wall
+            // that becomes load-bearing the day the form carries more, and it
+            // costs one comparison to have it standing already.
+            var maxAttachments = assignment.MaxAttachments ?? activity.MaxAttachments;
+            if (maxAttachments < 1)
+            {
+                throw new ForbiddenActionException(
+                    "This problem accepts no attachments", "submission.attachments");
+            }
+
+            // **Checked before the bytes are committed, with the other
+            // refusals.** Everything above this line refuses without leaving
+            // anything behind, and the envelope check has to be on the same side
+            // of that line: `CommitAsync` is the point of no return, and a
+            // document refused after it would leave a blob nothing references.
+            var declared = Opaque.StoreText(props, "props");
+
             var version = await ((ProblemService)problems).ResolveVersionAsync(assignment, ct)
                 ?? throw new ConflictException("This problem has no published version", "problem.noVersion");
 
@@ -225,7 +262,7 @@ namespace AlgoJudge.Server.Services
             {
                 UserId = user.Id,
                 SeriesProblemId = assignment.Id,
-                Language = language,
+                Props = declared,
             };
             context.Submissions.Add(submission);
 
@@ -238,7 +275,11 @@ namespace AlgoJudge.Server.Services
                 // activity's table then decides whether `source` reaches them.
                 Scope = FileScope.Participant,
                 Name = AttachmentNames.Source,
-                Language = language,
+                // **No `Language` here.** This column is a BCP-47 subtag — it is
+                // how a version keeps one statement per natural language — and a
+                // programming language was being written into it, truncated at
+                // sixteen characters. Two meanings of one word met in one line;
+                // the column keeps the meaning it is documented with.
             });
 
             context.EvaluationJobs.Add(new EvaluationJob
@@ -314,8 +355,8 @@ namespace AlgoJudge.Server.Services
 
             // `Scoring` reads submissions, not the jobs under them: the best of
             // what somebody sent, and how many times they sent it.
-            var best = Scoring.Best(mine);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            var (best, outOf) = Scoring.BestOf(mine);
+            var maxPoints = Scoring.Scale(assignment, outOf);
 
             await events.SendToUserAsync(submission.UserId, EventTypes.ProblemStatusChanged, new
             {

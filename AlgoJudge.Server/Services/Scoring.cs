@@ -34,7 +34,41 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         public const double RunnerScale = 100d;
 
-        public static double MaxPoints(SeriesProblem assignment) => assignment.MaxPoints ?? RunnerScale;
+        /// <summary>
+        /// The scale a number is reported on: the assignment's point value, or —
+        /// where it states none — <b>what the result itself was marked out of</b>.
+        /// <para>
+        /// This was <c>assignment.MaxPoints ?? 100</c> until 2026-08-22, and that
+        /// contradicted the column beside it in the same file:
+        /// <see cref="SeriesProblem.MaxPoints"/> says "null keeps the Runner's
+        /// own scale", and 100 is not the Runner's own scale, it is a percentage.
+        /// A package marking out of 70 reported a full solve as <b>100 / 100</b>
+        /// on every screen — the problem's own scoring, which the owner's rule
+        /// says is fixed to the problem, silently replaced by a convention.
+        /// </para>
+        /// <para>
+        /// Null where the assignment states no value <i>and</i> nothing has been
+        /// judged: there is no scale yet, and inventing one would put a maximum
+        /// beside a score that does not exist.
+        /// </para>
+        /// </summary>
+        public static double? Scale(SeriesProblem assignment, double? outOf) =>
+            assignment.MaxPoints ?? outOf;
+
+        /// <summary>
+        /// What one result is worth and what it is worth out of, together.
+        /// <para>
+        /// <b>Together, because apart is how they disagree.</b> A screen reading
+        /// the score from one place and the maximum from another showed a raw
+        /// attempt score beside a rescaled maximum — 70 out of 50 — and nothing
+        /// in either expression looked wrong on its own.
+        /// </para>
+        /// </summary>
+        public static (double? Score, double? MaxScore) Reported(SeriesProblem assignment, Result? result)
+        {
+            var scale = Scale(assignment, result?.MaxScore);
+            return (Rescale(Fraction(result), scale ?? 0), result?.Score is null ? null : scale);
+        }
 
         /// <summary>
         /// What a result is worth, as a fraction of what it was marked out of.
@@ -68,6 +102,10 @@ namespace AlgoJudge.Server.Services
             return Math.Round(fraction.Value * maxPoints);
         }
 
+        /// <summary>The same, where the scale may not be known yet.</summary>
+        public static double? Rescale(double? fraction, double? maxPoints) =>
+            maxPoints is null ? null : Rescale(fraction, maxPoints.Value);
+
         /// <summary>The newest job decides what a submission currently says.</summary>
         public static EvaluationJob? Current(Submission submission) =>
             submission.Jobs.OrderByDescending(j => j.Attempt).FirstOrDefault();
@@ -82,16 +120,36 @@ namespace AlgoJudge.Server.Services
         /// out of one.
         /// </para>
         /// </summary>
-        public static double? Best(IEnumerable<Submission> submissions)
+        public static double? Best(IEnumerable<Submission> submissions) => BestOf(submissions).Fraction;
+
+        /// <summary>
+        /// The best standing <b>and the scale the result that produced it was
+        /// marked on</b>.
+        /// <para>
+        /// The second half matters where the assignment states no point value:
+        /// the number reported is then the package's own, and the package's own
+        /// maximum is only knowable from a result. Two submissions to one problem
+        /// may carry different maxima — a package republished with more tests —
+        /// so it is the best one's maximum, not any of them.
+        /// </para>
+        /// </summary>
+        public static (double? Fraction, double? OutOf) BestOf(IEnumerable<Submission> submissions)
         {
             double? best = null;
+            double? outOf = null;
+
             foreach (var submission in submissions)
             {
-                var fraction = Fraction(Current(submission)?.Result);
+                var result = Current(submission)?.Result;
+                var fraction = Fraction(result);
                 if (fraction is null) continue;
-                best = best is null ? fraction : Math.Max(best.Value, fraction.Value);
+                if (best is null || fraction.Value > best.Value)
+                {
+                    best = fraction;
+                    outOf = result?.MaxScore;
+                }
             }
-            return best;
+            return (best, outOf);
         }
 
         /// <summary>

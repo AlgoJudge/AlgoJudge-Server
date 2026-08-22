@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using AlgoJudge.Server.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Database.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260822091352_PropsSpecAndConfig")]
+    partial class PropsSpecAndConfig
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -792,9 +795,6 @@ namespace AlgoJudge.Server.Database.Migrations
 
                     b.Property<Guid>("ProblemId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Props")
-                        .HasColumnType("jsonb");
 
                     b.Property<int>("Version")
                         .HasColumnType("integer");

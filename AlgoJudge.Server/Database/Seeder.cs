@@ -222,7 +222,6 @@ namespace AlgoJudge.Server.Database
                 ScoreVisibility = ScoreVisibility.Everyone,
                 JoinPolicy = JoinPolicy.Open,
                 Unlisted = false,
-                Languages = ["cpp", "python", "java"],
                 MaxUploadBytes = 1024 * 1024,
                 MaxAttachments = 1,
             };
@@ -307,7 +306,6 @@ namespace AlgoJudge.Server.Database
                 Version = 1,
                 CreatedByUserId = admin.Id,
                 Note = "Seeded",
-                Config = """{"format":"standard-io","version":1,"limits":{"timeMs":1000,"memoryBytes":268435456}}""",
             };
             context.ProblemVersions.Add(version);
 
@@ -337,6 +335,14 @@ namespace AlgoJudge.Server.Database
                 Slug = "A",
                 Order = 1,
                 MaxPoints = 50,
+                // The three documents, and the one thing all three say: which
+                // languages. `config` is what the Runner refuses against,
+                // `spec` is what the form offers, `props` is what a header
+                // reads out. They agree here; where they do not, `config` wins,
+                // because it is the only one anything enforces.
+                Config = """{"type":"standard-io@1","languages":["cpp20-gcc","python3"],"limits":{"timeMs":1000,"memoryBytes":268435456}}""",
+                Spec = """{"type":"standard-io@1","languages":[{"id":"cpp20-gcc","label":"C++20 (GCC)"},{"id":"python3","label":"Python 3 (CPython)"}]}""",
+                Props = """{"type":"standard-io@1","languages":"C++20 (GCC), Python 3 (CPython)"}""",
             });
 
             await context.SaveChangesAsync(ct);

@@ -176,7 +176,7 @@ namespace AlgoJudge.Server.Services
         {
             var assignment = submission.SeriesProblem!;
             var current = Scoring.Current(submission);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            var (score, maxScore) = Scoring.Reported(assignment, current?.Result);
 
             return new ManagedSubmissionDto
             {
@@ -193,11 +193,11 @@ namespace AlgoJudge.Server.Services
                     ? submission.UserId
                     : Projections.DisplayName(submission.User),
                 SubmittedAt = Wire.At(submission.CreatedDate),
-                Language = submission.Language,
+                Props = Projections.Opaque(submission.Props),
                 State = Projections.Wire(current?.State ?? EvaluationJobState.Queued),
                 Verdict = current?.Result?.Verdict,
-                Score = Scoring.Rescale(Scoring.Fraction(current?.Result), maxPoints),
-                MaxScore = current?.Result?.Score is null ? null : maxPoints,
+                Score = score,
+                MaxScore = maxScore,
                 Attempts = submission.Jobs.Count,
             };
         }
@@ -223,7 +223,7 @@ namespace AlgoJudge.Server.Services
                 UserId = summary.UserId,
                 UserName = summary.UserName,
                 SubmittedAt = summary.SubmittedAt,
-                Language = summary.Language,
+                Props = summary.Props,
                 State = summary.State,
                 Verdict = summary.Verdict,
                 Score = summary.Score,

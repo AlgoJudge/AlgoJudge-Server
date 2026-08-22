@@ -245,9 +245,13 @@ namespace AlgoJudge.Server.Services
                 Version = (previous?.Version ?? 0) + 1,
                 CreatedByUserId = user.Id,
                 Note = input.Note,
-                Config = input.Config is null
-                    ? previous?.Config
-                    : JsonSerializer.Serialize(input.Config),
+                // An absent document carries the previous version's forward; a
+                // present one is checked before it replaces it. A problem's
+                // identity does not change because somebody fixed a typo in its
+                // statement.
+                Props = input.Props is null
+                    ? previous?.Props
+                    : Opaque.Store(input.Props, "props"),
             };
             context.ProblemVersions.Add(version);
 
@@ -488,7 +492,7 @@ namespace AlgoJudge.Server.Services
                     Version = 1,
                     CreatedByUserId = user.Id,
                     Note = $"Copied from {source.Slug} v{newest.Version}",
-                    Config = newest.Config,
+                    Props = newest.Props,
                 };
                 context.ProblemVersions.Add(version);
 
@@ -663,8 +667,8 @@ namespace AlgoJudge.Server.Services
                 .Include(s => s.Jobs).ThenInclude(j => j.Result)
                 .ToListAsync(ct);
 
-            var scale = Scoring.Best(mine);
-            var maxPoints = Scoring.MaxPoints(assignment);
+            var (scale, outOf) = Scoring.BestOf(mine);
+            var maxPoints = Scoring.Scale(assignment, outOf);
             var ceiling = assignment.MaxSubmissions ?? activity.MaxSubmissionsPerProblem;
 
             return new ProblemDetailDto
@@ -685,7 +689,13 @@ namespace AlgoJudge.Server.Services
                 BestScore = Scoring.Rescale(scale, maxPoints),
                 MaxScore = mine.Count == 0 ? null : maxPoints,
                 Attempts = mine.Count,
-                Languages = activity.Languages,
+                // The three documents, each to the reader it is for. The Server
+                // reads none of them: it checked the envelope and the ceiling
+                // when a manager wrote them, and that is the whole of its
+                // involvement.
+                Config = Projections.Opaque(assignment.Config),
+                Spec = Projections.Opaque(assignment.Spec),
+                Props = Projections.Opaque(assignment.Props),
                 MaxUploadBytes = assignment.MaxUploadBytes ?? activity.MaxUploadBytes,
                 SubmitFields =
                 [

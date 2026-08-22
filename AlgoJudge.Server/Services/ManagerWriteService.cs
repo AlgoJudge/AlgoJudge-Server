@@ -154,7 +154,7 @@ namespace AlgoJudge.Server.Services
             if (input.Modules is { } modules) activity.HasQuestions = modules.Questions;
             if (input.ScoreVisibility is { } visibility) activity.ScoreVisibility = ParseScoreVisibility(visibility);
             if (input.HideEndedSeriesProblems is { } hide) activity.HideEndedSeriesProblems = hide;
-            if (input.Languages is { } languages) activity.Languages = languages.ToList();
+            if (input.Props is not null) activity.Props = Opaque.Store(input.Props, "props");
             if (input.MaxUploadBytes is { } upload) activity.MaxUploadBytes = upload;
             if (input.MaxAttachments is { } attachments) activity.MaxAttachments = attachments;
             activity.MaxSubmissionsPerProblem = input.MaxSubmissionsPerProblem;
@@ -516,11 +516,14 @@ namespace AlgoJudge.Server.Services
             }
 
             assignment.Name = input.Name;
+            CheckMaxPoints(input.MaxPoints);
             assignment.MaxPoints = input.MaxPoints;
             assignment.MaxUploadBytes = input.MaxUploadBytes;
             assignment.MaxAttachments = input.MaxAttachments;
             assignment.MaxSubmissions = input.MaxSubmissions;
-            assignment.Config = input.Config is null ? null : JsonSerializer.Serialize(input.Config);
+            assignment.Config = Opaque.Store(input.Config, "config");
+            assignment.Spec = Opaque.Store(input.Spec, "spec");
+            assignment.Props = Opaque.Store(input.Props, "props");
 
             if (input.PinnedProblemVersionId is { } rawPin)
             {
@@ -591,5 +594,30 @@ namespace AlgoJudge.Server.Services
             "managersOnly" => ScoreVisibility.ManagersOnly,
             _ => ScoreVisibility.Everyone,
         };
-    }
+    
+        /// <summary>
+        /// A point value, or nothing. <b>Never zero and never negative.</b>
+        /// <para>
+        /// Zero was accepted and is not a problem worth nothing — it is a
+        /// problem whose every number is <c>0 / 0</c>, which a board reads as
+        /// full marks because zero out of zero is the whole of it. A problem
+        /// nobody should score is a problem nobody should attach.
+        /// </para>
+        /// <para>
+        /// Checked on both write paths rather than on one: an assignment is
+        /// created by attaching and changed by editing, and a rule enforced on
+        /// the first alone is a rule the second removes.
+        /// </para>
+        /// </summary>
+        private static void CheckMaxPoints(int? maxPoints)
+        {
+            if (maxPoints is { } value && value <= 0)
+            {
+                throw new ValidationException(
+                    $"A problem is worth {value} points here, which is not a value anything can be scored against",
+                    "assignment.maxPoints.invalid");
+            }
+        }
+
+}
 }

@@ -340,9 +340,6 @@ namespace AlgoJudge.Server.Database
                         Version = number,
                         CreatedByUserId = admin.Id,
                         Note = number == 1 ? "Pierwsza wersja" : $"Wersja {number}",
-                        // The shape `docs/specs/PACKAGE_FORMAT.md` states, decided
-                        // 2026-08-08 over the fixture's `kind`/`memoryBytes` form.
-                        Config = """{"format":"standard-io","version":1,"limits":{"timeMs":1000,"memoryBytes":268435456}}""",
                     };
                     context.ProblemVersions.Add(version);
                     made[number] = version;
@@ -390,7 +387,6 @@ namespace AlgoJudge.Server.Database
                 JoinPassword = joinPassword,
                 Unlisted = true,
                 HideEndedSeriesProblems = false,
-                Languages = languages,
                 MaxUploadBytes = maxUploadBytes,
                 MaxAttachments = maxAttachments,
                 MaxSubmissionsPerProblem = maxSubmissions,
@@ -483,6 +479,13 @@ namespace AlgoJudge.Server.Database
                         Name = assignmentName,
                         Order = order++,
                         MaxPoints = maxPoints,
+                        // Limits and the allowed languages moved here when the
+                        // chain collapsed to two layers: they are properties of
+                        // this *use* of the problem, which is why they were
+                        // never at home on a version of it.
+                        Config = """{"type":"standard-io@1","languages":["cpp20-gcc","python3"],"limits":{"timeMs":1000,"memoryBytes":268435456}}""",
+                        Spec = """{"type":"standard-io@1","languages":[{"id":"cpp20-gcc","label":"C++20 (GCC)"},{"id":"python3","label":"Python 3 (CPython)"}]}""",
+                        Props = """{"type":"standard-io@1","languages":"C++20 (GCC), Python 3 (CPython)"}""",
                     };
                     context.SeriesProblems.Add(assignment);
                     assignments[letter] = assignment;
@@ -516,7 +519,7 @@ namespace AlgoJudge.Server.Database
                 CreatedDate = at,
                 UserId = author.Id,
                 SeriesProblemId = assignment.Id,
-                Language = attempt.Language,
+                Props = $$"""{"type":"standard-io@1","language":"{{attempt.Language}}"}""",
             };
             context.Submissions.Add(submission);
 

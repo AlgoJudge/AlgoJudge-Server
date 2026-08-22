@@ -28,8 +28,23 @@ namespace AlgoJudge.Server.Database.Models
         public Guid SeriesProblemId { get; set; }
         public SeriesProblem? SeriesProblem { get; set; }
 
-        /// <summary>Declared by the participant; meaningful only to the problem type.</summary>
-        public string? Language { get; set; }
+        /// <summary>
+        /// What the participant declared beside the bytes — the language, and
+        /// whatever else the problem type asks of them. <c>jsonb</c> and
+        /// <b>opaque to the Server</b>, handed to the Runner unread.
+        /// <para>
+        /// <b>This was a <c>Language</c> column until 2026-08-22</b>, and the
+        /// Server read it: it refused a language the activity did not list, and
+        /// it chose a file extension for pasted source from a table of seven
+        /// languages compiled into <c>ActivitiesController</c>. That table meant
+        /// a <b>Server release for every new language</b>, against a guardrail
+        /// saying a problem type must not need one. Both are gone; the allowed
+        /// set lives in <see cref="SeriesProblem.Config"/> and the Runner refuses
+        /// what the assignment excluded.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
+        /// </summary>
+        public string? Props { get; set; }
 
         /// <summary>
         /// What was sent — the source, or the archive — under the name

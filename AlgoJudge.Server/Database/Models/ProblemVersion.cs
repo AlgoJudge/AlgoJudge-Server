@@ -32,21 +32,32 @@ namespace AlgoJudge.Server.Database.Models
         public string? Note { get; set; }
 
         /// <summary>
-        /// Limits and scoring for this version, as <c>jsonb</c> and <b>opaque to
-        /// the Server</b>, which stores it and never reads it.
+        /// What the problem type needs to know about <b>this version of this
+        /// problem</b>, as <c>jsonb</c> and <b>opaque to the Server</b>.
         /// <para>
-        /// It is the middle of three layers: the package's own defaults, then
-        /// this, then <see cref="SeriesProblem.Config"/>. Each overrides the one
-        /// before, and the Client and the Runner both parse the result — the
-        /// Client to show limits and draw a result, the Runner to enforce them.
+        /// <b>Not a configuration layer.</b> `Config` was here until 2026-08-22
+        /// as the middle of three — package, version, assignment — and the middle
+        /// one earned nothing: a version wanting different limits is a version
+        /// with a different package, because limits are calibrated against the
+        /// tests that version ships. The chain is still two.
         /// </para>
         /// <para>
-        /// Null means none; never <c>{}</c>. Nothing the Server has to enforce
-        /// belongs here — a limit it cannot read is a limit it cannot police, so
-        /// those are explicit columns instead.
+        /// What came back the same day is a different thing under a different
+        /// name: **identity, not settings**. `uva@1` needs the archive's problem
+        /// number, which is a fact about the problem rather than about one
+        /// activity's use of it — copying it onto every assignment would be one
+        /// number written in as many places as the problem is attached, and
+        /// wrong in whichever of them somebody mistyped.
         /// </para>
+        /// <para>
+        /// <b>Optional here and required by some types.</b> The Server cannot
+        /// tell which: it does not read this and must not branch on a problem
+        /// type. A Runner that needs it and does not find it reports an
+        /// infrastructure failure naming what is missing.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
         /// </summary>
-        public string? Config { get; set; }
+        public string? Props { get; set; }
 
         /// <summary>
         /// Everything this version is made of — the statement and its

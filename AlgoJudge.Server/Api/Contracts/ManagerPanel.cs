@@ -326,7 +326,8 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string UserId { get; init; }
         public required string UserName { get; init; }
         public required string SubmittedAt { get; init; }
-        public string? Language { get; init; }
+        /// <summary>What the participant declared beside the bytes. Opaque.</summary>
+        public object? Props { get; init; }
         public required string State { get; init; }
         public string? Verdict { get; init; }
         public double? Score { get; init; }

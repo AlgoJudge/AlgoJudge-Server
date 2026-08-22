@@ -344,7 +344,6 @@ namespace AlgoJudge.Server.Services
                 Unlisted = source.Unlisted,
                 HideEndedSeriesProblems = source.HideEndedSeriesProblems,
                 Props = source.Props,
-                Languages = [.. source.Languages],
                 MaxAttachments = source.MaxAttachments,
                 MaxSubmissionsPerProblem = source.MaxSubmissionsPerProblem,
                 // **Nothing here is for anybody yet**, which is the whole reason
@@ -520,7 +519,7 @@ namespace AlgoJudge.Server.Services
                 // forced rather than left to disagree with it.
                 Unlisted = policy == JoinPolicy.Closed || (input.Unlisted ?? false),
                 HideEndedSeriesProblems = input.HideEndedSeriesProblems ?? false,
-                Languages = input.Languages?.ToList() ?? ["cpp", "python"],
+                Props = Opaque.Store(input.Props, "props"),
                 MaxUploadBytes = input.MaxUploadBytes ?? 8L * 1024 * 1024,
                 MaxAttachments = input.MaxAttachments ?? 1,
                 MaxSubmissionsPerProblem = input.MaxSubmissionsPerProblem,

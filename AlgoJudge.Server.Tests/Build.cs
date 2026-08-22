@@ -40,7 +40,6 @@ public static class Build
             rankingType = "icpc",
             timeZone = "Europe/Warsaw",
             joinPolicy = "open",
-            languages = new[] { "python" },
             attachmentVisibility = new[] { new { name = "source", visibility = "participant" } },
         });
 
@@ -121,8 +120,12 @@ public static class Build
 
         using var content = new MultipartFormDataContent
         {
-            { new StringContent("python"), "language" },
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
             { new StringContent(source), "code" },
+            // Required for pasted source since 2026-08-22: the Server no longer
+            // owns a table of language extensions, so only the sender can name
+            // the file, and a name the Runner refuses is worse than no name.
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(checksum), "sha256" },
         };
 
@@ -258,12 +261,24 @@ public sealed class StubRunner(
     public async Task<string> UploadAsync(string name, string text) =>
         await Build.UploadAsync(Client, "/api/v1/runner/files", name, text);
 
+    /// <summary>
+    /// Reports a result.
+    ///
+    /// <para>
+    /// <b>`maxScore` is a parameter, and it has to be.</b> It defaulted to 100
+    /// and nothing ever passed anything else, so every test in this suite
+    /// reported on the one scale where a raw score and a percentage are the same
+    /// number — which is the scale on which none of the scoring defects is
+    /// visible.
+    /// </para>
+    /// </summary>
     public async Task<JsonElement> ReportAsync(
-        string jobId, string leaseToken, double score = 100, string verdict = "Accepted")
+        string jobId, string leaseToken, double score = 100, string verdict = "Accepted",
+        double maxScore = 100)
     {
         var response = await Client.PostAsJsonAsync($"/api/v1/runner/jobs/{jobId}/report", new
         {
-            leaseToken, score, maxScore = 100, verdict, runnerVersion = "0.0.1",
+            leaseToken, score, maxScore, verdict, runnerVersion = "0.0.1",
         });
         await Sign.Succeeded(response);
         return await response.Content.ReadFromJsonAsync<JsonElement>();

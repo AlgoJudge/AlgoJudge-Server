@@ -97,7 +97,6 @@ public class EndToEndTests(ServerFixture server)
             rankingType = "icpc",
             timeZone = "Europe/Warsaw",
             joinPolicy = "open",
-            languages = new[] { "python" },
             attachmentVisibility = new[] { new { name = "source", visibility = "participant" } },
         });
         Assert.Equal(slug, activity.GetProperty("slug").GetString());
@@ -128,18 +127,27 @@ public class EndToEndTests(ServerFixture server)
         {
             note = "First",
             statements = new[] { new { fileId = statement } },
-            config = new { format = "standard-io", version = 1, limits = new { timeMs = 2000, memoryBytes = 268435456 } },
             package = new { fileId = package },
         });
         Assert.Equal(1, version.GetProperty("version").GetInt32());
         Assert.True(version.GetProperty("hasPackage").GetBoolean());
 
         // Attaching pins the current version and says what it is worth here.
+        // **The configuration is stated here and not on the version.** It was
+        // on the version until 2026-08-22, as the middle of three layers; the
+        // chain is two now — the package, then this — because limits belong to
+        // one *use* of a problem rather than to the problem.
         var attached = await Post(admin, $"/api/v1/series/{roundId}/problems", new
         {
             problemId,
             slug = "A",
             maxPoints = 50,
+            config = new
+            {
+                type = "standard-io@1",
+                languages = new[] { "python3" },
+                limits = new { timeMs = 2000, memoryBytes = 268435456 },
+            },
         });
         var assignment = Assert.Single(attached.GetProperty("problems").EnumerateArray().ToList());
         Assert.Equal(version.GetProperty("id").GetString(), assignment.GetProperty("pinnedProblemVersionId").GetString());
@@ -184,8 +192,7 @@ public class EndToEndTests(ServerFixture server)
         Assert.Contains(
             job.GetProperty("files").EnumerateArray(),
             f => f.GetProperty("name").GetString() == "source");
-        // The merged configuration chain, which the Server carried without
-        // reading either layer.
+        // The assignment's own, carried without being read.
         Assert.Equal(2000, job.GetProperty("config").GetProperty("limits").GetProperty("timeMs").GetInt32());
 
         var running = await participant.GetFromJsonAsync<JsonElement>(
@@ -279,18 +286,78 @@ public class EndToEndTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Forbidden, second.StatusCode);
     }
 
+    /// <summary>
+    /// <b>A language this Server has never heard of is accepted</b>, and that is
+    /// the point rather than an oversight.
+    ///
+    /// <para>
+    /// It used to be refused here, against a list on the activity. The Server
+    /// cannot do that any more and should never have wanted to: a language is one
+    /// member of a document whose shape belongs to the problem type, and a Server
+    /// that reached into it would need a release every time a Runner learned a
+    /// new toolchain. The refusal lives where the catalogue does.
+    /// </para>
+    ///
+    /// <para>
+    /// The test this replaces asserted `submission.language`, an error code that
+    /// no longer exists. This asserts the opposite behaviour deliberately, so
+    /// that re-adding the check means deleting a test that says why it went.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task A_language_the_activity_does_not_accept_is_refused()
+    public async Task A_language_this_server_has_never_heard_of_is_accepted()
     {
         var participant = await SignInAsync(Seeder.DevParticipantLogin, Seeder.DevParticipantPassword);
 
-        var content = Multipart("rust", "fn main() {}\n");
+        var content = Multipart("fortran2018-gfortran", "program main\nend program\n");
         var response = await participant.PostAsync(
             "/api/v1/activities/DEV-2026/problems/A/submissions", content);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await Succeeded(response);
+        var submission = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Stored exactly as declared, for the Runner to accept or refuse.
+        Assert.Equal(
+            "fortran2018-gfortran",
+            submission.GetProperty("props").GetProperty("language").GetString());
+    }
+
+    /// <summary>
+    /// <b>Pasted source has to be named, and there is no default.</b>
+    ///
+    /// <para>
+    /// The Server used to name it — `main.` plus an extension from a table of
+    /// seven languages compiled into the controller, which meant a Server
+    /// release for every language anybody added. The table is gone with the
+    /// language, and nothing here can replace it: a guess of `main.txt` is a
+    /// name the Runner refuses for every toolchain in its catalogue, so it would
+    /// turn a correct solution into a compilation error.
+    /// </para>
+    ///
+    /// <para>Refusing is the only honest answer. The Client always knows.</para>
+    /// </summary>
+    [Fact]
+    public async Task Pasted_source_with_no_file_name_is_refused()
+    {
+        var participant = await SignInAsync(Seeder.DevParticipantLogin, Seeder.DevParticipantPassword);
+
+        var source = "print(1)\n";
+        var checksum = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(source))).ToLowerInvariant();
+
+        using var content = new MultipartFormDataContent
+        {
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
+            { new StringContent(source), "code" },
+            { new StringContent(checksum), "sha256" },
+        };
+
+        var response = await participant.PostAsync(
+            "/api/v1/activities/DEV-2026/problems/A/submissions", content);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("submission.language", problem.GetProperty("code").GetString());
+        Assert.Equal("submission.fileName.missing", problem.GetProperty("code").GetString());
     }
 
     [Fact]
@@ -458,8 +525,9 @@ public class EndToEndTests(ServerFixture server)
         var checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         return new MultipartFormDataContent
         {
-            { new StringContent(language), "language" },
+            { new StringContent($$"""{"type":"standard-io@1","language":"{{language}}"}"""), "props" },
             { new StringContent(source), "code" },
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(checksum), "sha256" },
         };
     }

@@ -211,7 +211,8 @@ public class FreezeAndCeilingTests(ServerFixture server)
 
         using var content = new MultipartFormDataContent
         {
-            { new StringContent("python"), "language" },
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
+            { new StringContent("main.py"), "fileName" },
             { new StringContent(source), "code" },
             { new StringContent(checksum), "sha256" },
         };

@@ -402,6 +402,9 @@ namespace AlgoJudge.Server.Services
                     r => r.ProblemVersionId == job.ProblemVersionId
                         && r.Name == PackageNames.Archive, ct);
 
+            // Read for its `props` alone, which says which problem this is —
+            // `uva@1`'s archive number lives there. Not a configuration layer:
+            // the chain is the package and then the assignment.
             var version = await context.ProblemVersions.AsNoTracking()
                 .FirstAsync(v => v.Id == job.ProblemVersionId, ct);
 
@@ -417,37 +420,28 @@ namespace AlgoJudge.Server.Services
                 PackageFileId = package is null ? "" : Wire.Id(package.FileId),
                 PackageSha256 = package?.File?.Sha256 ?? "",
                 Files = submission.Files.Select(Projections.SubmissionFile).ToList(),
-                Language = submission.Language,
-                // The chain, merged: package, then version, then assignment. The
-                // Server merged two documents it never read.
-                Config = MergeConfig(version.Config, assignment.Config),
+                Props = Projections.Opaque(submission.Props),
+                ProblemVersionProps = Projections.Opaque(version.Props),
+                // **One layer, handed over whole.** The chain was package →
+                // version → assignment and the Server merged the last two for a
+                // Runner that then laid the result over the package. The middle
+                // layer is gone (2026-08-22), so there is nothing left to merge:
+                // the assignment's document travels as it was stored and the
+                // Runner performs the one merge that remains.
+                Config = Projections.Opaque(assignment.Config),
             };
         }
 
-        /// <summary>
-        /// The later layer wins, member by member at the top level.
-        /// <para>
-        /// The Server does not understand either document — it only knows that
-        /// the assignment's entries override the version's. A deeper merge would
-        /// require knowing what the members mean.
-        /// </para>
-        /// </summary>
-        private static object? MergeConfig(string? version, string? assignment)
-        {
-            var lower = Projections.Opaque(version) as JsonElement?;
-            var upper = Projections.Opaque(assignment) as JsonElement?;
-            if (lower is null) return upper;
-            if (upper is null) return lower;
-            if (lower.Value.ValueKind != JsonValueKind.Object || upper.Value.ValueKind != JsonValueKind.Object)
-            {
-                return upper;
-            }
-
-            var merged = new Dictionary<string, JsonElement>();
-            foreach (var member in lower.Value.EnumerateObject()) merged[member.Name] = member.Value;
-            foreach (var member in upper.Value.EnumerateObject()) merged[member.Name] = member.Value;
-            return merged;
-        }
+        // **`MergeConfig` and `Deepen` were here, and there is nothing left
+        // for them to do.** They laid the assignment's configuration over the
+        // problem version's, in depth — a fix made on 2026-08-22 so that an
+        // assignment narrowing a time limit stopped dropping the memory limit
+        // beside it. The middle layer went the same week, and one layer needs no
+        // merge.
+        //
+        // The deep merge itself is not lost: `Config::overlaid` in the Runner's
+        // `aj-package` is the surviving half, and it is the half that was always
+        // load-bearing, because it is what lays an assignment over a package.
 
         /// <summary>
         /// Records a verdict, once.
@@ -501,15 +495,40 @@ namespace AlgoJudge.Server.Services
 
             var now = clock.GetUtcNow().UtcDateTime;
 
-            if (report.Extra is not null)
+            // The board's ceiling, not a document's: `extra` rides the results
+            // feed once per submission per contestant. Checked here rather than
+            // inline since 2026-08-22, so that the envelope rule reaches it too.
+            var extra = Opaque.Store(report.Extra, "extra", OpaqueLimits.Board);
+
+            // A document's ceiling, not the board's: this one travels with a
+            // single result to a single reader, so the multiplication that sets
+            // `extra`'s 2 kB does not apply to it.
+            var props = Opaque.Store(report.Props, "props");
+
+            // **A judged result has a verdict; a failure has none, and that is
+            // not the same kind of absence.** An infrastructure failure is not a
+            // judgement — it already carries no score and no maximum — so the
+            // column stays nullable and the obligation lands here, on the path
+            // that claims to have judged something.
+            //
+            // Required from 2026-08-22. Before that a Runner could report a
+            // completed evaluation with no word for what happened, and every
+            // screen showed a blank where the outcome belongs.
+            if (!report.InfrastructureFailure)
             {
-                var size = JsonSerializer.SerializeToUtf8Bytes(report.Extra).Length;
-                if (size > 2048)
+                if (string.IsNullOrWhiteSpace(report.Verdict))
                 {
-                    // Refused, never truncated: half a document is worse than
-                    // none, because something will try to parse it.
                     throw new ValidationException(
-                        "`extra` is over the 2 kB ceiling", "opaque.tooLarge");
+                        "A judged result must carry a verdict", "result.verdict.missing");
+                }
+                // The column is `varchar(64)`. Unchecked, a longer one reached
+                // the database as an unhandled error rather than as an answer
+                // the Runner could act on.
+                if (report.Verdict.Length > 64)
+                {
+                    throw new ValidationException(
+                        $"`verdict` is {report.Verdict.Length} characters, over the 64 the column holds",
+                        "result.verdict.tooLong");
                 }
             }
 
@@ -522,7 +541,8 @@ namespace AlgoJudge.Server.Services
                 Score = report.InfrastructureFailure ? null : report.Score,
                 MaxScore = report.InfrastructureFailure ? null : report.MaxScore,
                 Verdict = report.Verdict,
-                Extra = report.Extra is null ? null : JsonSerializer.Serialize(report.Extra),
+                Extra = extra,
+                Props = props,
                 RunnerVersion = report.RunnerVersion ?? runner.Version,
             };
             context.Results.Add(result);

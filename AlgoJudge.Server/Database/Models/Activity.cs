@@ -79,18 +79,17 @@ namespace AlgoJudge.Server.Database.Models
         public bool HideEndedSeriesProblems { get; set; }
 
         /// <summary>
-        /// The languages a solution may be written in here.
-        /// <para>
-        /// The activity's answer and the only one — nothing declares a problem's
-        /// own languages yet. Narrowing it leaves what has already been sent
-        /// alone: a result belongs to what it was judged against.
-        /// </para>
-        /// </summary>
-        public List<string> Languages { get; set; } = [];
-
-        /// <summary>
         /// Free display metadata, e.g. <c>Prowadzący: Jan Kowalski</c>. Never
         /// queried, never filtered on, so it is stored rather than modelled.
+        /// <para>
+        /// <b>Opaque since 2026-08-22</b>, and typed <c>{ key, value }[]</c>
+        /// before that — a shape the Server invented for a value it does not
+        /// read. It also had <b>no write path at all</b>: no member on
+        /// <c>ActivityInputDto</c>, nothing in <c>ManagerWriteService</c>. It
+        /// was writable from nowhere and readable by participants only, which is
+        /// why changing its shape costs nothing.
+        /// </para>
+        /// <para>Null means none; never <c>{}</c>.</para>
         /// </summary>
         public string? Props { get; set; }
 
