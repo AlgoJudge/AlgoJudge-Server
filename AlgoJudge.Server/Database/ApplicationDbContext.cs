@@ -29,6 +29,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<QuestionRead> QuestionReads { get; set; }
         public DbSet<PermissionTemplate> PermissionTemplates { get; set; }
         public DbSet<Grant> Grants { get; set; }
+        public DbSet<ActivityGroup> ActivityGroups { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
         public DbSet<IdentityProvider> IdentityProviders { get; set; }
         public DbSet<IdentityProviderMappingRule> IdentityProviderMappingRules { get; set; }
@@ -328,6 +329,16 @@ namespace AlgoJudge.Server.Database
             {
                 e.ToTable("Submissions");
                 e.Property(s => s.IpAddress).HasColumnType("inet");
+                // **`Restrict`, and it is the opposite choice from the grant's
+                // on purpose.** This stamp is the record of what competed; a
+                // group that has submissions cannot be deleted without making
+                // every one of them say it was sent by nobody. The service
+                // refuses the delete with a message, and this is the floor under
+                // that refusal.
+                e.HasOne(s => s.Group)
+                    .WithMany()
+                    .HasForeignKey(s => s.GroupId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 // **`SetNull`, and it is not a preference.** The default for an
                 // optional key is `ClientSetNull`, which means EF nulls it when the
                 // session is loaded and the database does nothing when it is not —
@@ -482,6 +493,14 @@ namespace AlgoJudge.Server.Database
 
             builder.Entity<Grant>(e =>
             {
+                // **`SetNull`, so removing a group leaves its members in the
+                // activity.** A grant is somebody's assignment to the contest; the
+                // group is one field on it, and deleting a group is not deleting the
+                // people who were in it.
+                e.HasOne(g => g.Group)
+                    .WithMany(x => x.Members)
+                    .HasForeignKey(g => g.GroupId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 e.ToTable("Grants");
                 e.Property(g => g.Permissions).HasColumnType("jsonb");
                 // One grant per user per activity. A null ActivityId is the
@@ -525,6 +544,19 @@ namespace AlgoJudge.Server.Database
                     .WithMany(a => a.Grants)
                     .HasForeignKey(g => g.ActivityId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<ActivityGroup>(e =>
+            {
+                e.ToTable("ActivityGroups");
+                e.Property(g => g.Name).HasMaxLength(128);
+                e.Property(g => g.Description).HasMaxLength(256);
+                e.HasOne(g => g.Activity)
+                    .WithMany(a => a.Groups)
+                    .HasForeignKey(g => g.ActivityId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // A ranking row's name, so two rows may not carry one.
+                e.HasIndex(g => new { g.ActivityId, g.Name }).IsUnique();
             });
 
             builder.Entity<UserSession>(e =>

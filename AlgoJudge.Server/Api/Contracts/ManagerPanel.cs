@@ -23,6 +23,51 @@ namespace AlgoJudge.Server.Api.Contracts
         public required IReadOnlyList<string> Permissions { get; init; }
     }
 
+    /// <summary>Several people competing as one, in one activity.</summary>
+    public record ActivityGroupDto
+    {
+        public required string Id { get; init; }
+        public required string ActivityId { get; init; }
+        public required string Name { get; init; }
+        /// <summary>A short line beside the name, shown in the ranking.</summary>
+        public string? Description { get; init; }
+        /// <summary>
+        /// Kept out of results and out of the ranking. <b>It still submits and
+        /// still spends its allowance</b> — what it does not do is appear.
+        /// </summary>
+        public required bool IsSystem { get; init; }
+        public required int MemberCount { get; init; }
+        /// <summary>
+        /// How many submissions were sent under it. <b>A group with any cannot
+        /// be deleted</b>: the stamp on a submission is the record of what
+        /// competed, and removing the row would make each of them say it was
+        /// sent by nobody.
+        /// </summary>
+        public required int SubmissionCount { get; init; }
+        public required string CreatedAt { get; init; }
+    }
+
+    public record ActivityGroupInputDto
+    {
+        public required string Name { get; init; }
+        public string? Description { get; init; }
+        public bool IsSystem { get; init; }
+    }
+
+    /// <summary>
+    /// Which group somebody competes as, or none.
+    /// <para>
+    /// <b>A move is allowed at any time and moves nothing already sent.</b> Each
+    /// submission stamped its group when it was made, so this changes what
+    /// happens next and leaves every ranking that has already been read alone.
+    /// </para>
+    /// </summary>
+    public record GrantGroupInputDto
+    {
+        /// <summary>Null takes them out of every group.</summary>
+        public string? GroupId { get; init; }
+    }
+
     public record GrantDto
     {
         public required string Id { get; init; }
@@ -45,6 +90,9 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? CreatedFromTemplate { get; init; }
         /// <summary>`invited` | `active`.</summary>
         public required string State { get; init; }
+        /// <summary>The group this person competes as, or null for themselves.</summary>
+        public string? GroupId { get; init; }
+        public string? GroupName { get; init; }
         public required string CreatedAt { get; init; }
 
         /// <summary>

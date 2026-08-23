@@ -216,8 +216,10 @@ namespace AlgoJudge.Server.Api
             Activity activity,
             string membership,
             DateTime now,
-            IEnumerable<FileReference> documents) => new()
+            IEnumerable<FileReference> documents,
+            MyGroupDto? group = null) => new()
         {
+            Group = group,
             Id = Contracts.Wire.Id(activity.Id),
             Slug = activity.Slug,
             Name = activity.Name,

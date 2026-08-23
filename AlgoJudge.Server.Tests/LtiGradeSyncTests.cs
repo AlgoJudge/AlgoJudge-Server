@@ -256,6 +256,34 @@ public class LtiGradeSyncTests(ServerFixture server)
         Assert.NotEqual(first, world.Gradebook.Held[world.Subject].Score);
     }
 
+    /// <summary>
+    /// A group's grade reaches every member the platform knows.
+    /// <para>
+    /// One submission, sent by one member, and two gradebook rows carrying the
+    /// same score — because what competed was the group, and a mark is a fact
+    /// about the contestant rather than about whoever happened to press the
+    /// button.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_groups_grade_reaches_every_member()
+    {
+        var world = await BuildAsync(grouped: true);
+
+        var posted = await world.SweepAsync();
+        Assert.True(posted >= 2, $"the sweep posted {posted} score(s) for a group of two");
+
+        Assert.True(world.Gradebook.Held.ContainsKey(world.Subject),
+            "the member who submitted has no grade");
+        Assert.True(world.Gradebook.Held.ContainsKey(world.Teammate!),
+            "the member who submitted nothing has no grade");
+
+        // The same score, not merely a score each: the group earned one mark.
+        Assert.Equal(
+            world.Gradebook.Held[world.Subject].Score,
+            world.Gradebook.Held[world.Teammate!].Score);
+    }
+
     // ── The world these tests run in ─────────────────────────────────────────
 
     private sealed record World(
@@ -264,7 +292,13 @@ public class LtiGradeSyncTests(ServerFixture server)
         HttpClient Manager,
         Guid LinkId,
         string Subject,
-        Guid SubmissionId)
+        Guid SubmissionId,
+        /// <summary>
+        /// The other member, when this world was built with a group. Their work
+        /// is nobody's: the grade comes from the first member's submission, and
+        /// this is who else must be given it.
+        /// </summary>
+        string? Teammate = null)
     {
         public async Task<int> SweepAsync()
         {
@@ -359,7 +393,8 @@ public class LtiGradeSyncTests(ServerFixture server)
     private async Task<World> BuildAsync(
         ScoreVisibility scoreVisibility = ScoreVisibility.Everyone,
         bool freeze = false,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        bool grouped = false)
     {
         using var platform = new FakePlatform();
         var gradebook = new FakeGradebook();
@@ -407,6 +442,32 @@ public class LtiGradeSyncTests(ServerFixture server)
         // would in life rather than being written by hand.
         var link = await LaunchAsync(host, platform, user.UserName!, slug);
 
+        // **The group is made before anything is sent**, because a submission
+        // stamps its group when it is made. Grouping people afterwards leaves
+        // their earlier work exactly where it was — which is the rule, and which
+        // this setup got wrong once and was told so by its own assertion.
+        string? teammate = null;
+        if (grouped)
+        {
+            var other = await DirectoryUserAsync();
+            await LaunchAsync(host, platform, other.UserName!, slug);
+
+            var made = await admin.PostAsJsonAsync(
+                $"/api/v1/activities/{slug}/groups", new { name = "Zespół " + slug });
+            made.EnsureSuccessStatusCode();
+            var groupId = (await made.Content.ReadFromJsonAsync<JsonElement>())
+                .GetProperty("id").GetString()!;
+
+            foreach (var member in new[] { user, other })
+            {
+                (await admin.PutAsJsonAsync(
+                    $"/api/v1/activities/{slug}/participants/{member.Id}/group",
+                    new { groupId })).EnsureSuccessStatusCode();
+            }
+
+            teammate = "sub-" + other.UserName;
+        }
+
         var participant = await Sign.InAsync(server, user.UserName!, await PasswordAsync(user));
         var submission = await Build.SubmitAsync(participant, slug, "print(2)\n");
         var submissionId = Guid.Parse(submission.GetProperty("id").GetString()!);
@@ -419,7 +480,8 @@ public class LtiGradeSyncTests(ServerFixture server)
         // fails and is skipped, and drift silently reads as zero.
         var manager = await Sign.InAsync(host, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        return new World(host, gradebook, manager, link, "sub-" + user.UserName, submissionId);
+        return new World(
+            host, gradebook, manager, link, "sub-" + user.UserName, submissionId, teammate);
     }
 
     private async Task ConfigureAsync(

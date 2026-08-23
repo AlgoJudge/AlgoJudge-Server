@@ -27,7 +27,8 @@ namespace AlgoJudge.Server.Controllers
         ISubmissionService submissions,
         IResultsService results,
         IQuestionService questions,
-        IFileService files
+        IFileService files,
+        IActivityGroupService groups
     ) : ControllerBase
     {
         /// <summary>
@@ -64,6 +65,60 @@ namespace AlgoJudge.Server.Controllers
         public Task<ActivityDto> Enrol(
             string idOrSlug, [FromBody] EnrolInputDto input, CancellationToken ct) =>
             activities.EnrolAsync(idOrSlug, input, ct);
+
+        // ── groups ───────────────────────────────────────────────────────────
+        //
+        // Under the activity rather than under `/groups`, because a group has no
+        // meaning outside one: it competes in this contest and nowhere else, and
+        // a flat collection would need the activity in every query anyway.
+
+        [HttpGet("{idOrSlug}/groups")]
+        [ProducesResponseType<IReadOnlyList<ActivityGroupDto>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<ActivityGroupDto>> Groups(string idOrSlug, CancellationToken ct) =>
+            groups.ListAsync(idOrSlug, ct);
+
+        [HttpPost("{idOrSlug}/groups")]
+        [ProducesResponseType<ActivityGroupDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<ActivityGroupDto>> CreateGroup(
+            string idOrSlug, [FromBody] ActivityGroupInputDto input, CancellationToken ct) =>
+            StatusCode(StatusCodes.Status201Created, await groups.CreateAsync(idOrSlug, input, ct));
+
+        [HttpPut("{idOrSlug}/groups/{groupId:guid}")]
+        [ProducesResponseType<ActivityGroupDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<ActivityGroupDto> UpdateGroup(
+            string idOrSlug, Guid groupId, [FromBody] ActivityGroupInputDto input,
+            CancellationToken ct) =>
+            groups.UpdateAsync(idOrSlug, groupId, input, ct);
+
+        /// <summary>
+        /// Removes a group nobody has submitted under. One that has is refused
+        /// with <c>group.hasSubmissions</c> — mark it system instead.
+        /// </summary>
+        [HttpDelete("{idOrSlug}/groups/{groupId:guid}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> DeleteGroup(
+            string idOrSlug, Guid groupId, CancellationToken ct)
+        {
+            await groups.DeleteAsync(idOrSlug, groupId, ct);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Moves somebody into a group, or out of every one with a null id.
+        /// <para>
+        /// Allowed at any time, and it moves nothing already sent: each
+        /// submission stamped its group when it was made.
+        /// </para>
+        /// </summary>
+        [HttpPut("{idOrSlug}/participants/{userId}/group")]
+        [ProducesResponseType<GrantDto>(StatusCodes.Status200OK)]
+        public Task<GrantDto> AssignGroup(
+            string idOrSlug, string userId, [FromBody] GrantGroupInputDto input,
+            CancellationToken ct) =>
+            groups.AssignAsync(idOrSlug, userId, input, ct);
 
         [HttpGet("{idOrSlug}/questions")]
         [ProducesResponseType<PageDto<QuestionDto>>(StatusCodes.Status200OK)]

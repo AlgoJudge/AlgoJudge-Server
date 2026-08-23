@@ -210,11 +210,22 @@ namespace AlgoJudge.Server.Services
             // Nothing is lost: the check ran on a string the Server could not
             // validate the meaning of either.
 
+            // **Read from the grant, never from the request.** "If the user is in
+            // a group, sending as the group is compulsory" is a rule about what
+            // happens rather than a default a form is asked to keep, and taking
+            // it from the request would make it forgeable.
+            var group = await Contestant.GroupAsync(context, activity.Id, user.Id, ct);
+
             var ceiling = assignment.MaxSubmissions ?? activity.MaxSubmissionsPerProblem;
             if (ceiling is { } limit)
             {
-                var used = await context.Submissions
-                    .CountAsync(s => s.SeriesProblemId == assignment.Id && s.UserId == user.Id, ct);
+                // **The group spends one allowance, not one per member.** Two
+                // people in one group share the ceiling; the fourth attempt
+                // against a limit of three is refused whoever sends it.
+                var used = await Contestant
+                    .Sent(context.Submissions.Where(s => s.SeriesProblemId == assignment.Id),
+                        user.Id, group)
+                    .CountAsync(ct);
                 if (used >= limit)
                 {
                     throw new ForbiddenActionException(
@@ -270,6 +281,10 @@ namespace AlgoJudge.Server.Services
                 IpAddress = origin.Address,
                 SessionId = origin.SessionId,
                 DeviceId = origin.DeviceId,
+                // Stamped once and never rewritten: a manager may move somebody
+                // to another group mid-contest, and this row keeps saying what
+                // competed when it was sent.
+                GroupId = group,
             };
             context.Submissions.Add(submission);
 

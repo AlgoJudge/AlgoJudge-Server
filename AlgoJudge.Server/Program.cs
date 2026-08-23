@@ -190,6 +190,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IExternalFetchService, ExternalFetchService>();
             builder.Services.AddScoped<IInstanceService, InstanceService>();
             builder.Services.AddScoped<IActivityService, ActivityService>();
+            builder.Services.AddScoped<Services.IActivityGroupService, Services.ActivityGroupService>();
             builder.Services.AddScoped<ISeriesService, SeriesService>();
             builder.Services.AddScoped<IProblemService, ProblemService>();
             builder.Services.AddScoped<IResultsService, ResultsService>();
