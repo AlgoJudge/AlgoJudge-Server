@@ -110,6 +110,14 @@ namespace AlgoJudge.Server.Authorization
         public const string SubmissionRejudge = "submission:rejudge";
         public const string SubmissionCancel = "submission:cancel";
 
+        /// <summary>
+        /// Rules that a submission counts towards no standing. Its own
+        /// permission: <see cref="SubmissionRejudge"/> asks the Runner to look
+        /// again, this decides an outcome by hand, and an installation may
+        /// delegate the first without the second.
+        /// </summary>
+        public const string SubmissionExclude = "submission:exclude";
+
         public const string ResultReadOwn = "result:read:own";
         public const string ResultReadAll = "result:read:all";
         public const string ResultLogReadAll = "result:log:read:all";
@@ -233,6 +241,7 @@ namespace AlgoJudge.Server.Authorization
             Define(SubmissionSourceReadAll, "submission", PermissionScope.Both),
             Define(SubmissionRejudge, "submission", PermissionScope.Both),
             Define(SubmissionCancel, "submission", PermissionScope.Both),
+            Define(SubmissionExclude, "submission", PermissionScope.Both),
 
             Define(ResultReadOwn, "result", PermissionScope.Activity),
             Define(ResultReadAll, "result", PermissionScope.Both),
@@ -310,7 +319,7 @@ namespace AlgoJudge.Server.Authorization
             ProblemReadOwn, ProblemCreate, ProblemUpdate,
             ProblemShare, ProblemArchive, ProblemAttach,
             SubmissionReadAll, SubmissionSourceReadAll,
-            SubmissionRejudge, SubmissionCancel,
+            SubmissionRejudge, SubmissionCancel, SubmissionExclude,
             ResultReadAll, ResultLogReadAll,
             QuestionReadAll, QuestionAnswer, QuestionPublish,
             AnnouncementCreate,

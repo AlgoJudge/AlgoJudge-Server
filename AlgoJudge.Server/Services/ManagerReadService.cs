@@ -27,6 +27,10 @@ namespace AlgoJudge.Server.Services
         Task<int> RejudgeSeriesAsync(Guid seriesId, CancellationToken ct);
         Task<ManagedSubmissionDetailDto> CancelAttemptAsync(Guid submissionId, Guid attemptId, CancellationToken ct);
 
+        /// <summary>Rules that a submission counts towards no standing, or lifts it.</summary>
+        Task<ManagedSubmissionDetailDto> SetExcludedAsync(
+            Guid submissionId, bool excluded, string? reason, CancellationToken ct);
+
         Task<PageDto<ManagedQuestionDto>> ListQuestionsAsync(
             PageQuery paging, Guid? activityId, Guid? seriesId, string? kind,
             bool unansweredOnly, string? search, CancellationToken ct);
@@ -199,6 +203,7 @@ namespace AlgoJudge.Server.Services
                 Score = score,
                 MaxScore = maxScore,
                 Attempts = submission.Jobs.Count,
+                Excluded = submission.ExcludedAt is not null,
             };
         }
 
@@ -209,6 +214,12 @@ namespace AlgoJudge.Server.Services
                 Permissions.SubmissionReadAll, submission.SeriesProblem!.ActivityId, ct);
 
             var summary = Project(submission);
+
+            // Who ruled, by name. A lookup rather than a navigation property:
+            // the column is a bare identifier on purpose.
+            var ruler = submission.ExcludedByUserId is { } excludedBy
+                ? await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == excludedBy, ct)
+                : null;
 
             return new ManagedSubmissionDetailDto
             {
@@ -229,6 +240,12 @@ namespace AlgoJudge.Server.Services
                 Score = summary.Score,
                 MaxScore = summary.MaxScore,
                 Attempts = summary.Attempts,
+                Excluded = summary.Excluded,
+                ExcludedAt = Wire.At(submission.ExcludedAt),
+                ExcludedBy = ruler is null
+                    ? submission.ExcludedByUserId
+                    : Projections.DisplayName(ruler),
+                ExclusionReason = submission.ExclusionReason,
                 ProblemType = submission.SeriesProblem.Problem?.Type ?? "standard-io@1",
                 IpAddress = submission.IpAddress?.ToString(),
                 SessionId = submission.SessionId is { } session ? Wire.Id(session) : null,
@@ -394,6 +411,59 @@ namespace AlgoJudge.Server.Services
             await submissions.AnnounceAsync(submissionId, ct);
             var detail = await GetSubmissionAsync(submissionId, ct);
             await AnnounceSubmissionAsync(job.Submission!.SeriesProblem!.ActivityId, detail, ct);
+            return detail;
+        }
+
+        /// <summary>
+        /// A manager's ruling that a submission counts towards no standing.
+        /// <para>
+        /// <b>It retracts nothing</b>: the verdict, the attempts, the files, the
+        /// place in every list and the ceiling it spent all stay. What it leaves
+        /// is every reader that computes a standing.
+        /// </para>
+        /// </summary>
+        public async Task<ManagedSubmissionDetailDto> SetExcludedAsync(
+            Guid submissionId, bool excluded, string? reason, CancellationToken ct)
+        {
+            var submission = await context.Submissions
+                .Include(s => s.SeriesProblem)
+                .FirstOrDefaultAsync(s => s.Id == submissionId, ct)
+                ?? throw new NotFoundException("Submission");
+
+            var activityId = submission.SeriesProblem!.ActivityId;
+            await permissions.RequireAsync(Permissions.SubmissionExclude, activityId, ct);
+
+            // All three together, both ways: a cleared timestamp beside a kept
+            // reason answers "is it excluded" and "why" with two states.
+            submission.ExcludedAt = excluded ? clock.GetUtcNow().UtcDateTime : null;
+            submission.ExcludedByUserId = excluded ? currentUser.UserId : null;
+            submission.ExclusionReason = excluded
+                ? (string.IsNullOrWhiteSpace(reason) ? null : reason.Trim())
+                : null;
+
+            await context.SaveChangesAsync(ct);
+
+            // The author's screens: the submission row, and their standing on the
+            // problem, which a submission has just left.
+            await submissions.AnnounceAsync(submissionId, ct);
+
+            var detail = await GetSubmissionAsync(submissionId, ct);
+            await AnnounceSubmissionAsync(activityId, detail, ct);
+
+            // **And every open board**, which the ordinary result push cannot
+            // do: the Client merges by id and no merge removes a row. So the
+            // change travels alone and each reader refetches.
+            var watching = await audience.InActivityAsync(activityId, Permissions.RankingRead, ct);
+            if (watching.Count > 0)
+            {
+                await events.SendToUsersAsync(watching, EventTypes.RankingChanged, new RankingChangedData
+                {
+                    ActivityId = Wire.Id(activityId),
+                    Change = "excluded",
+                    SeriesId = Wire.Id(submission.SeriesProblem.SeriesId),
+                }, ct);
+            }
+
             return detail;
         }
 

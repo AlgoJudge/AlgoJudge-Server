@@ -231,6 +231,20 @@ namespace AlgoJudge.Server.Api.Contracts
         public double? MaxScore { get; init; }
         /// <summary>Short label from the Runner. Its meaning is the type's business.</summary>
         public string? Verdict { get; init; }
+
+        /// <summary>
+        /// A manager ruled that this counts towards no standing.
+        /// <para>
+        /// <b>Told rather than left to be inferred</b>: without it this screen
+        /// and the ranking describe one submission differently — judged, a
+        /// verdict, a score, no points — with no way to find out why.
+        /// </para>
+        /// <para>
+        /// <b>The flag, never the reason</b>, which travels on the manager's
+        /// screen and in this person's data export.
+        /// </para>
+        /// </summary>
+        public required bool Excluded { get; init; }
     }
 
     /// <summary>One attempt at evaluating a submission. A rejudge adds an attempt.</summary>

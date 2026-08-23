@@ -150,8 +150,12 @@ namespace AlgoJudge.Server.Lti.Services
             // **Every member's work is read, not only a linked member's.** The
             // submission that earns the grade may have been sent by somebody the
             // platform never linked; the grade still belongs to the group.
+            // **An excluded submission earns no grade.** The sweep is how that
+            // reaches a gradebook already posted to — the desired score is
+            // recomputed, the row goes stale, the worker reposts — so no hook
+            // into the results path is needed.
             var sent = await core.Submissions.AsNoTracking()
-                .Where(s => s.SeriesProblemId == assignment.Id)
+                .Where(s => s.SeriesProblemId == assignment.Id && s.ExcludedAt == null)
                 .Join(core.EvaluationJobs.AsNoTracking(), s => s.Id, j => j.SubmissionId,
                     (s, j) => new { s.UserId, s.GroupId, j.Id })
                 .Join(core.Results.AsNoTracking(), j => j.Id, r => r.EvaluationJobId,
@@ -174,7 +178,9 @@ namespace AlgoJudge.Server.Lti.Services
                     x.UserId,
                     x.Score,
                     x.MaxScore,
-                    x.Id,
+                    // Nullable so a grade withdrawn below can say there is no
+                    // result behind its number.
+                    Id = (Guid?)x.Id,
                 })
                 .Where(x => x.GroupId is not null || linked.ContainsKey(x.UserId))
                 .ToList();
@@ -203,6 +209,31 @@ namespace AlgoJudge.Server.Lti.Services
                         .Where(linked.ContainsKey)
                         .Select(member => new { UserId = member, entry.Score, entry.MaxScore, entry.Id })
                     : [new { entry.UserId, entry.Score, entry.MaxScore, entry.Id }])
+                .ToList();
+
+            // **Somebody who had a grade and has stopped earning one.** Excluding
+            // the only submission there was drops that contestant out of
+            // everything above, and a row nobody computes is a row nobody
+            // corrects — the platform would hold the old mark for ever. So they
+            // are carried back in at zero, which is what a gradebook column has
+            // to say for "no counting work here". Nothing could reach this state
+            // before exclusions existed.
+            var earning = desired.Select(entry => entry.UserId).ToHashSet();
+            var stranded = await db.GradeSyncStates
+                .Where(s => s.LineItemId == item.Id
+                    && !earning.Contains(s.UserId)
+                    && s.DesiredScore != 0)
+                .Select(s => s.UserId)
+                .ToListAsync(ct);
+
+            desired = desired
+                .Concat(stranded.Select(userId => new
+                {
+                    UserId = userId,
+                    Score = (double?)0,
+                    MaxScore = (double?)1,
+                    Id = (Guid?)null,
+                }))
                 .ToList();
 
             var state = ScoreState(activity, assignment);

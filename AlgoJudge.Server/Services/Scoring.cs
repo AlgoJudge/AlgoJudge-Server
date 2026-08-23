@@ -132,6 +132,13 @@ namespace AlgoJudge.Server.Services
         /// may carry different maxima — a package republished with more tests —
         /// so it is the best one's maximum, not any of them.
         /// </para>
+        /// <para>
+        /// <b>An excluded submission is not among them</b>, filtered here rather
+        /// than at the three call sites — the problem page, the round list and
+        /// `problemStatusChanged` ask one question, and three copies of it are
+        /// three chances to disagree with the board. Counting is another matter:
+        /// the allowance stays spent, so callers count everything.
+        /// </para>
         /// </summary>
         public static (double? Fraction, double? OutOf) BestOf(IEnumerable<Submission> submissions)
         {
@@ -140,6 +147,7 @@ namespace AlgoJudge.Server.Services
 
             foreach (var submission in submissions)
             {
+                if (submission.ExcludedAt is not null) continue;
                 var result = Current(submission)?.Result;
                 var fraction = Fraction(result);
                 if (fraction is null) continue;
