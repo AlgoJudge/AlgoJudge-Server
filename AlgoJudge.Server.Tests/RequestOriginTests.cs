@@ -188,6 +188,37 @@ public class RequestOriginTests
 
         Assert.Null(new RequestOrigin(new HttpContextAccessor()).SessionId);
     }
+
+    /// <summary>
+    /// The device id is a UUID or it is nothing.
+    /// <para>
+    /// <b>It is text a page wrote</b>, so anybody using the browser can put
+    /// anything in it. Storing whatever arrived would put an unvalidated string
+    /// in front of a judge; parsing it means the column can only ever hold the
+    /// one shape the product understands.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_device_that_is_not_a_uuid_is_no_device_at_all()
+    {
+        var id = Guid.NewGuid();
+
+        var declared = new DefaultHttpContext();
+        declared.Request.Headers["AlgoJudge-Device"] = id.ToString();
+        Assert.Equal(
+            id,
+            new RequestOrigin(new HttpContextAccessor { HttpContext = declared }).DeviceId);
+
+        foreach (var nonsense in new[] { "not-a-uuid", "", "<script>alert(1)</script>" })
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Headers["AlgoJudge-Device"] = nonsense;
+            Assert.Null(
+                new RequestOrigin(new HttpContextAccessor { HttpContext = context }).DeviceId);
+        }
+
+        Assert.Null(new RequestOrigin(new HttpContextAccessor()).DeviceId);
+    }
 }
 
 /// <summary>
