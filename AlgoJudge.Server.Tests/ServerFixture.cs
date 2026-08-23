@@ -100,12 +100,12 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         WithWebHostBuilder(builder => builder.UseSetting("Admin:Token", "")).CreateClient();
 
     /// <summary>
-    /// The six the application registers through a factory: the drainer, the
-    /// lease reaper, the deletion sweeper, the series scheduler, the file
-    /// collector and the storage migrator. The LTI grade worker is registered by
-    /// type and does not sweep on its own timer.
+    /// The seven the application registers through a factory: the drainer, the
+    /// lease reaper, the deletion sweeper, the address sweeper, the series
+    /// scheduler, the file collector and the storage migrator. The LTI grade
+    /// worker is registered by type and does not sweep on its own timer.
     /// </summary>
-    private const int ExpectedSweepers = 6;
+    private const int ExpectedSweepers = 7;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

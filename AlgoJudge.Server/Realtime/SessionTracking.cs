@@ -48,7 +48,7 @@ namespace AlgoJudge.Server.Realtime
 
         public async Task InvokeAsync(
             HttpContext http, ApplicationDbContext context, TimeProvider clock,
-            Services.IRequestOrigin origin)
+            Services.IRequestOrigin origin, IConfiguration configuration)
         {
             await next(http);
 
@@ -60,7 +60,7 @@ namespace AlgoJudge.Server.Realtime
 
             try
             {
-                await TouchAsync(http, context, clock, origin, userId);
+                await TouchAsync(http, context, clock, origin, configuration, userId);
             }
             catch (Exception)
             {
@@ -72,7 +72,7 @@ namespace AlgoJudge.Server.Realtime
 
         private static async Task TouchAsync(
             HttpContext http, ApplicationDbContext context, TimeProvider clock,
-            Services.IRequestOrigin origin, string userId)
+            Services.IRequestOrigin origin, IConfiguration configuration, string userId)
         {
             var now = clock.GetUtcNow();
 
@@ -130,6 +130,13 @@ namespace AlgoJudge.Server.Realtime
             }
 
             session.LastRequestAt = now.UtcDateTime;
+            // **Pushed out on every touch, not fixed at creation.** The window
+            // is "thirty days since this browser was last here", which is what
+            // the cookie means, so a session in daily use never expires and one
+            // abandoned in June is swept in July. `AddressSweeper` is what acts
+            // on it; the column existed and was never set until 2026-08-23.
+            session.ExpiresAt = now.UtcDateTime.AddDays(
+                configuration.GetValue("Retention:SessionOriginDays", 30));
             // The path, not the screen: the Server does not know what somebody
             // was looking at, and guessing would be inventing.
             session.LastRequestPath = Truncate(http.Request.Path.Value, 256);

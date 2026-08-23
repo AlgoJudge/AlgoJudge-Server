@@ -229,6 +229,12 @@ namespace AlgoJudge.Server
             builder.Services.AddSingleton<Workers.DeletionSweeper>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.DeletionSweeper>());
 
+            // Takes addresses back out of sessions past their window. The column
+            // it acts on was indexed and never written until 2026-08-23; see
+            // `Workers/AddressSweeper.cs`.
+            builder.Services.AddSingleton<Workers.AddressSweeper>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.AddressSweeper>());
+
             // Owns every open/close transition, because openness is stored.
             builder.Services.AddSingleton<Workers.SeriesScheduler>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.SeriesScheduler>());

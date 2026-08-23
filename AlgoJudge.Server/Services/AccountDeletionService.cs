@@ -319,10 +319,23 @@ namespace AlgoJudge.Server.Services
                 question.Body = "[deleted]";
             }
 
+            // **Every session, not only the open ones, and the address goes with
+            // the closure.** This closed what was open and left the addresses
+            // behind — so an account that had been "deleted" still said where
+            // that person had connected from, on every row they had ever made.
+            // An anonymisation that leaves personal data behind is not one.
+            //
+            // The rows stay, as they do when `AddressSweeper` reaches them: what
+            // is deleted is the person, not the record that somebody signed in.
             var sessions = await context.UserSessions
-                .Where(s => s.UserId == user.Id && s.EndedAt == null)
+                .Where(s => s.UserId == user.Id)
                 .ToListAsync(ct);
-            foreach (var session in sessions) session.EndedAt = clock.GetUtcNow().UtcDateTime;
+            foreach (var session in sessions)
+            {
+                session.EndedAt ??= clock.GetUtcNow().UtcDateTime;
+                session.IpAddress = null;
+                session.UserAgent = null;
+            }
         }
 
         public async Task<PageDto<DeletionRequestDto>> ListAsync(

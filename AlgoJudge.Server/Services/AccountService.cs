@@ -178,6 +178,17 @@ namespace AlgoJudge.Server.Services
                 .Where(q => q.AuthorUserId == user.Id)
                 .ToListAsync(ct);
 
+            // **The Server has collected these since the schema was written and
+            // has never given them back.** An address and a user agent are
+            // personal data about the person asking, so leaving them out of the
+            // one document that exists to answer "what do you hold about me" was
+            // an omission rather than a decision. Ended sessions included: they
+            // are held longest and were the ones nothing could read.
+            var sessions = await context.UserSessions.AsNoTracking()
+                .Where(s => s.UserId == user.Id)
+                .OrderByDescending(s => s.StartedAt)
+                .ToListAsync(ct);
+
             var document = new
             {
                 exportedAt = Wire.At(clock.GetUtcNow().UtcDateTime),
@@ -227,6 +238,17 @@ namespace AlgoJudge.Server.Services
                     body = q.Body,
                     askedAt = Wire.At(q.CreatedAt),
                     answered = q.AnswerBody is not null,
+                }),
+                sessions = sessions.Select(s => new
+                {
+                    startedAt = Wire.At(s.StartedAt),
+                    lastRequestAt = Wire.At(s.LastRequestAt),
+                    endedAt = Wire.At(s.EndedAt),
+                    // Null once the window has passed and `AddressSweeper` has
+                    // been through, which is the honest answer: it is not held
+                    // any more.
+                    ipAddress = s.IpAddress?.ToString(),
+                    userAgent = s.UserAgent,
                 }),
             };
 
