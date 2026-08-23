@@ -327,6 +327,19 @@ namespace AlgoJudge.Server.Services
             //
             // The rows stay, as they do when `AddressSweeper` reaches them: what
             // is deleted is the person, not the record that somebody signed in.
+            // **The submissions stay and their origin does not.** A submission
+            // survives erasure by design — it is somebody's mark in a contest —
+            // but where it was sent from is a fact about the person, not about
+            // the work.
+            var sent = await context.Submissions
+                .Where(s => s.UserId == user.Id && (s.IpAddress != null || s.DeviceId != null))
+                .ToListAsync(ct);
+            foreach (var submission in sent)
+            {
+                submission.IpAddress = null;
+                submission.DeviceId = null;
+            }
+
             var sessions = await context.UserSessions
                 .Where(s => s.UserId == user.Id)
                 .ToListAsync(ct);

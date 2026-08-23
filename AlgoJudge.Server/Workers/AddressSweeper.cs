@@ -30,6 +30,7 @@ namespace AlgoJudge.Server.Workers
     public class AddressSweeper(
         IServiceScopeFactory scopes,
         TimeProvider clock,
+        IConfiguration configuration,
         ILogger<AddressSweeper> logger
     ) : BackgroundService
     {
@@ -50,6 +51,7 @@ namespace AlgoJudge.Server.Workers
                 try
                 {
                     await SweepSessionsAsync(stopping);
+                    await SweepSubmissionsAsync(stopping);
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
@@ -106,6 +108,49 @@ namespace AlgoJudge.Server.Workers
             await context.SaveChangesAsync(ct);
             logger.LogInformation(
                 "Cleared the origin of {Count} sessions past their window", stale.Count);
+            return stale.Count;
+        }
+
+        /// <summary>
+        /// The same, for submissions, on a window of its own.
+        /// <para>
+        /// <b>A year, and independent of the activity's life.</b> A submission's
+        /// address is evidence in a contest rather than an operational record,
+        /// so it outlives the session that produced it — a complaint about a
+        /// result can arrive long after the activity is archived. It does not
+        /// outlive it indefinitely, which is what the window is for.
+        /// </para>
+        /// <para>
+        /// <c>SessionId</c> stays. Once the session's own fields have been swept
+        /// it names nothing about a person; what it still answers is "these
+        /// submissions came from one browser session", which is the shape of the
+        /// question a judge asks and costs nothing to keep.
+        /// </para>
+        /// </summary>
+        internal async Task<int> SweepSubmissionsAsync(CancellationToken ct)
+        {
+            using var scope = scopes.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var days = configuration.GetValue("Retention:SubmissionOriginDays", 365);
+            var before = clock.GetUtcNow().UtcDateTime.AddDays(-days);
+
+            var stale = await context.Submissions
+                .Where(s => s.CreatedDate <= before
+                    && (s.IpAddress != null || s.DeviceId != null))
+                .ToListAsync(ct);
+
+            if (stale.Count == 0) return 0;
+
+            foreach (var submission in stale)
+            {
+                submission.IpAddress = null;
+                submission.DeviceId = null;
+            }
+
+            await context.SaveChangesAsync(ct);
+            logger.LogInformation(
+                "Cleared the origin of {Count} submissions past their window", stale.Count);
             return stale.Count;
         }
     }

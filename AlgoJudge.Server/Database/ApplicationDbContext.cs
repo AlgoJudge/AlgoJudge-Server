@@ -327,6 +327,18 @@ namespace AlgoJudge.Server.Database
             builder.Entity<Submission>(e =>
             {
                 e.ToTable("Submissions");
+                e.Property(s => s.IpAddress).HasColumnType("inet");
+                // **`SetNull`, and it is not a preference.** The default for an
+                // optional key is `ClientSetNull`, which means EF nulls it when the
+                // session is loaded and the database does nothing when it is not —
+                // and a delete that reached the database directly would take the
+                // submission with it. Sessions are not deleted today; the day
+                // somebody writes that sweep, this is what stops it deleting
+                // somebody's work.
+                e.HasOne<UserSession>()
+                    .WithMany()
+                    .HasForeignKey(s => s.SessionId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 e.Property(s => s.Props).HasColumnType("jsonb");
                 // Every participant screen asks "my submissions for this
                 // assignment, newest first", and the submission-count ceiling is
