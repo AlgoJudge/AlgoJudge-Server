@@ -173,6 +173,7 @@ AJ_Forwarded__KnownProxies=none                # or this, when nothing sits in f
 
 # How long a session keeps the address and user agent it was made with.
 AJ_Retention__SessionOriginDays=30             # optional; the aj_session cookie's own life
+AJ_Retention__SubmissionOriginDays=365         # optional; a submission's address is evidence in a contest
 
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
 deadline at all** — measured 2026-08-23, an unassigned `AmazonS3Config` carries a

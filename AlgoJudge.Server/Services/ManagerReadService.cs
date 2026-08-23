@@ -230,6 +230,9 @@ namespace AlgoJudge.Server.Services
                 MaxScore = summary.MaxScore,
                 Attempts = summary.Attempts,
                 ProblemType = submission.SeriesProblem.Problem?.Type ?? "standard-io@1",
+                IpAddress = submission.IpAddress?.ToString(),
+                SessionId = submission.SessionId is { } session ? Wire.Id(session) : null,
+                DeviceId = submission.DeviceId is { } device ? Wire.Id(device) : null,
                 AttemptList = submission.Jobs
                     .OrderByDescending(j => j.Attempt)
                     .Select(job => new ManagedAttemptDto

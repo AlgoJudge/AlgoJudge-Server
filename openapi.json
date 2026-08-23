@@ -12488,6 +12488,18 @@
             "type": "string",
             "nullable": true
           },
+          "ipAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "sessionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "deviceId": {
+            "type": "string",
+            "nullable": true
+          },
           "attemptList": {
             "type": "array",
             "items": {

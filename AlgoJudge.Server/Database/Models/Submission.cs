@@ -1,3 +1,4 @@
+using System.Net;
 using AlgoJudge.Server.Utils;
 
 namespace AlgoJudge.Server.Database.Models
@@ -54,5 +55,44 @@ namespace AlgoJudge.Server.Database.Models
         public ICollection<FileReference> Files { get; set; } = new List<FileReference>();
 
         public ICollection<EvaluationJob> Jobs { get; set; } = new List<EvaluationJob>();
+
+        /// <summary>
+        /// Where this arrived from, for a judge auditing a contest.
+        /// <para>
+        /// The question it exists to answer is <b>was this sent from outside the
+        /// examination room</b>, which is containment in a network rather than
+        /// equality with an address — so <c>inet</c>, and normalised before it
+        /// gets here. See <see cref="Services.RequestOrigin"/> and
+        /// <c>docs/specs/ORIGIN_METADATA.md</c>.
+        /// </para>
+        /// <para>
+        /// <b>Here rather than reached through the session</b>, for two reasons
+        /// that both matter. It rides <c>submission:read:all</c>, which is
+        /// already scoped per activity, so a judge sees their own contest and no
+        /// other — the session list answers to a system-scope permission. And it
+        /// is evidence in a contest, so it outlives the session's own thirty-day
+        /// window by design.
+        /// </para>
+        /// </summary>
+        public IPAddress? IpAddress { get; set; }
+
+        /// <summary>
+        /// The browser session this came from, or null.
+        /// <para>
+        /// Null on the first authenticated request a brand-new browser makes,
+        /// because the session cookie is minted <i>after</i> the response —
+        /// <see cref="Realtime.SessionTrackingMiddleware"/>. In practice a dozen
+        /// requests precede a submission, so this is documented rather than
+        /// worked around.
+        /// </para>
+        /// </summary>
+        public Guid? SessionId { get; set; }
+
+        /// <summary>
+        /// The name the browser gave itself. <b>Not evidence</b>: a page writes
+        /// it, and a room of machines imaged from one disk reports one for all
+        /// of them. It answers <i>the same browser, two accounts</i>.
+        /// </summary>
+        public Guid? DeviceId { get; set; }
     }
 }

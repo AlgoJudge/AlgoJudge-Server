@@ -32,7 +32,8 @@ namespace AlgoJudge.Server.Services
         ISeriesGate gate,
         IResultsService results,
         IEventHub events,
-        IEventAudience audience
+        IEventAudience audience,
+        IRequestOrigin origin
     ) : ISubmissionService
     {
         public async Task<PageDto<SubmissionSummaryDto>> ListAsync(
@@ -263,6 +264,12 @@ namespace AlgoJudge.Server.Services
                 UserId = user.Id,
                 SeriesProblemId = assignment.Id,
                 Props = declared,
+                // Where it came from, for a judge auditing the contest. Through
+                // `IRequestOrigin`, so the address is un-mapped and the device
+                // is a UUID or nothing — see `Submission.IpAddress`.
+                IpAddress = origin.Address,
+                SessionId = origin.SessionId,
+                DeviceId = origin.DeviceId,
             };
             context.Submissions.Add(submission);
 

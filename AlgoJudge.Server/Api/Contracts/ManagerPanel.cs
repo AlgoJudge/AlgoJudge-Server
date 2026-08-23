@@ -352,6 +352,31 @@ namespace AlgoJudge.Server.Api.Contracts
     public record ManagedSubmissionDetailDto : ManagedSubmissionDto
     {
         public required string ProblemType { get; init; }
+
+        /// <summary>
+        /// Where this arrived from — for a judge asking whether a solution came
+        /// from outside the examination room.
+        /// <para>
+        /// <b>On the detail and deliberately not on the list.</b> A column of
+        /// addresses across two hundred rows is exposure for a question nobody
+        /// asked of most of them; a judge who wants one opens one.
+        /// </para>
+        /// <para>
+        /// Null once past the retention window, which is the honest answer: it
+        /// is not held any more.
+        /// </para>
+        /// </summary>
+        public string? IpAddress { get; init; }
+
+        /// <summary>The browser session, or null if it had none yet.</summary>
+        public string? SessionId { get; init; }
+
+        /// <summary>
+        /// The name the browser gave itself. <b>Not evidence</b> — a page writes
+        /// it, and a room imaged from one disk reports one for every machine.
+        /// It answers <i>the same browser, two accounts</i>.
+        /// </summary>
+        public string? DeviceId { get; init; }
         /// <summary>Newest first.</summary>
         public required IReadOnlyList<ManagedAttemptDto> AttemptList { get; init; }
         public required IReadOnlyList<SubmissionFileDto> Files { get; init; }
