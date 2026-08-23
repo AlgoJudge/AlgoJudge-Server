@@ -38,6 +38,39 @@ namespace AlgoJudge.Server.Storage
         /// </para>
         /// </summary>
         public bool CreateBucket { get; init; }
+
+        /// <summary>
+        /// How long one request may take before it is abandoned.
+        /// <para>
+        /// <b>The SDK's own default is no deadline at all.</b> Measured against
+        /// AWSSDK.S3 on 2026-08-23: an <c>AmazonS3Config</c> nobody assigns to
+        /// carries a <c>Timeout</c> of <b>24 days</b>, which is
+        /// <c>int.MaxValue</c> milliseconds wearing a hat. A request that is
+        /// never answered was therefore never given up on, and this store takes
+        /// <see cref="S3BlobStore.bucketGate"/> across its S3 calls — so one such
+        /// request would have queued every upload in the installation behind it,
+        /// for ever.
+        /// </para>
+        /// <para>
+        /// Ten minutes, and generous on purpose: a write is a single
+        /// <c>PutObject</c> of up to 128 MiB (§10.3, A59), which needs about
+        /// 1.8 Mbit/s to fit. Short enough to bound the hang, long enough that no
+        /// honest upload meets it. Lower it only where the link is known.
+        /// </para>
+        /// </summary>
+        public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(10);
+
+        /// <summary>
+        /// How many times a retryable failure is retried before it is reported.
+        /// <para>
+        /// <b>Two, which is the SDK's own default</b> — measured the same day, so
+        /// this changes nothing and says so out loud. It is here because the
+        /// number matters to how long a failing write takes and was not
+        /// previously anybody's decision. Zero is a legitimate setting for a
+        /// store whose failures are not worth waiting through.
+        /// </para>
+        /// </summary>
+        public int MaxErrorRetry { get; init; } = 2;
     }
 
     /// <summary>
@@ -80,21 +113,43 @@ namespace AlgoJudge.Server.Storage
             this.options = options;
             this.spoolPath = spoolPath;
 
-            var config = new AmazonS3Config
-            {
-                ServiceURL = options.Endpoint,
-                // Bucket in the path, not in the hostname: virtual host style
-                // needs wildcard DNS pointing at the endpoint, which a
-                // self-hosted deployment almost never has.
-                ForcePathStyle = true,
-                AuthenticationRegion = options.Region,
-                RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
-                ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
-            };
-
             client = new AmazonS3Client(
-                new BasicAWSCredentials(options.AccessKey, options.SecretKey), config);
+                new BasicAWSCredentials(options.AccessKey, options.SecretKey), ConfigFor(options));
         }
+
+        /// <summary>
+        /// The client configuration one set of options produces.
+        /// <para>
+        /// Separated from the constructor so it can be asserted on without an
+        /// endpoint to talk to: every value here is a decision, and three of them
+        /// exist because an SDK default was wrong for this product.
+        /// </para>
+        /// </summary>
+        internal static AmazonS3Config ConfigFor(S3StoreOptions options) => new()
+        {
+            ServiceURL = options.Endpoint,
+            // Bucket in the path, not in the hostname: virtual host style
+            // needs wildcard DNS pointing at the endpoint, which a
+            // self-hosted deployment almost never has.
+            ForcePathStyle = true,
+            AuthenticationRegion = options.Region,
+            RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+            ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
+            Timeout = options.Timeout,
+            MaxErrorRetry = options.MaxErrorRetry,
+        };
+
+        /// <summary>
+        /// What the client this store talks through was actually built with.
+        /// <para>
+        /// The client's own, not the options it came from. A test reading the
+        /// options record proves a deployment's setting was <i>parsed</i>, which
+        /// is one step short of the thing that matters — and a first attempt at
+        /// this did exactly that and stayed green when the assignment was
+        /// deleted.
+        /// </para>
+        /// </summary>
+        internal AmazonS3Config Configuration => (AmazonS3Config)client.Config;
 
         public string Id { get; }
 

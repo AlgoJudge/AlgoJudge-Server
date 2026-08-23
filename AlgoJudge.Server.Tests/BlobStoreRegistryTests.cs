@@ -1,4 +1,5 @@
 using AlgoJudge.Server.Storage;
+using Amazon.S3;
 using Microsoft.Extensions.Configuration;
 
 namespace AlgoJudge.Server.Tests;
@@ -27,6 +28,65 @@ public class BlobStoreRegistryTests
     /// now something somebody says out loud.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// An S3 request is given up on, and the SDK would not have given up at all.
+    /// <para>
+    /// Measured 2026-08-23 against AWSSDK.S3: an <c>AmazonS3Config</c> nobody
+    /// assigns to carries a <c>Timeout</c> of <b>24 days</b> —
+    /// <c>int.MaxValue</c> milliseconds. <c>S3BlobStore</c> holds its bucket gate
+    /// across S3 calls, so one unanswered request would have queued every upload
+    /// in the installation behind it with no end.
+    /// </para>
+    /// <para>
+    /// The bound has to be finite and it has to be generous: a write is one
+    /// <c>PutObject</c> of up to 128 MiB. This asserts both halves, because a
+    /// deadline short enough to cut an honest upload is its own defect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void An_s3_request_carries_a_deadline_the_sdk_would_not_have_given_it()
+    {
+        var config = S3BlobStore.ConfigFor(new S3StoreOptions
+        {
+            Endpoint = "http://127.0.0.1:9000",
+            Bucket = "objects",
+            AccessKey = "key",
+            SecretKey = "secret",
+        });
+
+        Assert.NotNull(config.Timeout);
+        Assert.True(
+            config.Timeout < TimeSpan.FromHours(1),
+            $"the request deadline is {config.Timeout}, which is the SDK's own absence of one");
+        Assert.True(
+            config.Timeout >= TimeSpan.FromMinutes(5),
+            $"the request deadline is {config.Timeout}, short enough to cut a 128 MiB upload");
+        Assert.Equal(2, config.MaxErrorRetry);
+    }
+
+    /// <summary>
+    /// And a deployment may say both, because the right numbers depend on a link
+    /// this Server has never seen.
+    /// </summary>
+    [Fact]
+    public void A_deployment_may_state_its_own_deadline_and_retry_count()
+    {
+        var registry = new BlobStoreRegistry(Configured(
+            ("Storage:Stores:objects:Kind", "s3"),
+            ("Storage:Stores:objects:Endpoint", "http://127.0.0.1:9000"),
+            ("Storage:Stores:objects:Bucket", "objects"),
+            ("Storage:Stores:objects:AccessKey", "key"),
+            ("Storage:Stores:objects:SecretKey", "secret"),
+            ("Storage:Stores:objects:TimeoutSeconds", "45"),
+            ("Storage:Stores:objects:MaxErrorRetry", "0")));
+
+        // Read off the client, not off the options: parsing a setting and
+        // applying it are two things, and only one of them is the point.
+        var store = Assert.IsType<S3BlobStore>(registry.Find("objects"));
+        Assert.Equal(TimeSpan.FromSeconds(45), store.Configuration.Timeout);
+        Assert.Equal(0, store.Configuration.MaxErrorRetry);
+    }
+
     [Fact]
     public void An_installation_that_configures_no_storage_does_not_start()
     {
