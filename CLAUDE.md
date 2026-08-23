@@ -138,6 +138,27 @@ After cloning, inspect the solution and project files, then document:
   - **A system group still submits and still spends.** It is excluded from
     *results*, the way `Grant.IsSystem` excludes staff — one level up.
 
+- **A manager may rule that one submission does not count** (2026-08-24),
+  specified in `docs/specs/EXCLUDED_SUBMISSIONS.md` in the workspace. One column
+  is the whole fact — `Submission.ExcludedAt`, non-null means excluded — and four
+  things about it are easy to get wrong:
+  - **It rules on a result and retracts nothing.** The verdict, the attempts, the
+    files, the place in every list and **the ceiling it spent** all stay.
+    `Services/Contestant` deliberately does not read it: filtering there would be
+    a second, invisible way to move a limit.
+  - **Five readers stop counting it**, and they are the ones the code already
+    enumerates: `Scoring.BestOf` (which covers the problem page, the round list
+    and the socket's push), `ResultsService` twice, and `GradeSyncService`.
+  - **A board already open is not repaired by silence.** The Client merges an
+    arriving result by id and no merge removes a row, so the write sends
+    `rankingChanged` with `change: "excluded"` and no result, and every reader
+    refetches.
+  - **The gradebook needed more than a filter.** Dropping the submission left the
+    contestant out of the computation, and a row nobody computes is a row nobody
+    corrects — so a contestant who stops earning is carried back in at **zero**.
+    The reason is cleared on erasure while `ExcludedAt` stays, and it travels in
+    the participant's own data export.
+
 ## Layout
 
 The frontend is in
