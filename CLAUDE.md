@@ -116,6 +116,28 @@ After cloning, inspect the solution and project files, then document:
     clears a session's after 30 days and a submission's after 365, keeping the
     row; erasure clears both.
 
+- **Several people may compete as one** (2026-08-23), specified in
+  `docs/specs/GROUPS.md` in the workspace. Five things about it are easy to get
+  wrong:
+  - **A submission stamps its group when it is made and never afterwards.** A
+    manager may move somebody at any time; that changes what happens next and
+    nothing that already happened, so a board read an hour ago still reconciles
+    with the board now. Deriving the group through the grant at read time would
+    move points that were already scored.
+  - **The stamp comes from the grant, never from the request.** "If the user is
+    in a group, sending as the group is compulsory" is a rule about what happens,
+    not a default a form is asked to keep.
+  - **One allowance per contestant, and the ungrouped half is the subtle one.**
+    In a group it counts that group's stamped submissions; outside one it counts
+    what the person sent *while not in a group*. `Services/Contestant` owns the
+    rule, because the ceiling and the figure on the screen are computed by
+    different services and would otherwise disagree.
+  - **A group is a contestant and its members are not.** The ranking has always
+    been abstract over that; what a member gets is `Me` pointing at the group,
+    or their own row never highlights.
+  - **A system group still submits and still spends.** It is excluded from
+    *results*, the way `Grant.IsSystem` excludes staff — one level up.
+
 ## Layout
 
 The frontend is in

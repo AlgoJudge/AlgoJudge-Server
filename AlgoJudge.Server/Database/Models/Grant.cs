@@ -118,6 +118,27 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public string? CreatedFromTemplate { get; set; }
 
+        /// <summary>
+        /// The group this person competes as in this activity, or null for
+        /// somebody competing as themselves.
+        /// <para>
+        /// <b>Here because a grant is the assignment to an activity</b>, which is
+        /// where the owner put it: being in a group is a fact about taking part
+        /// in this contest, not a property of the account. And because the table
+        /// already holds one grant per user per activity, this field <i>is</i>
+        /// the rule "at most one group" — there is no second constraint to keep
+        /// in step with it.
+        /// </para>
+        /// <para>
+        /// A manager may change it at any time. What that does <b>not</b> do is
+        /// move work already sent: a submission stamps its group when it is made
+        /// and keeps it, so a move changes what happens next and nothing that
+        /// already happened.
+        /// </para>
+        /// </summary>
+        public Guid? GroupId { get; set; }
+        public ActivityGroup? Group { get; set; }
+
         public GrantState State { get; set; } = GrantState.Active;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -23,11 +23,35 @@ namespace AlgoJudge.Server.Api.Contracts
     }
 
 
+    /// <summary>
+    /// The group a participant competes as, on their own screens.
+    /// <para>
+    /// Shown because <b>sending as the group is compulsory rather than a
+    /// choice</b>: without it somebody cannot tell why an allowance they never
+    /// spent has gone down, or why their name is not in the ranking.
+    /// </para>
+    /// </summary>
+    public record MyGroupDto
+    {
+        public required string Id { get; init; }
+        public required string Name { get; init; }
+        public string? Description { get; init; }
+        /// <summary>Everyone in it, this reader included.</summary>
+        public required IReadOnlyList<string> Members { get; init; }
+    }
+
     public record ActivityDto
     {
         public required string Id { get; init; }
         public required string Slug { get; init; }
         public required string Name { get; init; }
+        /// <summary>
+        /// The group this reader competes as here, or absent when they compete
+        /// as themselves. <b>Their own group only</b> — the roster of anybody
+        /// else's is the ranking's business and the activity's setting.
+        /// </summary>
+        public MyGroupDto? Group { get; init; }
+
         /// <summary>Type discriminator, `name@version`. Selects the layout renderer.</summary>
         public required string Type { get; init; }
         /// <summary>Selects the ranking renderer. Independent of `type`.</summary>
@@ -243,10 +267,35 @@ namespace AlgoJudge.Server.Api.Contracts
     /// screen's business and is not disclosed here.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// One row of a board: a person competing as themselves, or a group.
+    /// <para>
+    /// The ranking has always been abstract over this — neither ICPC penalties
+    /// nor points scoring ask who a contestant is — which is why a group needed
+    /// no new shape here, only a way to say which kind a row is.
+    /// </para>
+    /// </summary>
     public record ContestantDto
     {
         public required string Id { get; init; }
         public required string Name { get; init; }
+
+        /// <summary><c>user</c> or <c>group</c>.</summary>
+        public required string Kind { get; init; }
+
+        /// <summary>A group's short line beside its name. Null for a person.</summary>
+        public string? Description { get; init; }
+
+        /// <summary>
+        /// Who is in the group, when the activity says to print it.
+        /// <para>
+        /// <b>Under the group's own name, never as rows of their own.</b>
+        /// Somebody competing in a group does not appear in the ranking as
+        /// themselves, and a row per member would score the same points twice in
+        /// one table. Empty when the setting is off, and for a person.
+        /// </para>
+        /// </summary>
+        public IReadOnlyList<string> Members { get; init; } = [];
     }
 
     /// <summary>A problem as a board's column: what it is called and what it is worth.</summary>

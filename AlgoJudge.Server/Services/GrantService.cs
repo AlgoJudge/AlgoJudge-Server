@@ -78,6 +78,7 @@ namespace AlgoJudge.Server.Services
                 .Include(g => g.User)
                 .Include(g => g.Activity)
                 .Include(g => g.SourceProvider)
+                .Include(g => g.Group)
                 .AsQueryable();
 
             if (userId is not null) query = query.Where(g => g.UserId == userId);
@@ -93,14 +94,19 @@ namespace AlgoJudge.Server.Services
 
             return new PageDto<GrantDto>
             {
-                Items = page.Select(Project).ToList(),
+                Items = page.Select(Projected).ToList(),
                 Total = total,
                 Page = paging.Page,
                 PageSize = paging.PageSize,
             };
         }
 
-        private static GrantDto Project(Grant grant) => new()
+        /// <summary>
+        /// One grant on the wire. Internal rather than private because
+        /// <see cref="ActivityGroupService"/> answers with one after a move, and
+        /// two projections of the same row would drift.
+        /// </summary>
+        internal static GrantDto Projected(Grant grant) => new()
         {
             Id = Wire.Id(grant.Id),
             UserId = grant.UserId,
@@ -108,6 +114,8 @@ namespace AlgoJudge.Server.Services
             UserLogin = grant.User?.UserName ?? grant.UserId,
             ActivityId = grant.ActivityId is { } a ? Wire.Id(a) : null,
             ActivityName = grant.Activity?.Name,
+            GroupId = grant.GroupId is { } group ? Wire.Id(group) : null,
+            GroupName = grant.Group?.Name,
             Permissions = Parse(grant.Permissions),
             IsSystem = grant.IsSystem,
             CreatedFromTemplate = grant.CreatedFromTemplate,
@@ -282,8 +290,9 @@ namespace AlgoJudge.Server.Services
                 .Include(g => g.User)
                 .Include(g => g.Activity)
                 .Include(g => g.SourceProvider)
+                .Include(g => g.Group)
                 .FirstAsync(g => g.Id == grant.Id, ct);
-            var projected = Project(stored);
+            var projected = Projected(stored);
             await AnnounceGrantAsync(stored.ActivityId, stored.UserId, new { grant = projected }, ct);
             return projected;
         }

@@ -93,25 +93,74 @@ namespace AlgoJudge.Server.Services
                     // member in the ranking beside the students is a bug.
                     && !g.IsSystem)
                 .Include(g => g.User)
+                .Include(g => g.Group)
                 .ToListAsync(ct);
 
-            var contestants = members
-                .Where(g => everyone || g.UserId == reader.Id)
+            // **A group is a contestant, and so its members are not.** Somebody
+            // competing in a group has no row of their own; the group has one,
+            // and a second row per member would score the same points twice in
+            // one table.
+            //
+            // A **system group** contributes nothing at all — the same rule
+            // `Grant.IsSystem` applies to a person, one level up. It still
+            // submits and still spends its allowance; what it does not do is
+            // appear.
+            var mine = members.FirstOrDefault(g => g.UserId == reader.Id);
+            var reading = mine?.GroupId is { } own ? Wire.Id(own) : reader.Id;
+
+            // **Grouped by id, not by the entity.** `AsNoTracking` hands every
+            // grant its own instance of the same group, so grouping on the
+            // reference makes one row per member — which is the defect this
+            // whole feature exists to avoid, arriving through the back door.
+            var grouped = members
+                .Where(g => g.Group is { IsSystem: false })
+                .GroupBy(g => g.GroupId!.Value)
+                .Select(g => new ContestantDto
+                {
+                    Id = Wire.Id(g.Key),
+                    Name = g.First().Group!.Name,
+                    Kind = "group",
+                    Description = g.First().Group!.Description,
+                    // Printed only where the activity says to, and under the
+                    // group's own name rather than as rows.
+                    Members = activity.ShowGroupMembers
+                        ? g.Where(m => m.User is not null)
+                            .Select(m => Projections.DisplayName(m.User!))
+                            .OrderBy(n => n, StringComparer.CurrentCulture)
+                            .ToList()
+                        : [],
+                });
+
+            var alone = members
+                .Where(g => g.GroupId is null)
                 .Select(g => new ContestantDto
                 {
                     Id = g.UserId,
                     Name = g.User is null ? g.UserId : Projections.DisplayName(g.User),
-                })
+                    Kind = "user",
+                });
+
+            var contestants = grouped.Concat(alone)
+                .Where(c => everyone || c.Id == reading)
                 .OrderBy(c => c.Name, StringComparer.CurrentCulture)
                 .ThenBy(c => c.Id, StringComparer.Ordinal)
                 .ToList();
 
             var eligible = contestants.Select(c => c.Id).ToHashSet();
+
+            // Which users' submissions may be read at all — a group's row is fed
+            // by every member's work, so narrowing the query by contestant id
+            // would find none of it.
+            var readable = members
+                .Where(g => eligible.Contains(
+                    g.GroupId is { } id ? Wire.Id(id) : g.UserId))
+                .Select(g => g.UserId)
+                .ToHashSet();
             var assignmentIds = visible.SelectMany(r => r.SeriesProblems).Select(sp => sp.Id).ToHashSet();
 
             var submissions = await context.Submissions
                 .AsNoTracking()
-                .Where(s => assignmentIds.Contains(s.SeriesProblemId) && eligible.Contains(s.UserId))
+                .Where(s => assignmentIds.Contains(s.SeriesProblemId) && readable.Contains(s.UserId))
                 .Include(s => s.SeriesProblem)
                 .Include(s => s.Jobs).ThenInclude(j => j.Result)
                 .ToListAsync(ct);
@@ -173,7 +222,9 @@ namespace AlgoJudge.Server.Services
                     .OrderBy(r => r.SubmittedAt, StringComparer.Ordinal)
                     .ThenBy(r => r.Id, StringComparer.Ordinal)
                     .ToList(),
-                Me = eligible.Contains(reader.Id) ? reader.Id : null,
+                // **The group, for somebody in one**, or their own row never
+                // highlights — the reader is not a contestant, the group is.
+                Me = eligible.Contains(reading) ? reading : null,
             };
         }
 
@@ -230,7 +281,14 @@ namespace AlgoJudge.Server.Services
             var basic = new ContestantResultDto
             {
                 Id = Wire.Id(submission.Id),
-                ContestantId = submission.UserId,
+                // **The group it was sent as, or the person.** Read off the
+                // submission and never through the grant: a manager may move
+                // somebody mid-contest, and a board that re-attributed work
+                // already scored would stop reconciling with the one somebody
+                // read an hour ago.
+                ContestantId = submission.GroupId is { } group
+                    ? Wire.Id(group)
+                    : submission.UserId,
                 SeriesId = Wire.Id(round.Id),
                 ProblemId = Wire.Id(assignment.Id),
                 ProblemSlug = assignment.Slug,

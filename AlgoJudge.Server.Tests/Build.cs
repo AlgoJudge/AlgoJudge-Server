@@ -112,6 +112,33 @@ public static class Build
         return client;
     }
 
+    /// <summary>
+    /// Sends, and hands back whatever the Server said.
+    /// <para>
+    /// Its own method rather than a flag, for the reason <see cref="Sign"/> gives
+    /// for the same split: refusal is what some tests are <b>asserting</b> — an
+    /// allowance spent, a round shut — and <see cref="SubmitAsync"/> throws on
+    /// one, which is right everywhere else and useless there.
+    /// </para>
+    /// </summary>
+    public static async Task<HttpResponseMessage> TrySubmitAsync(
+        HttpClient client, string activitySlug, string source)
+    {
+        var bytes = Encoding.UTF8.GetBytes(source);
+        var checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+        using var content = new MultipartFormDataContent
+        {
+            { new StringContent("""{"type":"standard-io@1","language":"python3"}"""), "props" },
+            { new StringContent(source), "code" },
+            { new StringContent("main.py"), "fileName" },
+            { new StringContent(checksum), "sha256" },
+        };
+
+        return await client.PostAsync(
+            $"/api/v1/activities/{activitySlug}/problems/A/submissions", content);
+    }
+
     public static async Task<JsonElement> SubmitAsync(
         HttpClient client, string activitySlug, string source)
     {

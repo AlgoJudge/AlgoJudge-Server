@@ -128,17 +128,56 @@ namespace AlgoJudge.Server.Lti.Services
                 item.ScoreMaximum = maxPoints;
             }
 
-            // The best attempt per person, which is the one shipped aggregation
-            // rule (§6.2). Computed here rather than asked of a ranking renderer:
-            // a gradebook column cannot ask one.
-            var best = await core.Submissions.AsNoTracking()
-                .Where(s => s.SeriesProblemId == assignment.Id && linked.Keys.Contains(s.UserId))
+            // Who competes as whom, so the rest of this can work on contestants.
+            // **Read at sync time**, which is the only thing the data supports: a
+            // submission remembers the group it was sent as, a gradebook row does
+            // not — so moving somebody moves the grade they will next be given.
+            // That follows from moves being allowed, and it is worth knowing
+            // before somebody discovers it in a mark.
+            var groups = await core.Grants.AsNoTracking()
+                .Where(g => g.ActivityId == activity.Id && g.GroupId != null)
+                .Select(g => new { g.UserId, GroupId = g.GroupId!.Value })
+                .ToListAsync(ct);
+
+            var membersOf = groups
+                .GroupBy(g => g.GroupId)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.UserId).ToList());
+
+            // The best attempt per contestant, which is the one shipped
+            // aggregation rule (§6.2). Computed here rather than asked of a
+            // ranking renderer: a gradebook column cannot ask one.
+            //
+            // **Every member's work is read, not only a linked member's.** The
+            // submission that earns the grade may have been sent by somebody the
+            // platform never linked; the grade still belongs to the group.
+            var sent = await core.Submissions.AsNoTracking()
+                .Where(s => s.SeriesProblemId == assignment.Id)
                 .Join(core.EvaluationJobs.AsNoTracking(), s => s.Id, j => j.SubmissionId,
-                    (s, j) => new { s.UserId, j.Id })
+                    (s, j) => new { s.UserId, s.GroupId, j.Id })
                 .Join(core.Results.AsNoTracking(), j => j.Id, r => r.EvaluationJobId,
-                    (j, r) => new { j.UserId, r.Score, r.MaxScore, r.Id })
+                    (j, r) => new { j.UserId, j.GroupId, r.Score, r.MaxScore, r.Id })
                 .Where(x => x.Score != null)
                 .ToListAsync(ct);
+
+            // A submission counts for the group it was **sent as**; one sent by
+            // somebody competing alone counts for them, and only if the platform
+            // knows who they are.
+            //
+            // The two are told apart by a field rather than by the shape of an
+            // id: `User.Id` is a UUID in a string column, so "does it look like a
+            // Guid" would say yes to both.
+            var best = sent
+                .Select(x => new
+                {
+                    Key = x.GroupId is { } group ? group.ToString() : x.UserId,
+                    x.GroupId,
+                    x.UserId,
+                    x.Score,
+                    x.MaxScore,
+                    x.Id,
+                })
+                .Where(x => x.GroupId is not null || linked.ContainsKey(x.UserId))
+                .ToList();
 
             // **Best by fraction, not by raw score.** Ordering on `Score` alone
             // compares numbers marked out of different maxima — a package
@@ -147,11 +186,23 @@ namespace AlgoJudge.Server.Lti.Services
             // worse of somebody's two attempts. Every other reader in the
             // product had already been fixed to compare fractions; this one
             // was missed.
-            var desired = best
-                .GroupBy(x => x.UserId)
+            var perContestant = best
+                .GroupBy(x => x.Key)
                 .Select(g => g
                     .OrderByDescending(x => Scoring.Fraction(x.Score, x.MaxScore) ?? -1)
                     .First())
+                .ToList();
+
+            // **Fanned out to every linked member**, so a group of three leaves
+            // three gradebook rows carrying one score. A member the platform
+            // never linked is skipped rather than failing the sweep — they have
+            // no row to write to.
+            var desired = perContestant
+                .SelectMany(entry => entry.GroupId is { } group
+                    ? membersOf.GetValueOrDefault(group, [])
+                        .Where(linked.ContainsKey)
+                        .Select(member => new { UserId = member, entry.Score, entry.MaxScore, entry.Id })
+                    : [new { entry.UserId, entry.Score, entry.MaxScore, entry.Id }])
                 .ToList();
 
             var state = ScoreState(activity, assignment);

@@ -52,6 +52,21 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public ScoreVisibility ScoreVisibility { get; set; } = ScoreVisibility.Everyone;
 
+        /// <summary>
+        /// Whether a group's ranking row also names who is in it.
+        /// <para>
+        /// Off by default. On, the roster is printed under the group's name and
+        /// description — <b>in the group's own row</b>, never as rows of its own:
+        /// somebody competing in a group does not appear in the ranking as
+        /// themselves, and a second row per member would score the same points
+        /// twice in one table.
+        /// </para>
+        /// </summary>
+        public bool ShowGroupMembers { get; set; }
+
+        /// <summary>Every group competing in this activity.</summary>
+        public ICollection<ActivityGroup> Groups { get; set; } = new List<ActivityGroup>();
+
         public JoinPolicy JoinPolicy { get; set; } = JoinPolicy.Closed;
 
         /// <summary>

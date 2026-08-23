@@ -203,7 +203,47 @@ namespace AlgoJudge.Server.Services
                 activity,
                 Membership(memberships, activity.Id),
                 clock.GetUtcNow().UtcDateTime,
-                await DocumentsAsync(activity.Id, ct));
+                await DocumentsAsync(activity.Id, ct),
+                // **On the one activity, not on the list.** A roster per row
+                // would be a query per row for something a list has no room to
+                // print, and the screen that needs it is the one somebody opened.
+                await MyGroupAsync(activity.Id, ct));
+        }
+
+        /// <summary>
+        /// The reader's own group here, with everyone in it.
+        /// <para>
+        /// Their own only. Whose roster anybody else may read is the ranking's
+        /// question, and the activity's <c>ShowGroupMembers</c> answers it.
+        /// </para>
+        /// </summary>
+        private async Task<MyGroupDto?> MyGroupAsync(Guid activityId, CancellationToken ct)
+        {
+            var me = currentUser.UserId;
+            if (me is null) return null;
+
+            var group = await context.Grants.AsNoTracking()
+                .Where(g => g.ActivityId == activityId && g.UserId == me && g.GroupId != null)
+                .Select(g => g.Group!)
+                .FirstOrDefaultAsync(ct);
+            if (group is null) return null;
+
+            var members = await context.Grants.AsNoTracking()
+                .Where(g => g.GroupId == group.Id)
+                .Include(g => g.User)
+                .ToListAsync(ct);
+
+            return new MyGroupDto
+            {
+                Id = Wire.Id(group.Id),
+                Name = group.Name,
+                Description = group.Description,
+                Members = members
+                    .Where(m => m.User is not null)
+                    .Select(m => Projections.DisplayName(m.User!))
+                    .OrderBy(n => n, StringComparer.CurrentCulture)
+                    .ToList(),
+            };
         }
 
         public async Task<PageDto<ManagedActivityDto>> ListManagedAsync(

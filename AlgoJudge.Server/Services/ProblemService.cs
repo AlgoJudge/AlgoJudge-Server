@@ -662,8 +662,14 @@ namespace AlgoJudge.Server.Services
                 .Where(r => r.ProblemVersionId == version.Id && r.Scope == FileScope.Participant)
                 .ToListAsync(ct);
 
-            var mine = await context.Submissions.AsNoTracking()
-                .Where(s => s.SeriesProblemId == assignment.Id && s.UserId == user.Id)
+            // **The contestant's, not the person's**, and it feeds both the best
+            // score shown and the allowance left — so somebody in a group reads
+            // the group's standing and the group's remaining attempts, which is
+            // what they actually have. `Services/Contestant` owns the rule.
+            var group = await Contestant.GroupAsync(context, activity.Id, user.Id, ct);
+            var mine = await Contestant
+                .Sent(context.Submissions.AsNoTracking()
+                    .Where(s => s.SeriesProblemId == assignment.Id), user.Id, group)
                 .Include(s => s.Jobs).ThenInclude(j => j.Result)
                 .ToListAsync(ct);
 

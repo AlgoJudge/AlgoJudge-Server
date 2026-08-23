@@ -26,6 +26,26 @@ namespace AlgoJudge.Server.Database.Models
         public required string UserId { get; set; }
         public User? User { get; set; }
 
+        /// <summary>
+        /// The group this was sent as, or null when it was sent by a person
+        /// competing as themselves.
+        /// <para>
+        /// <b>Stamped by the Server from the submitter's grant, never taken from
+        /// the request.</b> "If the user is in a group, sending as the group is
+        /// compulsory" is a rule about what happens, not a default the form is
+        /// asked to keep — deriving it here is what makes it unforgeable.
+        /// </para>
+        /// <para>
+        /// <b>And never rewritten.</b> A manager may move somebody to another
+        /// group mid-contest; this row keeps the group it was sent under, so a
+        /// ranking from an hour ago still reconciles with the ranking now. The
+        /// alternative — deriving the group through the grant at read time —
+        /// would move points that were already scored.
+        /// </para>
+        /// </summary>
+        public Guid? GroupId { get; set; }
+        public ActivityGroup? Group { get; set; }
+
         public Guid SeriesProblemId { get; set; }
         public SeriesProblem? SeriesProblem { get; set; }
 
