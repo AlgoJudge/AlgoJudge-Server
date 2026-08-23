@@ -109,6 +109,11 @@ namespace AlgoJudge.Server.Storage
                         SecretKey = Required(declared, "SecretKey", storeId),
                         Region = declared["Region"] is { Length: > 0 } region ? region : "us-east-1",
                         CreateBucket = declared.GetValue("CreateBucket", false),
+                        // Seconds rather than a `TimeSpan`, so a deployment says
+                        // `TimeoutSeconds: 600` instead of a format nobody
+                        // remembers the shape of.
+                        Timeout = TimeSpan.FromSeconds(declared.GetValue("TimeoutSeconds", 600)),
+                        MaxErrorRetry = declared.GetValue("MaxErrorRetry", 2),
                     }, spoolPath),
                     null or "" => throw new InvalidOperationException(
                         $"Storage store '{storeId}' does not say what kind it is"),
