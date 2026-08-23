@@ -93,6 +93,29 @@ After cloning, inspect the solution and project files, then document:
   - **No public answer names a store, backend, bucket or path.** `/health` says
     one word; `/admin/storage` carries the detail, behind loopback and a token.
 
+- **Where a request came from is recorded, and the address may not be forged**
+  (2026-08-23), specified in `docs/specs/ORIGIN_METADATA.md` in the workspace.
+  Four things about it are easy to get wrong:
+  - **An installation that names no trusted proxy does not start.** The second
+    such rule after storage, and for the same reason there is no default:
+    trusting every sender of `X-Forwarded-For` lets a visitor state their own
+    address, and trusting only loopback silently records the proxy in a container
+    network. `Forwarded__KnownProxies=none` is a full answer for a Server reached
+    directly.
+  - **An address is `inet` and un-mapped before it is stored.** The question
+    asked of it is containment in a network, which over text is a comparison of
+    spellings — and Kestrel on a dual-stack socket hands back
+    `::ffff:10.0.5.17`, which PostgreSQL calls family 6, so `<<=` against any
+    IPv4 network is silently `false`. `Services/RequestOrigin` is the one place
+    that normalises it.
+  - **It is not hashed, and that was decided rather than skipped.** A hash cannot
+    answer a subnet question; a keyed one is pseudonymisation and removes no
+    obligation; an unkeyed one of an IPv4 address is reversible in seconds.
+  - **A submission's origin rides `submission:read:all`** — already scoped per
+    activity — and is on the detail, never the list. `Workers/AddressSweeper`
+    clears a session's after 30 days and a submission's after 365, keeping the
+    row; erasure clears both.
+
 ## Layout
 
 The frontend is in
