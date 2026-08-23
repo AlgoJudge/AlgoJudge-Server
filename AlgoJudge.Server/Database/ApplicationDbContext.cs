@@ -520,7 +520,9 @@ namespace AlgoJudge.Server.Database
                 e.ToTable("UserSessions");
                 e.Property(s => s.LastRequestPath).HasMaxLength(256);
                 e.Property(s => s.UserAgent).HasMaxLength(512);
-                e.Property(s => s.IpAddress).HasMaxLength(64);
+                // `inet`, and no length: Npgsql maps `IPAddress` to it natively.
+                // It was `varchar(64)`, which cannot answer a subnet question.
+                e.Property(s => s.IpAddress).HasColumnType("inet");
                 e.HasOne(s => s.User)
                     .WithMany(u => u.Sessions)
                     .HasForeignKey(s => s.UserId)

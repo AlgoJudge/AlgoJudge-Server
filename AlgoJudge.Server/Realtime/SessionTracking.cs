@@ -34,14 +34,21 @@ namespace AlgoJudge.Server.Realtime
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, DateTimeOffset> Touched = new();
 
         /// <summary>
-        /// The cookie carries no session id of its own, so one is minted per
-        /// (user, user agent, address) and kept while it is alive. Two browsers
-        /// are two sessions; two tabs are one.
+        /// Carries the session's id, so one is minted per browser and kept while
+        /// it is alive. Two browsers are two sessions; two tabs are one.
+        /// <para>
+        /// Public because <see cref="Services.RequestOrigin"/> reads it, and the
+        /// half that writes a cookie should be the half that names it. It said
+        /// a session was minted "per (user, user agent, address)" until
+        /// 2026-08-23, which no code here has ever done: the cookie is the whole
+        /// key.
+        /// </para>
         /// </summary>
-        private const string SessionCookie = "aj_session";
+        public const string SessionCookie = "aj_session";
 
         public async Task InvokeAsync(
-            HttpContext http, ApplicationDbContext context, TimeProvider clock)
+            HttpContext http, ApplicationDbContext context, TimeProvider clock,
+            Services.IRequestOrigin origin)
         {
             await next(http);
 
@@ -53,7 +60,7 @@ namespace AlgoJudge.Server.Realtime
 
             try
             {
-                await TouchAsync(http, context, clock, userId);
+                await TouchAsync(http, context, clock, origin, userId);
             }
             catch (Exception)
             {
@@ -64,12 +71,12 @@ namespace AlgoJudge.Server.Realtime
         }
 
         private static async Task TouchAsync(
-            HttpContext http, ApplicationDbContext context, TimeProvider clock, string userId)
+            HttpContext http, ApplicationDbContext context, TimeProvider clock,
+            Services.IRequestOrigin origin, string userId)
         {
             var now = clock.GetUtcNow();
 
-            Guid? sessionId = http.Request.Cookies.TryGetValue(SessionCookie, out var raw)
-                && Guid.TryParse(raw, out var parsed) ? parsed : null;
+            var sessionId = origin.SessionId;
 
             if (sessionId is { } known
                 && Touched.TryGetValue(known, out var last)
@@ -88,7 +95,10 @@ namespace AlgoJudge.Server.Realtime
                 {
                     UserId = userId,
                     StartedAt = now.UtcDateTime,
-                    IpAddress = http.Connection.RemoteIpAddress?.ToString(),
+                    // Through `IRequestOrigin`, which un-maps an IPv4-mapped
+                    // IPv6 address. Straight off the connection it arrives mapped
+                    // and stops matching any IPv4 network anybody writes down.
+                    IpAddress = origin.Address,
                     UserAgent = Truncate(http.Request.Headers.UserAgent.ToString(), 512),
                 };
                 context.UserSessions.Add(session);

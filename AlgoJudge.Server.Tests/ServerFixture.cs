@@ -129,6 +129,14 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         builder.UseSetting("Problems:ReservedSlugPrefixes:0", "Imported-");
         builder.UseSetting("Storage:Default", "pg");
 
+        // **Named for the same reason storage is.** An installation that trusts
+        // no named proxy refuses to start, because trusting every sender of
+        // `X-Forwarded-For` means a visitor can state their own address — and
+        // once a judge is shown that address, a wrong one reads as an alibi.
+        // Loopback here: `TestServer` sends nothing through a proxy, so this
+        // says "believe nobody" in the only shape the setting has.
+        builder.UseSetting("Forwarded:KnownProxies", "127.0.0.1");
+
         // `TestServer` leaves `RemoteIpAddress` null, and the maintenance switch
         // answers only to a caller on the loopback interface — so without this
         // every test of it would see a 404 and prove nothing.

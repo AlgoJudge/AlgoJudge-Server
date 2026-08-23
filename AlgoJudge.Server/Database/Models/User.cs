@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Identity;
 
 namespace AlgoJudge.Server.Database.Models
@@ -93,7 +94,21 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>An API path, not the screen somebody was looking at.</summary>
         public string? LastRequestPath { get; set; }
 
-        public string? IpAddress { get; set; }
+        /// <summary>
+        /// Where this browser reached the Server from.
+        /// <para>
+        /// <b><c>inet</c>, not text</b>, because the question anybody will ever
+        /// ask of it — "is this inside the examination room's network" — is a
+        /// containment test, and over a string it is a string comparison.
+        /// PostgreSQL answers it with <c>&lt;&lt;=</c> and indexes it with GiST;
+        /// one column holds both families.
+        /// </para>
+        /// <para>
+        /// Normalised before it gets here. See <see cref="Services.RequestOrigin"/>
+        /// for what happens when it is not.
+        /// </para>
+        /// </summary>
+        public IPAddress? IpAddress { get; set; }
         public string? UserAgent { get; set; }
         public DateTime? ExpiresAt { get; set; }
 

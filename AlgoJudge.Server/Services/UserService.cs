@@ -401,7 +401,10 @@ namespace AlgoJudge.Server.Services
                 StartedAt = Wire.At(s.StartedAt),
                 LastRequestAt = Wire.At(s.LastRequestAt),
                 LastRequestPath = s.LastRequestPath,
-                IpAddress = s.IpAddress,
+                // Text on the wire, `inet` in the row: an address is a string to
+                // whoever reads the screen and a comparable value to whoever
+                // asks which network it was on.
+                IpAddress = s.IpAddress?.ToString(),
                 UserAgent = s.UserAgent,
                 ExpiresAt = Wire.At(s.ExpiresAt),
                 IsCurrent = s.UserId == mine,
