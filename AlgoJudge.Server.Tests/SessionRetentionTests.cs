@@ -72,6 +72,49 @@ public class SessionRetentionTests(ServerFixture server)
     }
 
     /// <summary>
+    /// A browser that names itself is recorded as having done so.
+    /// <para>
+    /// Driven through a real request rather than by building a row, because the
+    /// header has to survive the whole way: the Client sets it, CORS allows it —
+    /// `AllowAnyHeader` already — and `IRequestOrigin` parses it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_session_records_the_device_the_browser_named()
+    {
+        // **Signed in by hand, with the header already set.** The helpers build
+        // the client themselves, and a session is touched at most once a minute
+        // — so a header added after signing in reaches a session that was minted
+        // seconds ago and throttled away. A browser sends this from its first
+        // request, and so does this test.
+        var login = "device-" + Guid.NewGuid().ToString("N")[..10];
+        await Sign.NewAccountAsync(server, login);
+
+        var device = Guid.NewGuid();
+        var browser = server.CreateClient(
+            new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+            {
+                HandleCookies = true,
+            });
+        browser.DefaultRequestHeaders.Add("Device-Id", device.ToString());
+
+        var signedIn = await browser.PostAsJsonAsync(
+            "/api/v1/identity/login?useSessionCookies=true",
+            new { email = login, password = Sign.Password });
+        await Sign.Succeeded(signedIn);
+
+        var who = (await browser.GetFromJsonAsync<JsonElement>("/api/v1/account"))
+            .GetProperty("userId").GetString()!;
+
+        await using var context = server.NewContext();
+        var sessions = await context.UserSessions
+            .Where(s => s.UserId == who)
+            .ToListAsync();
+
+        Assert.Contains(sessions, s => s.DeviceId == device);
+    }
+
+    /// <summary>
     /// Past the window the address goes and the row stays.
     /// <para>
     /// <b>The row is the point.</b> Deleting it would take "when did this person

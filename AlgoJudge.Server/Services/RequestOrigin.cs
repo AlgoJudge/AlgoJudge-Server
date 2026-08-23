@@ -22,6 +22,12 @@ namespace AlgoJudge.Server.Services
         /// has one.
         /// </summary>
         Guid? SessionId { get; }
+
+        /// <summary>
+        /// The name the browser gives itself, or null when it gives none or
+        /// gives something that is not one.
+        /// </summary>
+        Guid? DeviceId { get; }
     }
 
     /// <summary>
@@ -58,6 +64,28 @@ namespace AlgoJudge.Server.Services
                     : address;
             }
         }
+
+        /// <summary>
+        /// The header this Client sends. No <c>X-</c> prefix: RFC 6648
+        /// deprecated that convention for new parameters.
+        /// <para>
+        /// The name is generic enough that something upstream could set one of
+        /// its own. That is covered by the same guard the page itself needs —
+        /// see <see cref="DeviceId"/> — rather than by a longer name.
+        /// </para>
+        /// </summary>
+        public const string DeviceHeader = "Device-Id";
+
+        /// <summary>
+        /// <b>Parsed, or discarded.</b> This is text a page wrote and anybody
+        /// can edit — keeping whatever arrived would put an unvalidated string
+        /// on a judge's screen. A <c>Guid</c> is the whole of what it is allowed
+        /// to be.
+        /// </summary>
+        public Guid? DeviceId =>
+            Guid.TryParse(accessor.HttpContext?.Request.Headers[DeviceHeader], out var device)
+                ? device
+                : null;
 
         public Guid? SessionId =>
             accessor.HttpContext?.Request.Cookies

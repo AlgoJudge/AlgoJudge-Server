@@ -110,6 +110,25 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public IPAddress? IpAddress { get; set; }
         public string? UserAgent { get; set; }
+
+        /// <summary>
+        /// The name this browser gives itself, or null when it gave none.
+        /// <para>
+        /// <b>Self-declared, and stored as such.</b> It arrives in a header the
+        /// page writes, so whoever is using the browser can read, change or
+        /// clear it, and a room of machines imaged from one disk reports one id
+        /// for all of them. It is weaker evidence than the session cookie, which
+        /// is <c>HttpOnly</c>. What it answers is <i>the same browser, two
+        /// accounts</i>, and nothing may describe it as a security control.
+        /// </para>
+        /// <para>
+        /// A <c>Guid</c> rather than the text that arrived: client-supplied text
+        /// stored whole is text that reaches a screen unvalidated. Anything that
+        /// does not parse is no device at all.
+        /// </para>
+        /// </summary>
+        public Guid? DeviceId { get; set; }
+
         public DateTime? ExpiresAt { get; set; }
 
         /// <summary>Set when the session ended, so history survives a sign-out.</summary>

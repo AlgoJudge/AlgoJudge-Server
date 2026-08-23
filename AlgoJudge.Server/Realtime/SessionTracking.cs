@@ -130,6 +130,12 @@ namespace AlgoJudge.Server.Realtime
             }
 
             session.LastRequestAt = now.UtcDateTime;
+            // **Filled when it is missing, never overwritten**, and on touch
+            // rather than only at creation. A session that existed before this
+            // Client shipped the header would otherwise never carry one; and a
+            // browser whose storage was cleared mid-session gets a new id, which
+            // is not a reason to rewrite the one this session was opened with.
+            session.DeviceId ??= origin.DeviceId;
             // **Pushed out on every touch, not fixed at creation.** The window
             // is "thirty days since this browser was last here", which is what
             // the cookie means, so a session in daily use never expires and one
