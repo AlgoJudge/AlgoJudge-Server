@@ -64,17 +64,20 @@ namespace AlgoJudge.Server
             // Without this the scheme is http, redirects point at the wrong
             // place, and — the one that matters here — every Runner is recorded
             // at the proxy's address instead of its own.
-            builder.Services.Configure<ForwardedHeadersOptions>(options =>
-            {
-                options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-                // Cleared because the defaults are loopback only, which is never
-                // where the proxy is in a container network. An installation that
-                // wants to pin them does it in configuration.
-                options.KnownNetworks.Clear();
-                options.KnownProxies.Clear();
-            });
+            //
+            // **Which hops may be believed is now configuration, and an
+            // installation that names none does not start.** See
+            // `Authorization/TrustedProxies.cs` for why the previous default —
+            // trusting every sender of `X-Forwarded-For` — stopped being
+            // survivable once a judge is shown the address.
+            builder.Services.Configure<ForwardedHeadersOptions>(
+                options => Authorization.TrustedProxies.Apply(options, builder.Configuration));
 
             builder.Services.AddHttpContextAccessor();
+
+            // Where the request came from, with the address normalised in one
+            // place. See `Services/RequestOrigin.cs`.
+            builder.Services.AddScoped<Services.IRequestOrigin, Services.RequestOrigin>();
 
             builder.Services.AddAuthorization();
             builder.Services.AddIdentityApiEndpoints<User>(options =>
@@ -284,6 +287,15 @@ namespace AlgoJudge.Server
             });
 
             var app = builder.Build();
+
+            // **Resolved here so a missing setting stops the Server here.**
+            // `Configure` is lazy, so without this line the refusal would
+            // surface from inside the first request's middleware, wrapped in
+            // whatever the pipeline makes of it — which is a long way from the
+            // operator who has to read it.
+            _ = app.Services
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<ForwardedHeadersOptions>>()
+                .Value;
 
             // **Before the rewrite**, and that ordering is the whole point: the
             // next line replaces the remote address with what the proxy says,

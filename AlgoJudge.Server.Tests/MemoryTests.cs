@@ -70,6 +70,10 @@ public sealed class MemoryTests(ITestOutputHelper output) : IAsyncLifetime
             builder.UseSetting("Storage:Stores:objects:Kind", "filesystem");
             builder.UseSetting("Storage:Stores:objects:Path", volume);
             builder.UseSetting("Storage:Default", "objects");
+
+            // Nothing sits in front of a test host, and a Server that says
+            // nothing about that does not start. See `TrustedProxies`.
+            builder.UseSetting("Forwarded:KnownProxies", "none");
         });
 
         // Force the host to build now, so nothing below measures startup.

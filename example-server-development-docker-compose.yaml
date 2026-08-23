@@ -93,6 +93,13 @@ services:
     # so the stack comes up from nothing with one command, and it is off
     # everywhere else.
     - AJ_Storage__Stores__objects__CreateBucket=true
+    # **Whose word to take for a visitor's address.** Nothing sits in front of
+    # this stack - it is reached on 8080 directly - so `none` is the truth, and
+    # `X-Forwarded-For` is read from nobody. A Server that named no answer at all
+    # would refuse to start, deliberately: trusting every sender of that header
+    # was the old default, and it lets a visitor state their own address. Behind
+    # nginx this becomes the address the proxy reaches the Server from.
+    - AJ_Forwarded__KnownProxies=none
 
 volumes:
   algojudge_dev_db_data:

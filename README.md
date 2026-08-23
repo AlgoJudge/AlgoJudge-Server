@@ -165,6 +165,12 @@ AJ_Storage__Stores__objects__Region=us-east-1        # optional
 AJ_Storage__Stores__objects__TimeoutSeconds=600      # optional; how long one request may take
 AJ_Storage__Stores__objects__MaxErrorRetry=2         # optional; retries of a retryable failure
 
+# Whose word to take for a visitor's address. Required: the Server does not
+# start without one of these.
+AJ_Forwarded__KnownProxies=10.0.0.2,10.0.0.3   # the address(es) your proxy reaches this Server from
+AJ_Forwarded__KnownNetworks=10.0.0.0/24        # or its network, in CIDR; both families accepted
+AJ_Forwarded__KnownProxies=none                # or this, when nothing sits in front
+
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
 deadline at all** — measured 2026-08-23, an unassigned `AmazonS3Config` carries a
 `Timeout` of twenty-four days — and this Server holds a gate across its S3 calls
@@ -172,6 +178,31 @@ while it checks the bucket, so one unanswered request would have queued every
 upload in the installation behind it with no end. Ten minutes is generous
 against the 128 MiB ceiling on a single write; lower it only where the link is
 known.
+
+**`Forwarded__KnownProxies` is required and has no default.** Until 2026-08-23
+the Server trusted `X-Forwarded-For` from whoever sent it, which is not "no
+proxies" — it is no checking. That was a log line's problem until the address
+became something a judge is shown and asked whether a solution came from the
+examination room: a participant who can reach this Server past the proxy states
+their own address, and the audit then *exonerates* them.
+
+There is no safe default. Trusting everyone is where this came from; trusting
+only loopback silently records the proxy's own address in a container network
+and looks like it is working. So an installation says which it is, and `none` —
+"nothing sits in front, believe the socket" — is as valid an answer as naming a
+proxy.
+
+Behind nginx the proxy must send the header, and one hop is what this Server
+reads:
+
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+That directive *appends* the peer to whatever arrived, so a header a participant
+wrote themselves ends up earlier in the chain and the address nginx observed ends
+up last — which is the one taken.
 
 # Or a volume.
 AJ_Storage__Stores__local__Kind=filesystem
