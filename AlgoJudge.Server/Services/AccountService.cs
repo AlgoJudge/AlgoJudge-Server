@@ -231,6 +231,14 @@ namespace AlgoJudge.Server.Services
                     score = Scoring.Reported(s.SeriesProblem!, Scoring.Current(s)?.Result).Score,
                     maxScore = Scoring.Reported(s.SeriesProblem!, Scoring.Current(s)?.Result).MaxScore,
                     verdict = Scoring.Current(s)?.Result?.Verdict,
+                    // **The reason included, which is the arguable half.** It is
+                    // writing about this person, so an access request covers it —
+                    // and §17 was corrected for the opposite mistake, a field
+                    // stored and missing from this document. The manager's screen
+                    // says so beside the field.
+                    excluded = s.ExcludedAt is not null,
+                    excludedAt = Wire.At(s.ExcludedAt),
+                    exclusionReason = s.ExclusionReason,
                 }),
                 questions = questions.Select(q => new
                 {

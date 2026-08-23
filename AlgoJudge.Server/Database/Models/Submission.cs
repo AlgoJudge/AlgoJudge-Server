@@ -114,5 +114,41 @@ namespace AlgoJudge.Server.Database.Models
         /// of them. It answers <i>the same browser, two accounts</i>.
         /// </summary>
         public Guid? DeviceId { get; set; }
+
+        /// <summary>
+        /// When a manager ruled that this does not count, or null. One column,
+        /// so there is nothing to disagree with.
+        /// <para>
+        /// <b>It rules on a result and retracts nothing.</b> The verdict, the
+        /// attempts, the files and the place in every list all stay — and so
+        /// does the ceiling it spent, as <see cref="ActivityGroup.IsSystem"/>
+        /// does one level up. Giving an attempt back means raising the limit.
+        /// </para>
+        /// <para>
+        /// What it leaves: <see cref="Services.Scoring.BestOf"/>, the board and
+        /// the socket in <see cref="Services.ResultsService"/>, and the gradebook
+        /// in <c>Lti/Services/GradeSyncService</c>.
+        /// <c>docs/specs/EXCLUDED_SUBMISSIONS.md</c>.
+        /// </para>
+        /// </summary>
+        public DateTime? ExcludedAt { get; set; }
+
+        /// <summary>
+        /// Who ruled. No navigation, as <see cref="Grant.GrantedByUserId"/>:
+        /// deletion here is anonymisation, and a foreign key would force a
+        /// cascade decision this does not need.
+        /// </summary>
+        public string? ExcludedByUserId { get; set; }
+
+        /// <summary>
+        /// Why, in a manager's own words.
+        /// <para>
+        /// Not on the participant's screen, and not withheld from them either —
+        /// it is writing about them, so their data export carries it. Cleared on
+        /// erasure while <see cref="ExcludedAt"/> stays: the ruling is contest
+        /// history, free text naming somebody is not.
+        /// </para>
+        /// </summary>
+        public string? ExclusionReason { get; set; }
     }
 }

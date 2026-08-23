@@ -158,9 +158,14 @@ namespace AlgoJudge.Server.Services
                 .ToHashSet();
             var assignmentIds = visible.SelectMany(r => r.SeriesProblems).Select(sp => sp.Id).ToHashSet();
 
+            // **An excluded submission reaches no board**, and that is not what
+            // a freeze does: a frozen entry keeps its row and loses its outcome,
+            // because "tried, and you may not know yet" is a thing a board says.
+            // This one does not count, so there is nothing for a row to mean.
             var submissions = await context.Submissions
                 .AsNoTracking()
-                .Where(s => assignmentIds.Contains(s.SeriesProblemId) && readable.Contains(s.UserId))
+                .Where(s => assignmentIds.Contains(s.SeriesProblemId) && readable.Contains(s.UserId)
+                    && s.ExcludedAt == null)
                 .Include(s => s.SeriesProblem)
                 .Include(s => s.Jobs).ThenInclude(j => j.Result)
                 .ToListAsync(ct);
@@ -335,6 +340,12 @@ namespace AlgoJudge.Server.Services
             var round = assignment?.Series;
             var activity = assignment?.Activity;
             if (submission is null || assignment is null || round is null || activity is null) return [];
+
+            // `GET /results` would not carry it, so neither does the socket.
+            // **Silence does not repair a board already holding the row** — the
+            // Client merges by id and there is nothing to merge. Whoever sets
+            // the flag sends `rankingChanged` with no result instead.
+            if (submission.ExcludedAt is not null) return [];
 
             var now = clock.GetUtcNow().UtcDateTime;
 

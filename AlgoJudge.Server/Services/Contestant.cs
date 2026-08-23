@@ -40,6 +40,12 @@ namespace AlgoJudge.Server.Services
         /// and nothing that already happened, which is the rule the whole
         /// stamping arrangement exists for.
         /// </para>
+        /// <para>
+        /// <b>An exclusion is not a refund</b>, so nothing here reads
+        /// <see cref="Submission.ExcludedAt"/>: it rules on a result, and the
+        /// attempt was still made. Filtering it out would be a silent way to
+        /// raise a ceiling.
+        /// </para>
         /// </summary>
         public static IQueryable<Submission> Sent(
             IQueryable<Submission> submissions, string userId, Guid? groupId) =>

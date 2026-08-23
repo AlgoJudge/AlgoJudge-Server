@@ -113,6 +113,39 @@ public class LtiGradeSyncTests(ServerFixture server)
     }
 
     /// <summary>
+    /// An excluded submission earns no grade, and the sweep carries that to a
+    /// gradebook already written to — §8 forbids a hook, so the correction
+    /// arrives one sweep later rather than on the event.
+    /// </summary>
+    [Fact]
+    public async Task An_excluded_submission_earns_no_grade()
+    {
+        var world = await BuildAsync();
+        await world.SweepAsync();
+
+        var first = world.Gradebook.Held[world.Subject].Score;
+        Assert.True(first > 0, "the setup posted nothing to move");
+
+        // The only submission there is, ruled out. Written where the state
+        // lives — the endpoint is `ExclusionTests`' business.
+        using (var scope = world.Host.Services.CreateScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var submission = await core.Submissions.FirstAsync(s => s.Id == world.SubmissionId);
+            submission.ExcludedAt = DateTime.UtcNow;
+            await core.SaveChangesAsync();
+        }
+
+        var posted = await world.SweepAsync();
+
+        // **Zero, not "unchanged".** Dropping the submission alone leaves this
+        // contestant out of the computation, and a row nobody computes is a row
+        // nobody corrects — the platform would hold the old mark for ever.
+        Assert.True(posted >= 1, "the withdrawn grade was never sent");
+        Assert.Equal(0, world.Gradebook.Held[world.Subject].Score);
+    }
+
+    /// <summary>
     /// <b>The best attempt is the best fraction, not the biggest number.</b>
     ///
     /// <para>

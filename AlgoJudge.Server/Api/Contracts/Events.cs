@@ -127,7 +127,11 @@ namespace AlgoJudge.Server.Api.Contracts
     public record RankingChangedData
     {
         public required string ActivityId { get; init; }
-        /// <summary>`result` | `unfrozen` | `windowOpened`.</summary>
+        /// <summary>
+        /// `result` | `unfrozen` | `windowOpened` | `excluded`. Only `result`
+        /// carries one; the rest cannot be repaired by merging — the Server was
+        /// withholding, or a row has to <i>leave</i> a board — so they refetch.
+        /// </summary>
         public required string Change { get; init; }
         public string? SeriesId { get; init; }
         /// <summary>Only on `result`, and already through the disclosure filter.</summary>

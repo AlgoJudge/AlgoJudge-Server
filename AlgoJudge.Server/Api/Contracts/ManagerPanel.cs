@@ -382,6 +382,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public double? MaxScore { get; init; }
         /// <summary>How many evaluation jobs it has had. A rejudge adds one.</summary>
         public required int Attempts { get; init; }
+
+        /// <summary>
+        /// A manager ruled that this counts towards no standing. On the list as
+        /// well as the detail, unlike the origin fields: no disclosure question,
+        /// and a manager scanning two hundred rows should not open each.
+        /// </summary>
+        public required bool Excluded { get; init; }
     }
 
     /// <summary>The unit a rejudge creates and a cancellation stops.</summary>
@@ -425,9 +432,34 @@ namespace AlgoJudge.Server.Api.Contracts
         /// It answers <i>the same browser, two accounts</i>.
         /// </summary>
         public string? DeviceId { get; init; }
+
+        /// <summary>When the ruling was made. Null unless `excluded`.</summary>
+        public string? ExcludedAt { get; init; }
+
+        /// <summary>Who made it, by display name.</summary>
+        public string? ExcludedBy { get; init; }
+
+        /// <summary>
+        /// Why, in the manager's own words. Not on the participant's screen —
+        /// theirs carries the marker alone — but writing about them, so their
+        /// data export carries it.
+        /// </summary>
+        public string? ExclusionReason { get; init; }
+
         /// <summary>Newest first.</summary>
         public required IReadOnlyList<ManagedAttemptDto> AttemptList { get; init; }
         public required IReadOnlyList<SubmissionFileDto> Files { get; init; }
+    }
+
+    /// <summary>
+    /// A manager's ruling that a submission counts towards no standing.
+    /// <c>excluded: false</c> lifts it and clears the reason with it — a
+    /// sentence about a state that no longer holds is worse than none.
+    /// </summary>
+    public record ExcludedInputDto
+    {
+        public required bool Excluded { get; init; }
+        public string? Reason { get; init; }
     }
 
     // ── Small inputs ────────────────────────────────────────────────────────

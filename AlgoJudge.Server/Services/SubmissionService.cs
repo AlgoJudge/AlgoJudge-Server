@@ -89,6 +89,10 @@ namespace AlgoJudge.Server.Services
                 Score = score,
                 MaxScore = maxScore,
                 Verdict = current?.Result?.Verdict,
+                // **The score above stays.** An exclusion rules on what a
+                // submission counts for, not on what the judge said — blanking
+                // the verdict would rewrite a result somebody has read.
+                Excluded = submission.ExcludedAt is not null,
             };
         }
 
@@ -139,6 +143,7 @@ namespace AlgoJudge.Server.Services
                 Score = summary.Score,
                 MaxScore = summary.MaxScore,
                 Verdict = summary.Verdict,
+                Excluded = summary.Excluded,
                 ProblemType = submission.SeriesProblem!.Problem?.Type ?? "standard-io@1",
                 AuthorName = submission.User is null ? submission.UserId : Projections.DisplayName(submission.User),
                 Attempts = submission.Jobs

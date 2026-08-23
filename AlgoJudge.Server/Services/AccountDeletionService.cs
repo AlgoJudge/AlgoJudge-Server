@@ -331,13 +331,18 @@ namespace AlgoJudge.Server.Services
             // survives erasure by design — it is somebody's mark in a contest —
             // but where it was sent from is a fact about the person, not about
             // the work.
+            // **The exclusion reason goes, the exclusion stays.** Whether a
+            // submission counted is contest history, and clearing it would
+            // quietly move a board; the sentence about a named person is not.
             var sent = await context.Submissions
-                .Where(s => s.UserId == user.Id && (s.IpAddress != null || s.DeviceId != null))
+                .Where(s => s.UserId == user.Id
+                    && (s.IpAddress != null || s.DeviceId != null || s.ExclusionReason != null))
                 .ToListAsync(ct);
             foreach (var submission in sent)
             {
                 submission.IpAddress = null;
                 submission.DeviceId = null;
+                submission.ExclusionReason = null;
             }
 
             var sessions = await context.UserSessions

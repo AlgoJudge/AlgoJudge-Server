@@ -222,6 +222,18 @@ namespace AlgoJudge.Server.Controllers
         public Task<ManagedSubmissionDetailDto> Cancel(
             Guid submissionId, Guid attemptId, CancellationToken ct) =>
             panel.CancelAttemptAsync(submissionId, attemptId, ct);
+
+        /// <summary>
+        /// Rules that this counts towards no standing, or lifts the ruling.
+        /// Neither a rejudge nor a cancellation — those are about evaluating,
+        /// this about what the evaluation counts for. The submission keeps
+        /// everything it had, its place against the ceiling included.
+        /// </summary>
+        [HttpPost("{id:guid}/excluded")]
+        [ProducesResponseType<ManagedSubmissionDetailDto>(StatusCodes.Status200OK)]
+        public Task<ManagedSubmissionDetailDto> Excluded(
+            Guid id, [FromBody] ExcludedInputDto input, CancellationToken ct) =>
+            panel.SetExcludedAsync(id, input.Excluded, input.Reason, ct);
     }
 
     [ApiController]
