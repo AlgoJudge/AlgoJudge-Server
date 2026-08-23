@@ -7052,6 +7052,65 @@
         }
       }
     },
+    "/submissions/{id}/excluded": {
+      "post": {
+        "tags": [
+          "ManagerSubmissions"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludedInputDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludedInputDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludedInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedSubmissionDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedSubmissionDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedSubmissionDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/permission-templates": {
       "get": {
         "tags": [
@@ -11303,6 +11362,19 @@
         },
         "additionalProperties": false
       },
+      "ExcludedInputDto": {
+        "type": "object",
+        "properties": {
+          "excluded": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ExternalContentDto": {
         "type": "object",
         "properties": {
@@ -12900,6 +12972,9 @@
             "type": "integer",
             "format": "int32"
           },
+          "excluded": {
+            "type": "boolean"
+          },
           "problemType": {
             "type": "string",
             "nullable": true
@@ -12913,6 +12988,18 @@
             "nullable": true
           },
           "deviceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "excludedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "excludedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "exclusionReason": {
             "type": "string",
             "nullable": true
           },
@@ -13004,6 +13091,9 @@
           "attempts": {
             "type": "integer",
             "format": "int32"
+          },
+          "excluded": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -14861,6 +14951,9 @@
             "type": "string",
             "nullable": true
           },
+          "excluded": {
+            "type": "boolean"
+          },
           "problemType": {
             "type": "string",
             "nullable": true
@@ -14963,6 +15056,9 @@
           "verdict": {
             "type": "string",
             "nullable": true
+          },
+          "excluded": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
