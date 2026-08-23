@@ -171,6 +171,9 @@ AJ_Forwarded__KnownProxies=10.0.0.2,10.0.0.3   # the address(es) your proxy reac
 AJ_Forwarded__KnownNetworks=10.0.0.0/24        # or its network, in CIDR; both families accepted
 AJ_Forwarded__KnownProxies=none                # or this, when nothing sits in front
 
+# How long a session keeps the address and user agent it was made with.
+AJ_Retention__SessionOriginDays=30             # optional; the aj_session cookie's own life
+
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
 deadline at all** — measured 2026-08-23, an unassigned `AmazonS3Config` carries a
 `Timeout` of twenty-four days — and this Server holds a gate across its S3 calls
