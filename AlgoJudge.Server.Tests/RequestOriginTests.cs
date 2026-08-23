@@ -204,7 +204,7 @@ public class RequestOriginTests
         var id = Guid.NewGuid();
 
         var declared = new DefaultHttpContext();
-        declared.Request.Headers["AlgoJudge-Device"] = id.ToString();
+        declared.Request.Headers["Device-Id"] = id.ToString();
         Assert.Equal(
             id,
             new RequestOrigin(new HttpContextAccessor { HttpContext = declared }).DeviceId);
@@ -212,7 +212,7 @@ public class RequestOriginTests
         foreach (var nonsense in new[] { "not-a-uuid", "", "<script>alert(1)</script>" })
         {
             var context = new DefaultHttpContext();
-            context.Request.Headers["AlgoJudge-Device"] = nonsense;
+            context.Request.Headers["Device-Id"] = nonsense;
             Assert.Null(
                 new RequestOrigin(new HttpContextAccessor { HttpContext = context }).DeviceId);
         }

@@ -68,8 +68,13 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// The header this Client sends. No <c>X-</c> prefix: RFC 6648
         /// deprecated that convention for new parameters.
+        /// <para>
+        /// The name is generic enough that something upstream could set one of
+        /// its own. That is covered by the same guard the page itself needs —
+        /// see <see cref="DeviceId"/> — rather than by a longer name.
+        /// </para>
         /// </summary>
-        public const string DeviceHeader = "AlgoJudge-Device";
+        public const string DeviceHeader = "Device-Id";
 
         /// <summary>
         /// <b>Parsed, or discarded.</b> This is text a page wrote and anybody

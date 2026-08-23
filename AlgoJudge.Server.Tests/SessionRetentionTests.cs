@@ -96,7 +96,7 @@ public class SessionRetentionTests(ServerFixture server)
             {
                 HandleCookies = true,
             });
-        browser.DefaultRequestHeaders.Add("AlgoJudge-Device", device.ToString());
+        browser.DefaultRequestHeaders.Add("Device-Id", device.ToString());
 
         var signedIn = await browser.PostAsJsonAsync(
             "/api/v1/identity/login?useSessionCookies=true",
