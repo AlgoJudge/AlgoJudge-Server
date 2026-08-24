@@ -167,6 +167,16 @@ After cloning, inspect the solution and project files, then document:
     clause sits **outside** `unfrozen`: that permission lifts a freeze and must
     not lift a lockdown.
 
+- **`ServerFixture` switches the background workers off, and one escaped for a
+  while** (2026-08-24). It removes them **by registration shape** — factory
+  registrations — because the framework's own HTTP service is registered by type
+  and removing every `IHostedService` would take the server down.
+  `GradeSyncWorker` uses `AddHostedService<T>()`, so it was missed and swept the
+  shared test database from every host a test built; the tests that call it
+  themselves then raced with it and failed about one full run in two. It is now
+  removed by type as well, with its own count assertion. **A worker added to this
+  Server must be switched off here, whichever way it is registered.**
+
 - **A manager may rule that one submission does not count** (2026-08-24),
   specified in `docs/specs/EXCLUDED_SUBMISSIONS.md` in the workspace. One column
   is the whole fact — `Submission.ExcludedAt`, non-null means excluded — and four

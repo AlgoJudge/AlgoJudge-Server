@@ -335,8 +335,10 @@ public class LtiGradeSyncTests(ServerFixture server)
     {
         public async Task<int> SweepAsync()
         {
-            var worker = Host.Services.GetServices<IHostedService>()
-                .OfType<GradeSyncWorker>().Single();
+            // By type, not out of the hosted services: the fixture switches the
+            // worker off there so it cannot sweep the shared database on its own
+            // timer, and registers it as a plain singleton for exactly this.
+            var worker = Host.Services.GetRequiredService<GradeSyncWorker>();
             return await worker.RunOnceAsync(CancellationToken.None);
         }
 

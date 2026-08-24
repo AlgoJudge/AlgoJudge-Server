@@ -102,10 +102,20 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
     /// <summary>
     /// The seven the application registers through a factory: the drainer, the
     /// lease reaper, the deletion sweeper, the address sweeper, the series
-    /// scheduler, the file collector and the storage migrator. The LTI grade
-    /// worker is registered by type and does not sweep on its own timer.
+    /// scheduler, the file collector and the storage migrator.
     /// </summary>
     private const int ExpectedSweepers = 7;
+
+    /// <summary>
+    /// The one registered by type: <see cref="Lti.Workers.GradeSyncWorker"/>.
+    /// <para>
+    /// <b>This line used to say it did not sweep on its own timer.</b> It does —
+    /// a <c>BackgroundService</c> that sweeps once on start and once a minute
+    /// after that — and the shape filter below walked straight past it, so every
+    /// host a test built left one running against the shared database.
+    /// </para>
+    /// </summary>
+    private const int ExpectedTypedSweepers = 1;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -183,10 +193,42 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
                     + "here — a worker left running sweeps the shared test database.");
             }
 
-            foreach (var sweeper in sweepers)
+            // **And the one registered by type.** `AddHostedService<T>()` records
+            // an implementation *type*, so the filter above cannot see it.
+            //
+            // What that cost: `LtiGradeSyncTests` builds eleven hosts and
+            // disposes none, each sweeping the one shared database on its own
+            // timer and posting to its own gradebook. A test's pending grade was
+            // taken by somebody else's worker and posted somewhere the test could
+            // not see, so its own count stayed at nought.
+            // `A_settled_grade_is_not_posted_again_on_every_sweep` and
+            // `An_excluded_submission_earns_no_grade` failed on it about one full
+            // run in two and never alone. Measured 2026-08-24: three of six runs,
+            // `Expected: 1, Actual: 0`.
+            var typed = services
+                .Where(d => d.ServiceType == typeof(IHostedService)
+                            && d.ImplementationType == typeof(Lti.Workers.GradeSyncWorker))
+                .ToList();
+
+            if (typed.Count != ExpectedTypedSweepers)
+            {
+                throw new InvalidOperationException(
+                    $"The fixture expected {ExpectedTypedSweepers} background worker registered by "
+                    + $"type and found {typed.Count}. A worker left running sweeps the shared test "
+                    + "database, and the tests that call it themselves then race with it.");
+            }
+
+            foreach (var sweeper in sweepers.Concat(typed))
             {
                 services.Remove(sweeper);
             }
+
+            // **Registered back as a plain singleton**, because switching a
+            // worker off must not make it unreachable: `LtiGradeSyncTests`
+            // resolves this one and calls `RunOnceAsync` itself, which is the
+            // deterministic half of the arrangement. Removing it outright left
+            // eleven tests unable to find it at all.
+            services.AddSingleton<Lti.Workers.GradeSyncWorker>();
         });
     }
 
