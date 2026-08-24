@@ -55,6 +55,7 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         ICurrentUserService currentUser,
         IPermissionService permissions,
+        ISeriesLockdown lockdown,
         TimeProvider clock
     ) : IActivityService
     {
@@ -149,11 +150,19 @@ namespace AlgoJudge.Server.Services
                 .ToList();
 
             var page = ordered.Skip(paging.Skip).Take(paging.PageSize).ToList();
+
+            // **The list says which of these are out of reach, and shows them
+            // anyway.** A row that vanished during an examination reads as a
+            // fault; a row that says why reads as a rule.
+            var state = await lockdown.ForReaderAsync(ct);
+
             var items = new List<ActivityDto>(page.Count);
             foreach (var activity in page)
             {
                 items.Add(Projections.Activity(
-                    activity, Membership(memberships, activity.Id), now, await DocumentsAsync(activity.Id, ct)));
+                    activity, Membership(memberships, activity.Id), now,
+                    await DocumentsAsync(activity.Id, ct),
+                    locked: await LockedAsync(activity.Id, state, ct)));
             }
 
             return new PageDto<ActivityDto>
@@ -163,6 +172,18 @@ namespace AlgoJudge.Server.Services
                 Page = paging.Page,
                 PageSize = paging.PageSize,
             };
+        }
+
+        /// <summary>
+        /// Why this activity is out of reach, or null. Shared by the list and
+        /// the page so the two cannot say different things about one activity.
+        /// </summary>
+        private async Task<LockedDto?> LockedAsync(
+            Guid activityId, LockdownState state, CancellationToken ct)
+        {
+            if (state.Quiet) return null;
+            if (!await lockdown.IsActivityLockedAsync(activityId, state, ct)) return null;
+            return new LockedDto { SeriesName = state.BySeriesName ?? "" };
         }
 
         private static string Membership(Dictionary<Guid, GrantState> memberships, Guid activityId) =>
@@ -207,7 +228,11 @@ namespace AlgoJudge.Server.Services
                 // **On the one activity, not on the list.** A roster per row
                 // would be a query per row for something a list has no room to
                 // print, and the screen that needs it is the one somebody opened.
-                await MyGroupAsync(activity.Id, ct));
+                await MyGroupAsync(activity.Id, ct),
+                // **The shell still loads while it is locked**, and that is the
+                // point: it is what carries the reason. Everything under it —
+                // the series, the problems, the submit path — refuses.
+                await LockedAsync(activity.Id, await lockdown.ForReaderAsync(ct), ct));
         }
 
         /// <summary>

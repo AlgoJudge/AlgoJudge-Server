@@ -138,6 +138,26 @@ After cloning, inspect the solution and project files, then document:
   - **A system group still submits and still spends.** It is excluded from
     *results*, the way `Grant.IsSystem` excludes staff — one level up.
 
+- **A running series may put the rest out of reach** (2026-08-24), specified in
+  `docs/specs/SERIES_LOCKDOWN.md` in the workspace. Two filters, and **neither is
+  a permission** — they are applied after authorization, because the model has no
+  subtraction in it. Five things are easy to get wrong:
+  - **Place and rank are different.** A round with `SeriesAddressRule` rows is
+    served inside and **absent** outside; a round below the floor is **locked**
+    and names what displaced it. Absent withholds its dates and its count;
+    locked says "not now".
+  - **The floor is a maximum, so equal ranks survive together** — which is how
+    two contests share one room. And it **follows the grant**: only a round
+    somebody takes part in can displace anything.
+  - **An address the Server cannot read admits nobody and locks nobody.** The
+    second half is what keeps a proxy failure from stopping every course at once,
+    and nothing is gained by stripping the header.
+  - **`Services/FileService` was a live hole.** A statement is authorised through
+    *any* activity holding its version, so a locked round's problem was reachable
+    through whichever open course also held it. The narrowing is per **round**.
+  - **Two switches, either lifting both filters and keeping the configuration**:
+    `Series.RestrictionsEnabled` and `Instance.SeriesRestrictionsEnabled`.
+
 - **A manager may rule that one submission does not count** (2026-08-24),
   specified in `docs/specs/EXCLUDED_SUBMISSIONS.md` in the workspace. One column
   is the whole fact — `Submission.ExcludedAt`, non-null means excluded — and four

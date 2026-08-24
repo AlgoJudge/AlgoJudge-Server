@@ -338,6 +338,7 @@ namespace AlgoJudge.Server.Services
             round.RankingRevealAt = ActivityService.ParseInstant(input.RankingRevealAt);
             round.RankingVisibleFrom = ActivityService.ParseInstant(input.RankingVisibleFrom);
             round.RankingVisibleTo = ActivityService.ParseInstant(input.RankingVisibleTo);
+            SeriesService.ApplyRestrictions(round, input);
 
             Reconcile(round);
             await context.SaveChangesAsync(ct);
@@ -564,7 +565,11 @@ namespace AlgoJudge.Server.Services
         }
 
         private async Task<Series> Round(Guid seriesId, CancellationToken ct) =>
-            await context.Series.FirstOrDefaultAsync(s => s.Id == seriesId, ct)
+            // The rules come with it: an update replaces the whole list, and a
+            // collection that was never loaded is one `Clear()` cannot empty.
+            await context.Series
+                .Include(s => s.AddressRules)
+                .FirstOrDefaultAsync(s => s.Id == seriesId, ct)
                 ?? throw new NotFoundException("Series");
 
         private async Task<ManagedSeriesDto> OneAsync(Series round, CancellationToken ct)

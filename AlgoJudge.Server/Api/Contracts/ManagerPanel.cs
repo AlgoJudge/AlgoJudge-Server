@@ -606,6 +606,18 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </para>
         /// </summary>
         public bool? ExternalJudgingEnabled { get; init; }
+
+        /// <summary>
+        /// Whether a series may hide or lock anything at all. Absent leaves it
+        /// alone, for the reason above.
+        /// <para>
+        /// <b>The switch for the morning nobody yet knows which round is at
+        /// fault.</b> A wrong address list locks out a whole cohort at once, and
+        /// whoever takes that call has to be able to clear it without first
+        /// finding the round that did it.
+        /// </para>
+        /// </summary>
+        public bool? SeriesRestrictionsEnabled { get; init; }
     }
 
     public record InstanceLogoInputDto

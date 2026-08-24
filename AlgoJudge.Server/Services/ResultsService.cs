@@ -49,6 +49,7 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IActivityService activities,
+        ISeriesLockdown lockdown,
         TimeProvider clock
     ) : IResultsService
     {
@@ -57,6 +58,7 @@ namespace AlgoJudge.Server.Services
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
             await permissions.RequireAsync(Permissions.RankingRead, activity.Id, ct);
+            await lockdown.RequireReachableAsync(activity.Id, ct);
             var reader = await currentUser.RequireAsync(ct);
 
             // Nobody may see a score, so there is no board — and no second

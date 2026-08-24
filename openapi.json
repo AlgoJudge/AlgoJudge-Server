@@ -10493,6 +10493,9 @@
           },
           "props": {
             "nullable": true
+          },
+          "locked": {
+            "$ref": "#/components/schemas/LockedDto"
           }
         },
         "additionalProperties": false
@@ -10692,6 +10695,20 @@
             "nullable": true
           },
           "me": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddressRuleDto": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
             "type": "string",
             "nullable": true
           }
@@ -11912,6 +11929,9 @@
           "externalJudgingEnabled": {
             "type": "boolean"
           },
+          "seriesRestrictionsEnabled": {
+            "type": "boolean"
+          },
           "documents": {
             "type": "array",
             "items": {
@@ -12010,6 +12030,10 @@
             "type": "boolean"
           },
           "externalJudgingEnabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "seriesRestrictionsEnabled": {
             "type": "boolean",
             "nullable": true
           }
@@ -12131,6 +12155,16 @@
           },
           "logo": {
             "$ref": "#/components/schemas/InstanceLogoDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LockedDto": {
+        "type": "object",
+        "properties": {
+          "seriesName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -12802,6 +12836,20 @@
           "rankingVisibleTo": {
             "type": "string",
             "nullable": true
+          },
+          "importance": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "addressRules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressRuleDto"
+            },
+            "nullable": true
+          },
+          "restrictionsEnabled": {
+            "type": "boolean"
           },
           "problems": {
             "type": "array",
@@ -14638,6 +14686,9 @@
               "$ref": "#/components/schemas/ProblemSummaryDto"
             },
             "nullable": true
+          },
+          "locked": {
+            "$ref": "#/components/schemas/LockedDto"
           }
         },
         "additionalProperties": false
@@ -14679,6 +14730,22 @@
           },
           "rankingVisibleTo": {
             "type": "string",
+            "nullable": true
+          },
+          "importance": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "addressRules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressRuleDto"
+            },
+            "nullable": true
+          },
+          "restrictionsEnabled": {
+            "type": "boolean",
             "nullable": true
           }
         },

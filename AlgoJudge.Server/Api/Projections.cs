@@ -217,9 +217,11 @@ namespace AlgoJudge.Server.Api
             string membership,
             DateTime now,
             IEnumerable<FileReference> documents,
-            MyGroupDto? group = null) => new()
+            MyGroupDto? group = null,
+            LockedDto? locked = null) => new()
         {
             Group = group,
+            Locked = locked,
             Id = Contracts.Wire.Id(activity.Id),
             Slug = activity.Slug,
             Name = activity.Name,
@@ -297,6 +299,12 @@ namespace AlgoJudge.Server.Api
                 RankingRevealAt = Contracts.Wire.At(series.RankingRevealAt),
                 RankingVisibleFrom = Contracts.Wire.At(series.RankingVisibleFrom),
                 RankingVisibleTo = Contracts.Wire.At(series.RankingVisibleTo),
+                Importance = series.Importance,
+                RestrictionsEnabled = series.RestrictionsEnabled,
+                AddressRules = series.AddressRules
+                    .Select(r => new AddressRuleDto { Network = r.Network.ToString(), Note = r.Note })
+                    .OrderBy(r => r.Network, StringComparer.Ordinal)
+                    .ToList(),
                 Problems = problems.ToList(),
             };
 

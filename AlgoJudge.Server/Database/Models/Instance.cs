@@ -93,6 +93,23 @@ namespace AlgoJudge.Server.Database.Models
         public List<string> ExternalFetchHosts { get; set; } = ["onlinejudge.org"];
 
         /// <summary>
+        /// Whether a series may hide or lock anything at all.
+        /// <para>
+        /// <b>The switch for the minute nobody yet knows which series is at
+        /// fault.</b> A wrong address list on the morning of an examination
+        /// locks out a whole cohort, and the person taking the call has to be
+        /// able to clear it without first working out which of forty series did
+        /// it. Off, every lockdown lifts at once; the configuration is kept, so
+        /// turning it back on restores it.
+        /// </para>
+        /// <para>
+        /// <see cref="Series.RestrictionsEnabled"/> is the same switch for one
+        /// series, for when it <i>is</i> known.
+        /// </para>
+        /// </summary>
+        public bool SeriesRestrictionsEnabled { get; set; } = true;
+
+        /// <summary>
         /// Whether the sign-in screen offers the login-and-password form.
         /// <para>
         /// **Presentation, and the name says so.** Switching it off hides the

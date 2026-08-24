@@ -488,6 +488,10 @@ namespace AlgoJudge.Server.Controllers
             {
                 instance.ExternalJudgingEnabled = externalJudging;
             }
+            if (input.SeriesRestrictionsEnabled is { } restrictions)
+            {
+                instance.SeriesRestrictionsEnabled = restrictions;
+            }
             await context.SaveChangesAsync(ct);
 
             return await AnnounceAsync(ct);

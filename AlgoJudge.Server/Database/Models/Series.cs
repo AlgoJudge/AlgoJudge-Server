@@ -109,6 +109,49 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime? UnfrozenAnnouncedAt { get; set; }
 
         /// <summary>
+        /// How much this series outranks everything else while it runs.
+        /// <para>
+        /// <b>A number, because the number is the meaning.</b> While this series
+        /// is running, anything of a <i>lower</i> rank is locked for whoever is
+        /// taking part in it — see <see cref="Services.SeriesLockdown"/>.
+        /// Equal ranks survive together, which is what lets two contests share
+        /// one room.
+        /// </para>
+        /// <para>
+        /// <b>Visibility, never permission.</b> The permission model has no
+        /// subtraction in it; grants answer <i>who may</i>, this answers
+        /// <i>what is reachable while that runs</i>.
+        /// <c>docs/specs/SERIES_LOCKDOWN.md</c>.
+        /// </para>
+        /// </summary>
+        public int Importance { get; set; }
+
+        /// <summary>
+        /// The address ranges this series may be reached from. Empty means
+        /// anywhere.
+        /// <para>
+        /// <b>It grants and it takes away in one act</b>: a series with any rule
+        /// is served to an address that matches and is <b>absent</b> for every
+        /// other, whatever grant the reader holds.
+        /// </para>
+        /// </summary>
+        public ICollection<SeriesAddressRule> AddressRules { get; set; } = new List<SeriesAddressRule>();
+
+        /// <summary>
+        /// The switch for this series alone. Off, it neither hides nor locks —
+        /// and it <b>keeps its rules</b>, so turning it back on restores them.
+        /// <para>
+        /// A wrong list on the day of a contest locks out a whole cohort at
+        /// once, so there has to be something to clear that is not "delete the
+        /// configuration and rebuild it afterwards".
+        /// <see cref="Instance.SeriesRestrictionsEnabled"/> is the same switch
+        /// for the installation, for when nobody yet knows which series is at
+        /// fault.
+        /// </para>
+        /// </summary>
+        public bool RestrictionsEnabled { get; set; } = true;
+
+        /// <summary>
         /// Optimistic concurrency, so two Server instances cannot both open the
         /// same series and two managers cannot lose one another's shift.
         /// </summary>

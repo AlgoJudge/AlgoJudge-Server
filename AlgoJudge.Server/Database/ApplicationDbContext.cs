@@ -18,6 +18,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<ProblemVersion> ProblemVersions { get; set; }
         public DbSet<SeriesProblem> SeriesProblems { get; set; }
         public DbSet<Series> Series { get; set; }
+        public DbSet<SeriesAddressRule> SeriesAddressRules { get; set; }
         public DbSet<Activity> Activities { get; set; }
         public DbSet<AttachmentRule> AttachmentRules { get; set; }
         public DbSet<Submission> Submissions { get; set; }
@@ -137,6 +138,36 @@ namespace AlgoJudge.Server.Database
                 e.HasIndex(s => new { s.EndDate, s.EndAnnouncedAt });
                 e.HasIndex(s => new { s.RankingVisibleFrom, s.WindowAnnouncedAt });
                 e.HasIndex(s => new { s.RankingRevealAt, s.UnfrozenAnnouncedAt });
+                // Every request a participant makes asks "what is running that
+                // outranks or hides things", so the answer is read constantly
+                // and is nearly always empty.
+                e.HasIndex(s => new { s.IsOpen, s.Importance });
+            });
+
+            builder.Entity<SeriesAddressRule>(e =>
+            {
+                e.ToTable("SeriesAddressRules");
+                // **`cidr`, reached through a converter, and the direction is
+                // deliberate.** Npgsql 8 maps this column to `NpgsqlCidr`;
+                // Npgsql 10 maps it to `System.Net.IPNetwork` and marks
+                // `NpgsqlCidr` obsolete. The model already holds the later type,
+                // so §13's upgrade deletes this converter rather than changing
+                // the entity, the contract and every reader of it.
+                //
+                // The column stays `cidr`, so PostgreSQL refuses a malformed
+                // range and one with host bits set even if something one day
+                // writes past the service that validates first.
+                e.Property(r => r.Network)
+                    .HasColumnType("cidr")
+                    .HasConversion(
+                        network => new NpgsqlTypes.NpgsqlCidr(network.BaseAddress, (byte)network.PrefixLength),
+                        stored => new System.Net.IPNetwork(stored.Address, stored.Netmask));
+                e.Property(r => r.Note).HasMaxLength(200);
+                e.HasOne(r => r.Series)
+                    .WithMany(s => s.AddressRules)
+                    .HasForeignKey(r => r.SeriesId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(r => r.SeriesId);
             });
 
             builder.Entity<Problem>(e =>
