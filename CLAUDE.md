@@ -195,6 +195,14 @@ After cloning, inspect the solution and project files, then document:
     `MergeSweeper` empties it a day later, and until then an undo gives it back
     whole.
 
+- **An account past `ExpiresAt` stops working too** (2026-08-24). Computed on
+  every request beside the block, and refused at sign-in by
+  `Authorization/ExpiringSignInManager`. **Never written as a lockout**: a
+  manager and the clock on one field disagree silently both ways — unblocking
+  would defeat the expiry, extending the date would leave a stale block. The
+  refusal carries `account.expired` rather than `account.blocked`, because the
+  manager's screen has told the two apart since before either was enforced.
+
 - **A blocked account stops working now** (2026-08-24).
   `Authorization/BlockedGate` is a per-request check, because `LockoutEnd` is
   read at sign-in only: a blocked person used to carry on until Identity next

@@ -44,6 +44,18 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime? ExpiresAt { get; set; }
 
         /// <summary>
+        /// Whether the account has run out.
+        /// <para>
+        /// <b>Computed, never written.</b> Setting a block from the date would
+        /// put two writers on one field — a manager and the clock — and both
+        /// ways they disagree are silent: unblocking would defeat the expiry,
+        /// and moving the date would leave a stale block behind. One expression
+        /// over one column cannot drift from itself.
+        /// </para>
+        /// </summary>
+        public bool HasExpired(DateTimeOffset now) => ExpiresAt is { } end && end <= now.UtcDateTime;
+
+        /// <summary>
         /// Why the account is blocked. Blocking itself is
         /// <see cref="IdentityUser.LockoutEnd"/> and <b>never a second
         /// boolean</b>: two fields answering "is this account blocked" is two
