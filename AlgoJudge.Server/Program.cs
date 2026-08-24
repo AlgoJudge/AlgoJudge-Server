@@ -115,6 +115,14 @@ namespace AlgoJudge.Server
                 // which is framework code and takes the login it is given.
                 .AddUserValidator<ReservedLoginValidator>();
 
+            // **An account past its date does not sign in**, and the date stays
+            // the only place that says so. Registered over the framework's own
+            // rather than through `AddSignInManager`, which `AddIdentityCore`
+            // offers and `AddIdentityApiEndpoints` does not.
+            builder.Services.AddScoped<
+                Microsoft.AspNetCore.Identity.SignInManager<User>,
+                Authorization.ExpiringSignInManager>();
+
             // **A session established inside somebody else's page keeps a wider
             // cookie, and only that session.** `SameSite=Lax` is right for every
             // ordinary sign-in and is what stays; a response written into a

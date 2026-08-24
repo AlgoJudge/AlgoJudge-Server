@@ -4,8 +4,8 @@ using AlgoJudge.Server.Utils;
 namespace AlgoJudge.Server.Authorization
 {
     /// <summary>
-    /// A blocked account stops working <b>now</b>, not when its cookie next
-    /// happens to be revalidated.
+    /// A blocked or expired account stops working <b>now</b>, not when its
+    /// cookie next happens to be revalidated.
     /// <para>
     /// <b>Blocking was `LockoutEnd`, and `LockoutEnd` is checked at sign-in.</b>
     /// Somebody already signed in carried on until Identity revalidated the
@@ -18,6 +18,12 @@ namespace AlgoJudge.Server.Authorization
     /// The alternative was <c>SecurityStampValidationInterval = Zero</c>, which
     /// buys the same immediacy with a database read per request for everybody.
     /// This costs one read on the paths that were going to load the user anyway.
+    /// </para>
+    /// <para>
+    /// <b>Expiry rides the same check and answers a different code.</b> A
+    /// temporary account handed out for one contest carries a date; the manager
+    /// screen has drawn it as "expired" since before anything enforced it, so
+    /// the two states have to stay tellable apart on the way out as well.
     /// </para>
     /// </summary>
     public static class BlockedGate
@@ -46,17 +52,23 @@ namespace AlgoJudge.Server.Authorization
                 // Not found is not this gate's answer: an id in a cookie whose
                 // row is gone is the deletion path's business, and saying
                 // "blocked" about it would be a guess.
-                if (user is null || !user.IsBlocked(DateTimeOffset.UtcNow))
+                var now = DateTimeOffset.UtcNow;
+                if (user is null || (!user.IsBlocked(now) && !user.HasExpired(now)))
                 {
                     await next();
                     return;
                 }
 
-                throw new ForbiddenActionException(
-                    user.BlockedReason is { Length: > 0 } reason
-                        ? $"This account is blocked: {reason}"
-                        : "This account is blocked",
-                    "account.blocked");
+                // Blocked first: somebody stopped this account on purpose, and
+                // that is the more useful thing to be told.
+                throw user.IsBlocked(now)
+                    ? new ForbiddenActionException(
+                        user.BlockedReason is { Length: > 0 } reason
+                            ? $"This account is blocked: {reason}"
+                            : "This account is blocked",
+                        "account.blocked")
+                    : new ForbiddenActionException(
+                        "This account has expired", "account.expired");
             });
     }
 }
