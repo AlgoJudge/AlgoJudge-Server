@@ -89,6 +89,63 @@ public static class Build
         return (slug, roundId);
     }
 
+    /// <summary>
+    /// A second round in an activity that already has one, with a problem of
+    /// its own so it can be asserted about.
+    /// <para>
+    /// <b>The shape no test had.</b> Every activity built here ran exactly one
+    /// round, so nothing ever asked what a round does to its neighbours — which
+    /// is the whole question an activity-scoped importance answers.
+    /// </para>
+    /// </summary>
+    public static async Task<string> SecondRoundAsync(
+        ServerFixture server, string activitySlug, string roundSlug = "r2")
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var round = await PostAsync(admin, $"/api/v1/activities/{activitySlug}/series", new
+        {
+            slug = roundSlug,
+            name = "Round " + roundSlug,
+            startDate = DateTime.UtcNow.AddHours(-1).ToString("O"),
+            endDate = DateTime.UtcNow.AddDays(1).ToString("O"),
+        });
+        var roundId = round.GetProperty("id").GetString()!;
+
+        var problem = await PostAsync(admin, "/api/v1/problems", new
+        {
+            slug = $"p-{roundSlug}-{Guid.NewGuid():N}"[..24].ToLowerInvariant(),
+            name = "Second problem",
+            type = "standard-io@1",
+        });
+        var problemId = problem.GetProperty("id").GetString()!;
+
+        var statement = await UploadAsync(admin, "/api/v1/files", "content.md", "# Second\n");
+        var package = await UploadAsync(admin, "/api/v1/files", "package.zip", "archive-" + roundId);
+
+        await PostAsync(admin, $"/api/v1/problems/{problemId}/versions", new
+        {
+            statements = new[] { new { fileId = statement } },
+            config = new { format = "standard-io", version = 1, limits = new { timeMs = 1000, memoryBytes = 268435456 } },
+            package = new { fileId = package },
+        });
+
+        await PostAsync(admin, $"/api/v1/series/{roundId}/problems", new
+        {
+            problemId, slug = "B", maxPoints = 50,
+        });
+
+        await using (var context = server.NewContext())
+        {
+            var series = await context.Series.FirstAsync(s => s.Id == Guid.Parse(roundId));
+            series.IsOpen = true;
+            series.StartAnnouncedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        return roundId;
+    }
+
     public static async Task<string> PackageIdOfAsync(ServerFixture server, string activitySlug)
     {
         await using var context = server.NewContext();
@@ -122,7 +179,7 @@ public static class Build
     /// </para>
     /// </summary>
     public static async Task<HttpResponseMessage> TrySubmitAsync(
-        HttpClient client, string activitySlug, string source)
+        HttpClient client, string activitySlug, string source, string problemSlug = "A")
     {
         var bytes = Encoding.UTF8.GetBytes(source);
         var checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
@@ -136,7 +193,7 @@ public static class Build
         };
 
         return await client.PostAsync(
-            $"/api/v1/activities/{activitySlug}/problems/A/submissions", content);
+            $"/api/v1/activities/{activitySlug}/problems/{problemSlug}/submissions", content);
     }
 
     public static async Task<JsonElement> SubmitAsync(

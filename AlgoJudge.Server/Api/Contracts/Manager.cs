@@ -179,6 +179,12 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </summary>
         public required int Importance { get; init; }
 
+        /// <summary>
+        /// How far that rank reaches: `activity` for this activity's own rounds,
+        /// `installation` for everything the reader takes part in.
+        /// </summary>
+        public required string ImportanceScope { get; init; }
+
         /// <summary>The ranges it may be reached from. Empty means anywhere.</summary>
         public required IReadOnlyList<AddressRuleDto> AddressRules { get; init; }
 
@@ -216,6 +222,9 @@ namespace AlgoJudge.Server.Api.Contracts
         /// Refused with the rules below on a round without both dates.
         /// </summary>
         public int? Importance { get; init; }
+
+        /// <summary>`activity` or `installation`. Absent leaves it as it is.</summary>
+        public string? ImportanceScope { get; init; }
 
         /// <summary>
         /// The whole list, replaced — as `sharedWith` is on a problem. Absent

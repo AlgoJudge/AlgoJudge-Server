@@ -12841,6 +12841,10 @@
             "type": "integer",
             "format": "int32"
           },
+          "importanceScope": {
+            "type": "string",
+            "nullable": true
+          },
           "addressRules": {
             "type": "array",
             "items": {
@@ -14735,6 +14739,10 @@
           "importance": {
             "type": "integer",
             "format": "int32",
+            "nullable": true
+          },
+          "importanceScope": {
+            "type": "string",
             "nullable": true
           },
           "addressRules": {

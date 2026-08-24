@@ -157,6 +157,15 @@ After cloning, inspect the solution and project files, then document:
     through whichever open course also held it. The narrowing is per **round**.
   - **Two switches, either lifting both filters and keeping the configuration**:
     `Series.RestrictionsEnabled` and `Instance.SeriesRestrictionsEnabled`.
+  - **Amended the same day**: `Series.ImportanceScope` says how far a rank
+    reaches — `activity`, the default, or `installation`. There are two floors
+    per reader and the higher applies, the global one winning a tie. An
+    activity-scoped round can never lock its own activity, so it produces locked
+    **rounds** and never a locked card — which is why `ResultsService`, the
+    submission list and `QuestionService` moved from activity granularity to
+    round granularity through `UnreachableRoundsAsync`, and why the ranking's
+    clause sits **outside** `unfrozen`: that permission lifts a freeze and must
+    not lift a lockdown.
 
 - **A manager may rule that one submission does not count** (2026-08-24),
   specified in `docs/specs/EXCLUDED_SUBMISSIONS.md` in the workspace. One column

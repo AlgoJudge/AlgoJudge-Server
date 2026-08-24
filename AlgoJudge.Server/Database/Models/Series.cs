@@ -127,6 +127,17 @@ namespace AlgoJudge.Server.Database.Models
         public int Importance { get; set; }
 
         /// <summary>
+        /// How far <see cref="Importance"/> reaches: this activity, or every
+        /// activity the reader takes part in.
+        /// <para>
+        /// A course marking one round an examination should not lock its
+        /// students out of every other course on the installation, and a
+        /// laboratory contest should. Both are wanted, so the manager chooses.
+        /// </para>
+        /// </summary>
+        public SeriesImportanceScope ImportanceScope { get; set; } = SeriesImportanceScope.Activity;
+
+        /// <summary>
         /// The address ranges this series may be reached from. Empty means
         /// anywhere.
         /// <para>

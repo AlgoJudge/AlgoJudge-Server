@@ -45,8 +45,17 @@ namespace AlgoJudge.Server.Services
             await lockdown.RequireReachableAsync(activity.Id, ct);
             var user = await currentUser.RequireAsync(ct);
 
+            // Round by round, not all-or-nothing: an activity-scoped lockdown
+            // leaves the activity reachable and puts one of its rounds out of
+            // reach, and their own work in that round goes with it.
+            // A list rather than the set it comes as: EF translates `Contains`
+            // on a concrete collection and not on the interface.
+            var unreachable = (await lockdown.UnreachableRoundsAsync(
+                activity.Id, await lockdown.ForReaderAsync(ct), ct)).ToList();
+
             var query = context.Submissions
-                .Where(s => s.SeriesProblem!.ActivityId == activity.Id && s.UserId == user.Id);
+                .Where(s => s.SeriesProblem!.ActivityId == activity.Id && s.UserId == user.Id
+                    && !unreachable.Contains(s.SeriesProblem!.SeriesId));
 
             var total = await query.CountAsync(ct);
             var page = await query
@@ -121,6 +130,20 @@ namespace AlgoJudge.Server.Services
             // oversight.** During an examination somebody re-reading last week's
             // accepted solution is the thing a locked activity exists to stop.
             await lockdown.RequireReachableAsync(activity.Id, ct);
+
+            // And the round on its own, for the lockdown that leaves the
+            // activity reachable. Addressed by id, so it walks past the list.
+            var state = await lockdown.ForReaderAsync(ct);
+            var unreachable = await lockdown.UnreachableRoundsAsync(activity.Id, state, ct);
+            if (unreachable.Contains(submission.SeriesProblem!.SeriesId))
+            {
+                throw state.IsHidden(submission.SeriesProblem!.SeriesId)
+                    ? new ForbiddenActionException(
+                        "This round is only available from a permitted address", LockdownCodes.Address)
+                    : new ForbiddenActionException(
+                        $"Locked while \"{state.DisplacerFor(activity.Id)?.SeriesName}\" is running",
+                        LockdownCodes.Displaced);
+            }
 
             var isManager = await permissions.HasAsync(Permissions.SubmissionSourceReadAll, activity.Id, ct);
             var rules = await context.AttachmentRules.AsNoTracking()
@@ -219,10 +242,11 @@ namespace AlgoJudge.Server.Services
                 throw new ForbiddenActionException(
                     "This round accepts submissions only from a permitted address", LockdownCodes.Address);
             }
-            if (state.IsLocked(assignment.Series!.Importance))
+            if (state.IsLocked(activity.Id, assignment.Series!.Importance))
             {
                 throw new ForbiddenActionException(
-                    $"Locked while \"{state.BySeriesName}\" is running", LockdownCodes.Displaced);
+                    $"Locked while \"{state.DisplacerFor(activity.Id)?.SeriesName}\" is running",
+                    LockdownCodes.Displaced);
             }
 
             // **The language check was here, and it is the Runner's now.**

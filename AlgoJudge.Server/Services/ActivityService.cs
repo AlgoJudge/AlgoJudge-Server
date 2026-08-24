@@ -183,7 +183,7 @@ namespace AlgoJudge.Server.Services
         {
             if (state.Quiet) return null;
             if (!await lockdown.IsActivityLockedAsync(activityId, state, ct)) return null;
-            return new LockedDto { SeriesName = state.BySeriesName ?? "" };
+            return new LockedDto { SeriesName = state.DisplacerFor(activityId)?.SeriesName ?? "" };
         }
 
         private static string Membership(Dictionary<Guid, GrantState> memberships, Guid activityId) =>

@@ -6,36 +6,60 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AlgoJudge.Server.Services
 {
+    /// <summary>The round that set a floor, and the floor it set.</summary>
+    public sealed record Displacer(int Floor, Guid SeriesId, string SeriesName);
+
     /// <summary>
     /// What a running series puts out of reach, for the reader of this request.
     /// </summary>
-    /// <param name="Floor">
-    /// The highest rank running that admits this reader. Anything below it is
-    /// locked; zero means nothing is.
+    /// <param name="Global">
+    /// The highest <see cref="SeriesImportanceScope.Installation"/> rank running
+    /// that admits this reader. It applies to every activity they are in.
+    /// </param>
+    /// <param name="Local">
+    /// The same, per activity, from that activity's own
+    /// <see cref="SeriesImportanceScope.Activity"/> rounds.
     /// </param>
     /// <param name="Hidden">
     /// Series carrying address rules this reader does not match. Absent from
     /// every list, and refused by name with the reason and nothing else.
     /// </param>
-    /// <param name="Exempt">Staff of the series that set the floor.</param>
     public sealed record LockdownState(
-        int Floor,
-        Guid? BySeriesId,
-        string? BySeriesName,
-        IReadOnlySet<Guid> Hidden,
-        bool Exempt)
+        Displacer? Global,
+        IReadOnlyDictionary<Guid, Displacer> Local,
+        IReadOnlySet<Guid> Hidden)
     {
         public static readonly LockdownState Open =
-            new(0, null, null, new HashSet<Guid>(), false);
+            new(null, new Dictionary<Guid, Displacer>(), new HashSet<Guid>());
 
         /// <summary>Whether anything is out of reach at all. The common answer is no.</summary>
-        public bool Quiet => Floor == 0 && Hidden.Count == 0;
+        public bool Quiet => Global is null && Local.Count == 0 && Hidden.Count == 0;
 
         /// <summary>A series this reader may not reach from here.</summary>
         public bool IsHidden(Guid seriesId) => Hidden.Contains(seriesId);
 
+        /// <summary>
+        /// What displaces the lower ranks of this activity, or null.
+        /// <para>
+        /// The higher of the two floors, the global one winning a tie: it is the
+        /// one whose reach a reader is least likely to guess, so it is the one
+        /// worth naming. Exemption is settled before a displacer is recorded, so
+        /// whatever is here applies.
+        /// </para>
+        /// </summary>
+        public Displacer? DisplacerFor(Guid activityId)
+        {
+            var local = Local.GetValueOrDefault(activityId);
+            if (Global is null) return local;
+            if (local is null) return Global;
+            return local.Floor > Global.Floor ? local : Global;
+        }
+
+        /// <summary>The rank this activity's rounds must reach. Zero locks nothing.</summary>
+        public int FloorFor(Guid activityId) => DisplacerFor(activityId)?.Floor ?? 0;
+
         /// <summary>A series something more important has displaced.</summary>
-        public bool IsLocked(int importance) => !Exempt && importance < Floor;
+        public bool IsLocked(Guid activityId, int importance) => importance < FloorFor(activityId);
     }
 
     public interface ISeriesLockdown
@@ -46,8 +70,25 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// Whether an activity is locked: it is running nothing that survives
         /// the floor.
+        /// <para>
+        /// <b>An activity-scoped round can never lock its own activity</b>, and
+        /// that falls out rather than being a special case: the round that set
+        /// the floor is running here, at the floor.
+        /// </para>
         /// </summary>
         Task<bool> IsActivityLockedAsync(Guid activityId, LockdownState state, CancellationToken ct);
+
+        /// <summary>
+        /// The rounds of one activity this reader cannot reach — hidden, or
+        /// displaced by something above them.
+        /// <para>
+        /// <b>What the round-granular paths ask.</b> An activity-scoped floor
+        /// never locks the activity, so the board, the submission list and the
+        /// questions cannot be answered with "all of it or none of it" any more.
+        /// </para>
+        /// </summary>
+        Task<IReadOnlySet<Guid>> UnreachableRoundsAsync(
+            Guid activityId, LockdownState state, CancellationToken ct);
 
         /// <summary>
         /// Refuses everything under a locked activity.
@@ -134,6 +175,7 @@ namespace AlgoJudge.Server.Services
 
             var hidden = new HashSet<Guid>();
             Series? top = null;
+            var local = new Dictionary<Guid, Series>();
 
             foreach (var series in restricting)
             {
@@ -147,36 +189,68 @@ namespace AlgoJudge.Server.Services
                     continue;
                 }
 
-                if (series.Importance > (top?.Importance ?? 0)) top = series;
+                if (series.Importance == 0) continue;
+
+                if (series.ImportanceScope == SeriesImportanceScope.Installation)
+                {
+                    if (series.Importance > (top?.Importance ?? 0)) top = series;
+                }
+                else if (series.Importance > (local.GetValueOrDefault(series.ActivityId)?.Importance ?? 0))
+                {
+                    local[series.ActivityId] = series;
+                }
             }
 
-            if (top is null) return new LockdownState(0, null, null, hidden, false);
+            // **Staff are exempt from what their own activity's round does**, and
+            // it is settled here so that nothing downstream has to ask again.
+            // Whoever runs the examination would otherwise lose the panel they
+            // run it from.
+            if (top is not null && granted.GetValueOrDefault(top.ActivityId)) top = null;
 
             return new LockdownState(
-                top.Importance,
-                top.Id,
-                top.Name,
-                hidden,
-                // Staff of the series doing the displacing. Whoever runs the
-                // examination would otherwise lose the panel they run it from.
-                Exempt: granted.GetValueOrDefault(top.ActivityId));
+                top is null ? null : Of(top),
+                local
+                    .Where(entry => !granted.GetValueOrDefault(entry.Key))
+                    .ToDictionary(entry => entry.Key, entry => Of(entry.Value)),
+                hidden);
+
+            static Displacer Of(Series series) => new(series.Importance, series.Id, series.Name);
         }
 
         public async Task<bool> IsActivityLockedAsync(
             Guid activityId, LockdownState state, CancellationToken ct)
         {
-            if (state.Floor == 0 || state.Exempt) return false;
+            var floor = state.FloorFor(activityId);
+            if (floor == 0) return false;
 
             // Not locked while it runs something at the floor. `>=` reads as the
             // rule rather than as an equality that happens to hold: the floor is
-            // a maximum, so nothing can exceed it.
+            // a maximum, so nothing can exceed it — and it is what makes an
+            // activity-scoped round unable to lock the activity it runs in.
             var survives = await context.Series.AsNoTracking()
                 .AnyAsync(s => s.ActivityId == activityId
                     && s.IsOpen && s.PausedAt == null
-                    && s.Importance >= state.Floor
+                    && s.Importance >= floor
                     && !state.Hidden.Contains(s.Id), ct);
 
             return !survives;
+        }
+
+        public async Task<IReadOnlySet<Guid>> UnreachableRoundsAsync(
+            Guid activityId, LockdownState state, CancellationToken ct)
+        {
+            if (state.Quiet) return new HashSet<Guid>();
+
+            var floor = state.FloorFor(activityId);
+            var rounds = await context.Series.AsNoTracking()
+                .Where(s => s.ActivityId == activityId)
+                .Select(s => new { s.Id, s.Importance })
+                .ToListAsync(ct);
+
+            return rounds
+                .Where(s => state.IsHidden(s.Id) || s.Importance < floor)
+                .Select(s => s.Id)
+                .ToHashSet();
         }
 
         public async Task RequireReachableAsync(Guid activityId, CancellationToken ct)
@@ -186,7 +260,8 @@ namespace AlgoJudge.Server.Services
             if (!await IsActivityLockedAsync(activityId, state, ct)) return;
 
             throw new ForbiddenActionException(
-                $"Locked while \"{state.BySeriesName}\" is running", LockdownCodes.Displaced);
+                $"Locked while \"{state.DisplacerFor(activityId)?.SeriesName}\" is running",
+                LockdownCodes.Displaced);
         }
 
         /// <summary>

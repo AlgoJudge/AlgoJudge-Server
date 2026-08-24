@@ -121,6 +121,23 @@ namespace AlgoJudge.Server.Database.Models
     }
 
     /// <summary>
+    /// How far a series' importance reaches while it runs.
+    /// <para>
+    /// <b>The narrow one is the default</b>: a rank that reaches out of its own
+    /// activity is the surprising behaviour, and surprising behaviour is opted
+    /// into. What keeps an examination in a room honest is the address list,
+    /// which pays no attention to this.
+    /// </para>
+    /// </summary>
+    public enum SeriesImportanceScope
+    {
+        /// <summary>Displaces the lower-ranked rounds of its own activity only.</summary>
+        Activity = 0,
+        /// <summary>Displaces everything the reader holds a grant in.</summary>
+        Installation = 1,
+    }
+
+    /// <summary>
     /// Which document an owner publishes. The kinds an instance may publish and
     /// the kinds an activity may publish overlap deliberately — they are the
     /// same mechanism with two owners.
