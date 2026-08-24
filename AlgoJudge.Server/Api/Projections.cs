@@ -54,6 +54,9 @@ namespace AlgoJudge.Server.Api
             _ => "closed",
         };
 
+        public static string Wire(SeriesImportanceScope s) =>
+            s == SeriesImportanceScope.Installation ? "installation" : "activity";
+
         public static string Wire(AttachmentVisibility v) =>
             v == AttachmentVisibility.Participant ? "participant" : "managersOnly";
 
@@ -300,6 +303,7 @@ namespace AlgoJudge.Server.Api
                 RankingVisibleFrom = Contracts.Wire.At(series.RankingVisibleFrom),
                 RankingVisibleTo = Contracts.Wire.At(series.RankingVisibleTo),
                 Importance = series.Importance,
+                ImportanceScope = Wire(series.ImportanceScope),
                 RestrictionsEnabled = series.RestrictionsEnabled,
                 AddressRules = series.AddressRules
                     .Select(r => new AddressRuleDto { Network = r.Network.ToString(), Note = r.Note })

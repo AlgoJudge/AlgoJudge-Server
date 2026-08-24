@@ -412,7 +412,9 @@ namespace AlgoJudge.Server.Services
             //
             // The narrowing is per **round**, not per activity: an activity may
             // be reachable while one round inside it is displaced or restricted
-            // to an address, and that round's statement is not.
+            // to an address, and that round's statement is not. Each holder is
+            // judged against its own activity's floor, so a round displaced
+            // inside one course does not follow the problem into another.
             var holders = await context.SeriesProblems.AsNoTracking()
                 .Where(sp => sp.PinnedProblemVersionId == versionId
                     || context.ProblemVersions.Any(v => v.Id == versionId && v.ProblemId == sp.ProblemId))
@@ -425,7 +427,8 @@ namespace AlgoJudge.Server.Services
             foreach (var holder in holders)
             {
                 if (!state.Quiet
-                    && (state.IsHidden(holder.SeriesId) || state.IsLocked(holder.Importance)))
+                    && (state.IsHidden(holder.SeriesId)
+                        || state.IsLocked(holder.ActivityId, holder.Importance)))
                 {
                     continue;
                 }

@@ -157,6 +157,25 @@ After cloning, inspect the solution and project files, then document:
     through whichever open course also held it. The narrowing is per **round**.
   - **Two switches, either lifting both filters and keeping the configuration**:
     `Series.RestrictionsEnabled` and `Instance.SeriesRestrictionsEnabled`.
+  - **Amended the same day**: `Series.ImportanceScope` says how far a rank
+    reaches — `activity`, the default, or `installation`. There are two floors
+    per reader and the higher applies, the global one winning a tie. An
+    activity-scoped round can never lock its own activity, so it produces locked
+    **rounds** and never a locked card — which is why `ResultsService`, the
+    submission list and `QuestionService` moved from activity granularity to
+    round granularity through `UnreachableRoundsAsync`, and why the ranking's
+    clause sits **outside** `unfrozen`: that permission lifts a freeze and must
+    not lift a lockdown.
+
+- **`ServerFixture` switches the background workers off, and one escaped for a
+  while** (2026-08-24). It removes them **by registration shape** — factory
+  registrations — because the framework's own HTTP service is registered by type
+  and removing every `IHostedService` would take the server down.
+  `GradeSyncWorker` uses `AddHostedService<T>()`, so it was missed and swept the
+  shared test database from every host a test built; the tests that call it
+  themselves then raced with it and failed about one full run in two. It is now
+  removed by type as well, with its own count assertion. **A worker added to this
+  Server must be switched off here, whichever way it is registered.**
 
 - **A manager may rule that one submission does not count** (2026-08-24),
   specified in `docs/specs/EXCLUDED_SUBMISSIONS.md` in the workspace. One column

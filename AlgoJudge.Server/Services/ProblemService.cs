@@ -663,10 +663,11 @@ namespace AlgoJudge.Server.Services
                 throw new ForbiddenActionException(
                     "This round is only available from a permitted address", LockdownCodes.Address);
             }
-            if (state.IsLocked(assignment.Series!.Importance))
+            if (state.IsLocked(activity.Id, assignment.Series!.Importance))
             {
                 throw new ForbiddenActionException(
-                    $"Locked while \"{state.BySeriesName}\" is running", LockdownCodes.Displaced);
+                    $"Locked while \"{state.DisplacerFor(activity.Id)?.SeriesName}\" is running",
+                    LockdownCodes.Displaced);
             }
 
             if (!gate.MayReadProblems(assignment.Series!, activity)) throw new NotFoundException("Problem");

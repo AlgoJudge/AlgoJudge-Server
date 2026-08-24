@@ -47,6 +47,16 @@ namespace AlgoJudge.Server.Services
                 .AsNoTracking()
                 .Where(q => q.ActivityId == activity.Id);
 
+            // A question about a round out of reach goes with the round. One
+            // about the activity carries no round and stays — an announcement
+            // is how the organiser explains the lockdown.
+            var unreachable = (await lockdown.UnreachableRoundsAsync(
+                activity.Id, await lockdown.ForReaderAsync(ct), ct)).ToList();
+            if (unreachable.Count > 0)
+            {
+                query = query.Where(q => q.SeriesId == null || !unreachable.Contains(q.SeriesId.Value));
+            }
+
             // A question is visible to its author and to staff until a manager
             // publishes it, after which every participant sees it. An
             // announcement is published by definition.
@@ -167,6 +177,20 @@ namespace AlgoJudge.Server.Services
                     .FirstOrDefaultAsync(s => s.Id == parsed && s.ActivityId == activity.Id, ct)
                     ?? throw new NotFoundException("Series");
                 seriesId = series.Id;
+            }
+
+            // **Asking was the one unguarded way into a round out of reach.**
+            // Reading it, submitting to it and fetching its statement were all
+            // refused; posting a question naming it was not.
+            await lockdown.RequireReachableAsync(activity.Id, ct);
+            if (seriesId is { } asked)
+            {
+                var state = await lockdown.ForReaderAsync(ct);
+                if ((await lockdown.UnreachableRoundsAsync(activity.Id, state, ct)).Contains(asked))
+                {
+                    throw new ForbiddenActionException(
+                        "This round is out of reach", LockdownCodes.Displaced);
+                }
             }
 
             var question = new Question

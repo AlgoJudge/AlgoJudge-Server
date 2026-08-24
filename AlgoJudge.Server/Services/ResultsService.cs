@@ -80,8 +80,14 @@ namespace AlgoJudge.Server.Services
                 .ToListAsync(ct);
 
             // Filter one: a round whose window is shut contributes nothing —
-            // not its columns, not its results.
-            var visible = rounds.Where(round => unfrozen || WindowOpen(round, now)).ToList();
+            // not its columns, not its results. A round out of reach goes with
+            // it, and outside the `unfrozen` clause: a ranking permission may
+            // lift a freeze and must not lift a lockdown.
+            var unreachable = await lockdown.UnreachableRoundsAsync(
+                activity.Id, await lockdown.ForReaderAsync(ct), ct);
+            var visible = rounds
+                .Where(round => (unfrozen || WindowOpen(round, now)) && !unreachable.Contains(round.Id))
+                .ToList();
 
             // Filter two: whose results are in it.
             var everyone = activity.ScoreVisibility == ScoreVisibility.Everyone

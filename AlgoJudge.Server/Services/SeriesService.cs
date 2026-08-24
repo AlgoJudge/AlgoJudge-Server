@@ -69,7 +69,7 @@ namespace AlgoJudge.Server.Services
             {
                 // Displaced: its problems go with it, exactly as a closed round's
                 // do. Withheld by the Server, never left to the screen.
-                var locked = state.IsLocked(round.Importance);
+                var locked = state.IsLocked(activity.Id, round.Importance);
                 var open = !locked && gate.MayReadProblems(round, activity);
                 var problems = round.SeriesProblems
                     .OrderBy(sp => sp.Order).ThenBy(sp => sp.Id)
@@ -108,7 +108,9 @@ namespace AlgoJudge.Server.Services
                     // Even the count is withheld unless the manager allowed it.
                     ProblemCount = open || (!locked && round.RevealProblemCount) ? problems.Count : null,
                     Problems = open ? problems : null,
-                    Locked = locked ? new LockedDto { SeriesName = state.BySeriesName ?? "" } : null,
+                    Locked = locked
+                        ? new LockedDto { SeriesName = state.DisplacerFor(activity.Id)?.SeriesName ?? "" }
+                        : null,
                 };
             }).ToList();
         }
@@ -161,6 +163,17 @@ namespace AlgoJudge.Server.Services
                         "That is not an importance this Server knows", "series.importance.unknown");
                 }
                 round.Importance = rank;
+            }
+
+            if (input.ImportanceScope is { } scope)
+            {
+                round.ImportanceScope = scope switch
+                {
+                    "activity" => SeriesImportanceScope.Activity,
+                    "installation" => SeriesImportanceScope.Installation,
+                    _ => throw new ValidationException(
+                        "That is not a scope this Server knows", "series.importanceScope.unknown"),
+                };
             }
 
             if (input.RestrictionsEnabled is { } enabled) round.RestrictionsEnabled = enabled;
