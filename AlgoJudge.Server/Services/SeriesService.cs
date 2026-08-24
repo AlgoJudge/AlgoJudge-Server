@@ -22,7 +22,8 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IActivityService activities,
-        ISeriesGate gate
+        ISeriesGate gate,
+        ISeriesLockdown lockdown
     ) : ISeriesService
     {
         /// <summary>
@@ -40,12 +41,20 @@ namespace AlgoJudge.Server.Services
             await permissions.RequireAsync(Permissions.ActivityRead, activity.Id, ct);
             var user = await currentUser.RequireAsync(ct);
 
-            var series = await context.Series
+            var all = await context.Series
                 .AsNoTracking()
                 .Where(s => s.ActivityId == activity.Id)
                 .OrderBy(s => s.Order).ThenBy(s => s.Id)
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
                 .ToListAsync(ct);
+
+            // **Hidden is absent, locked is present and says so.** A series
+            // restricted to an address this reader is not at leaves no trace —
+            // its dates and its problem count are exactly what it withholds. One
+            // displaced by something more important keeps its row, because
+            // "not now, because of X" is the whole message.
+            var state = await lockdown.ForReaderAsync(ct);
+            var series = all.Where(s => !state.IsHidden(s.Id)).ToList();
 
             var mine = await context.Submissions
                 .AsNoTracking()
@@ -58,7 +67,10 @@ namespace AlgoJudge.Server.Services
 
             return series.Select(round =>
             {
-                var open = gate.MayReadProblems(round, activity);
+                // Displaced: its problems go with it, exactly as a closed round's
+                // do. Withheld by the Server, never left to the screen.
+                var locked = state.IsLocked(round.Importance);
+                var open = !locked && gate.MayReadProblems(round, activity);
                 var problems = round.SeriesProblems
                     .OrderBy(sp => sp.Order).ThenBy(sp => sp.Id)
                     .Select(assignment =>
@@ -94,8 +106,9 @@ namespace AlgoJudge.Server.Services
                     RankingVisibleFrom = Wire.At(round.RankingVisibleFrom),
                     RankingVisibleTo = Wire.At(round.RankingVisibleTo),
                     // Even the count is withheld unless the manager allowed it.
-                    ProblemCount = open || round.RevealProblemCount ? problems.Count : null,
+                    ProblemCount = open || (!locked && round.RevealProblemCount) ? problems.Count : null,
                     Problems = open ? problems : null,
+                    Locked = locked ? new LockedDto { SeriesName = state.BySeriesName ?? "" } : null,
                 };
             }).ToList();
         }
@@ -111,6 +124,7 @@ namespace AlgoJudge.Server.Services
                 .Where(s => s.ActivityId == activity.Id)
                 .OrderBy(s => s.Order).ThenBy(s => s.Id)
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
+                .Include(s => s.AddressRules)
                 .ToListAsync(ct);
 
             var result = new List<ManagedSeriesDto>(series.Count);
@@ -119,6 +133,68 @@ namespace AlgoJudge.Server.Services
                 result.Add(Projections.ManagedSeries(round, await AssignmentsAsync(round, ct)));
             }
             return result;
+        }
+
+        /// <summary>
+        /// Writes a round's importance and address rules, and refuses the pair
+        /// that cannot mean anything.
+        /// <para>
+        /// <b>Shared by create and update</b>, because two copies of a validation
+        /// are two chances for one path to accept what the other refuses — and
+        /// the thing being refused here is a round that would restrict a whole
+        /// installation for ever.
+        /// </para>
+        /// <para>
+        /// <b>Both dates or neither restriction.</b> A lockdown is bounded by the
+        /// round that imposes it, so a round with no end imposes one that never
+        /// lifts; a round with no start has nothing to say when it begins. The
+        /// owner asked for the rule and it is cheap to keep.
+        /// </para>
+        /// </summary>
+        internal static void ApplyRestrictions(Series round, SeriesInputDto input)
+        {
+            if (input.Importance is { } rank)
+            {
+                if (!SeriesImportance.IsKnown(rank))
+                {
+                    throw new ValidationException(
+                        "That is not an importance this Server knows", "series.importance.unknown");
+                }
+                round.Importance = rank;
+            }
+
+            if (input.RestrictionsEnabled is { } enabled) round.RestrictionsEnabled = enabled;
+
+            if (input.AddressRules is { } rules)
+            {
+                round.AddressRules.Clear();
+                foreach (var rule in rules)
+                {
+                    var network = rule.Network?.Trim() ?? "";
+                    // Parsed here as well as stored as `cidr`: the database would
+                    // refuse it too, but as a transaction failure carrying no
+                    // field name. This says which entry is wrong.
+                    if (!System.Net.IPNetwork.TryParse(network, out var parsed))
+                    {
+                        throw new ValidationException(
+                            $"\"{network}\" is not an address range", "series.address.invalid");
+                    }
+                    round.AddressRules.Add(new SeriesAddressRule
+                    {
+                        SeriesId = round.Id,
+                        Network = parsed,
+                        Note = rule.Note?.Trim() is { Length: > 0 } note ? note : null,
+                    });
+                }
+            }
+
+            if ((round.Importance != SeriesImportance.Normal || round.AddressRules.Count > 0)
+                && (round.StartDate is null || round.EndDate is null))
+            {
+                throw new ValidationException(
+                    "A round that restricts anything needs a start and an end",
+                    "series.restrictions.needDates");
+            }
         }
 
         private async Task<List<ManagedSeriesProblemDto>> AssignmentsAsync(Series round, CancellationToken ct)
@@ -206,11 +282,14 @@ namespace AlgoJudge.Server.Services
                 // late rather than pretending it just happened.
                 IsOpen = false,
             };
+            ApplyRestrictions(series, input);
+
             context.Series.Add(series);
             await context.SaveChangesAsync(ct);
 
             var stored = await context.Series
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
+                .Include(s => s.AddressRules)
                 .FirstAsync(s => s.Id == series.Id, ct);
             return Projections.ManagedSeries(stored, await AssignmentsAsync(stored, ct));
         }

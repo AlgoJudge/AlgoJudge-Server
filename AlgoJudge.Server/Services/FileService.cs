@@ -130,6 +130,7 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         ICurrentUserService currentUser,
         IPermissionService permissions,
+        ISeriesLockdown lockdown,
         IBlobStoreRegistry stores
     ) : IFileService
     {
@@ -364,6 +365,11 @@ namespace AlgoJudge.Server.Services
             // A welcome page is what somebody not enrolled reads, so an activity
             // document under participant scope is readable by anyone who may see
             // the activity at all.
+            //
+            // **A lockdown does not reach here, deliberately.** These documents
+            // carry no problem content, and they are what a locked card renders
+            // itself from — withholding them would leave a participant looking
+            // at a blank refusal instead of at an activity that says why.
             return await permissions.HasAsync(Authorization.Permissions.ActivityRead, activityId, ct)
                 || await IsListedAsync(activityId, ct);
         }
@@ -394,18 +400,37 @@ namespace AlgoJudge.Server.Services
                 return await permissions.HasAsync(Authorization.Permissions.ProblemUpdate, null, ct);
             }
 
-            // Participant scope: readable from any assignment of this version in
-            // an activity the caller may read.
-            var activityIds = await context.SeriesProblems.AsNoTracking()
+            // Participant scope: readable from **any assignment of this version
+            // the caller can currently reach**.
+            //
+            // **This is where a lockdown is walked past if it is not applied.**
+            // One problem is often attached in several places, and the check is
+            // "any holder" — so without the two tests below, the statement of a
+            // locked examination is served through whichever other course the
+            // same problem also hangs in. Nothing else in the read path leaks
+            // this way, because nothing else is addressed by file id.
+            //
+            // The narrowing is per **round**, not per activity: an activity may
+            // be reachable while one round inside it is displaced or restricted
+            // to an address, and that round's statement is not.
+            var holders = await context.SeriesProblems.AsNoTracking()
                 .Where(sp => sp.PinnedProblemVersionId == versionId
                     || context.ProblemVersions.Any(v => v.Id == versionId && v.ProblemId == sp.ProblemId))
-                .Select(sp => sp.ActivityId)
+                .Select(sp => new { sp.ActivityId, sp.SeriesId, sp.Series!.Importance })
                 .Distinct()
                 .ToListAsync(ct);
 
-            foreach (var activityId in activityIds)
+            var state = await lockdown.ForReaderAsync(ct);
+
+            foreach (var holder in holders)
             {
-                if (await permissions.HasAsync(Authorization.Permissions.ActivityRead, activityId, ct)) return true;
+                if (!state.Quiet
+                    && (state.IsHidden(holder.SeriesId) || state.IsLocked(holder.Importance)))
+                {
+                    continue;
+                }
+                if (await permissions.HasAsync(
+                    Authorization.Permissions.ActivityRead, holder.ActivityId, ct)) return true;
             }
 
             return await permissions.HasAsync(Authorization.Permissions.ProblemReadAll, null, ct);

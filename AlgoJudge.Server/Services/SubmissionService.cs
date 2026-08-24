@@ -31,6 +31,7 @@ namespace AlgoJudge.Server.Services
         IFileService files,
         ISeriesGate gate,
         IResultsService results,
+        ISeriesLockdown lockdown,
         IEventHub events,
         IEventAudience audience,
         IRequestOrigin origin
@@ -41,6 +42,7 @@ namespace AlgoJudge.Server.Services
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
             await permissions.RequireAsync(Permissions.SubmissionReadOwn, activity.Id, ct);
+            await lockdown.RequireReachableAsync(activity.Id, ct);
             var user = await currentUser.RequireAsync(ct);
 
             var query = context.Submissions
@@ -114,6 +116,11 @@ namespace AlgoJudge.Server.Services
             var mine = submission.UserId == user.Id;
             if (!mine) await permissions.RequireAsync(Permissions.SubmissionReadAll, activity.Id, ct);
             else await permissions.RequireAsync(Permissions.SubmissionReadOwn, activity.Id, ct);
+
+            // **Their own work too, and that is the decision rather than an
+            // oversight.** During an examination somebody re-reading last week's
+            // accepted solution is the thing a locked activity exists to stop.
+            await lockdown.RequireReachableAsync(activity.Id, ct);
 
             var isManager = await permissions.HasAsync(Permissions.SubmissionSourceReadAll, activity.Id, ct);
             var rules = await context.AttachmentRules.AsNoTracking()
@@ -201,6 +208,21 @@ namespace AlgoJudge.Server.Services
             if (!gate.MaySubmit(assignment.Series!))
             {
                 throw new ForbiddenActionException("This series is not accepting submissions", "series.closed");
+            }
+
+            // Checked here rather than at the top: the round has to be resolved
+            // first, and a round hidden by address is refused on its own terms
+            // rather than as "the activity is locked", which it is not.
+            var state = await lockdown.ForReaderAsync(ct);
+            if (state.IsHidden(assignment.SeriesId))
+            {
+                throw new ForbiddenActionException(
+                    "This round accepts submissions only from a permitted address", LockdownCodes.Address);
+            }
+            if (state.IsLocked(assignment.Series!.Importance))
+            {
+                throw new ForbiddenActionException(
+                    $"Locked while \"{state.BySeriesName}\" is running", LockdownCodes.Displaced);
             }
 
             // **The language check was here, and it is the Runner's now.**

@@ -111,6 +111,13 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </para>
         /// </summary>
         public required bool ExternalJudgingEnabled { get; init; }
+
+        /// <summary>
+        /// Whether series restrictions are in force at all. Public like the rest
+        /// of these — a participant told "this is only available from the
+        /// laboratory" is entitled to know the rule is switched on.
+        /// </summary>
+        public required bool SeriesRestrictionsEnabled { get; init; }
         public required IReadOnlyList<InstanceDocumentRefDto> Documents { get; init; }
         public InstanceLogoDto? Logo { get; init; }
         public IReadOnlyList<LocalisedLogoDto>? LogoTranslations { get; init; }

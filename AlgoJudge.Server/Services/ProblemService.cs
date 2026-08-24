@@ -35,6 +35,7 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         IActivityService activities,
         ISeriesGate gate,
+        ISeriesLockdown lockdown,
         IEventHub events,
         IEventAudience audience,
         IFileService files,
@@ -644,6 +645,7 @@ namespace AlgoJudge.Server.Services
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
             await permissions.RequireAsync(Permissions.ActivityRead, activity.Id, ct);
+            await lockdown.RequireReachableAsync(activity.Id, ct);
             var user = await currentUser.RequireAsync(ct);
 
             var assignment = await context.SeriesProblems
@@ -651,6 +653,21 @@ namespace AlgoJudge.Server.Services
                 .Include(sp => sp.Problem)
                 .FirstOrDefaultAsync(sp => sp.ActivityId == activity.Id && sp.Slug == problemSlug, ct)
                 ?? throw new NotFoundException("Problem");
+
+            // Its own series, checked by name: an activity may be reachable while
+            // one round inside it is not. Hidden answers the reason and nothing
+            // about the round; displaced names what displaced it.
+            var state = await lockdown.ForReaderAsync(ct);
+            if (state.IsHidden(assignment.SeriesId))
+            {
+                throw new ForbiddenActionException(
+                    "This round is only available from a permitted address", LockdownCodes.Address);
+            }
+            if (state.IsLocked(assignment.Series!.Importance))
+            {
+                throw new ForbiddenActionException(
+                    $"Locked while \"{state.BySeriesName}\" is running", LockdownCodes.Displaced);
+            }
 
             if (!gate.MayReadProblems(assignment.Series!, activity)) throw new NotFoundException("Problem");
 

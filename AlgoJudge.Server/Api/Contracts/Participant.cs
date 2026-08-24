@@ -88,6 +88,26 @@ namespace AlgoJudge.Server.Api.Contracts
         /// a shape the Server invented for a value it does not read.
         /// </summary>
         public object? Props { get; init; }
+
+        /// <summary>
+        /// Something more important is running, so nothing here is reachable.
+        /// Absent means it is not.
+        /// </summary>
+        public LockedDto? Locked { get; init; }
+    }
+
+    /// <summary>
+    /// Why something is out of reach.
+    /// <para>
+    /// <b>A name and nothing else.</b> The sentence is the Client's, in every
+    /// language it draws; a Server composing one would be writing interface text
+    /// into an API and would have to be released to change a comma.
+    /// </para>
+    /// </summary>
+    public record LockedDto
+    {
+        /// <summary>The series that displaced it.</summary>
+        public required string SeriesName { get; init; }
     }
 
     /// <summary>
@@ -138,6 +158,16 @@ namespace AlgoJudge.Server.Api.Contracts
         /// not started does not disclose what it holds.
         /// </summary>
         public IReadOnlyList<ProblemSummaryDto>? Problems { get; init; }
+
+        /// <summary>
+        /// Displaced by something more important running now. Its problems are
+        /// withheld with it, the way a closed series' are.
+        /// <para>
+        /// A series <b>hidden</b> by an address rule is not here at all — this
+        /// says "not now", and that says nothing.
+        /// </para>
+        /// </summary>
+        public LockedDto? Locked { get; init; }
     }
 
     public record ProblemSampleDto

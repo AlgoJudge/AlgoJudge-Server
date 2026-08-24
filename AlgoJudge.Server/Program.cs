@@ -210,6 +210,9 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<ISubmissionService, SubmissionService>();
             builder.Services.AddScoped<IRunnerService, RunnerService>();
             builder.Services.AddSingleton<ISeriesGate, SeriesGate>();
+            // Scoped, not singleton: it answers for the reader and the address of
+            // one request.
+            builder.Services.AddScoped<ISeriesLockdown, SeriesLockdown>();
 
             // The connection registry outlives any request: it is what the
             // users screen counts, and what an event is fanned out over.

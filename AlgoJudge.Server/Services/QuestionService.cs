@@ -28,6 +28,7 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IActivityService activities,
+        ISeriesLockdown lockdown,
         TimeProvider clock
     ) : IQuestionService
     {
@@ -37,6 +38,7 @@ namespace AlgoJudge.Server.Services
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
             await permissions.RequireAsync(Permissions.QuestionReadOwn, activity.Id, ct);
+            await lockdown.RequireReachableAsync(activity.Id, ct);
             var user = await currentUser.RequireAsync(ct);
 
             var readsAll = await permissions.HasAsync(Permissions.QuestionReadAll, activity.Id, ct);

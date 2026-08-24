@@ -170,7 +170,33 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? RankingRevealAt { get; init; }
         public string? RankingVisibleFrom { get; init; }
         public string? RankingVisibleTo { get; init; }
+
+        /// <summary>
+        /// How much this round outranks the rest while it runs. A number, and
+        /// the number is the meaning — the Client names it and prints the rank
+        /// beside the name, because a manager choosing one has to see what it
+        /// loses to. `docs/specs/SERIES_LOCKDOWN.md`.
+        /// </summary>
+        public required int Importance { get; init; }
+
+        /// <summary>The ranges it may be reached from. Empty means anywhere.</summary>
+        public required IReadOnlyList<AddressRuleDto> AddressRules { get; init; }
+
+        /// <summary>
+        /// Off, this round neither hides nor locks — and keeps its rules, so
+        /// turning it back on restores them.
+        /// </summary>
+        public required bool RestrictionsEnabled { get; init; }
+
         public required IReadOnlyList<ManagedSeriesProblemDto> Problems { get; init; }
+    }
+
+    public record AddressRuleDto
+    {
+        /// <summary>`10.0.5.0/24`, `2001:db8::/32`. A single machine is a `/32`.</summary>
+        public required string Network { get; init; }
+        /// <summary>What a manager calls it — a room number, a building.</summary>
+        public string? Note { get; init; }
     }
 
     public record SeriesInputDto
@@ -184,6 +210,20 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? RankingRevealAt { get; init; }
         public string? RankingVisibleFrom { get; init; }
         public string? RankingVisibleTo { get; init; }
+
+        /// <summary>
+        /// Absent leaves it as it is; on a new round that means `normal`.
+        /// Refused with the rules below on a round without both dates.
+        /// </summary>
+        public int? Importance { get; init; }
+
+        /// <summary>
+        /// The whole list, replaced — as `sharedWith` is on a problem. Absent
+        /// leaves it alone; empty clears it.
+        /// </summary>
+        public IReadOnlyList<AddressRuleDto>? AddressRules { get; init; }
+
+        public bool? RestrictionsEnabled { get; init; }
     }
 
     public record SeriesProblemInputDto
