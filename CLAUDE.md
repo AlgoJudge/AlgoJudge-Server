@@ -177,6 +177,30 @@ After cloning, inspect the solution and project files, then document:
   removed by type as well, with its own count assertion. **A worker added to this
   Server must be switched off here, whichever way it is registered.**
 
+- **One account's work may be carried onto another** (2026-08-24), specified in
+  `docs/specs/ACCOUNT_MERGE.md` in the workspace. Four things about it are easy
+  to get wrong:
+  - **What a person produced moves; what they did to somebody else's thing
+    stays.** A manager's exclusion, a grant they handed out, an answer they
+    wrote — moving those would say somebody else made that decision.
+  - **`File.UploadedByUserId` moves, and looks like it should not.** It is not
+    an audit trace: a file nothing references yet is readable only by its
+    uploader, which is what makes the two-step publish safe.
+  - **A system grant never moves, and an account holding one is refused.**
+    Grants move with the work, so otherwise anybody holding `user:merge` merges
+    an administrator into their own account and inherits their permissions.
+  - **It ends in anonymisation, never a delete.** `AUTHENTICATION.md` settled
+    that before this existed and **nothing here hard-deletes a user row** — the
+    rows recording what an account once did have to keep resolving.
+    `MergeSweeper` empties it a day later, and until then an undo gives it back
+    whole.
+
+- **A blocked account stops working now** (2026-08-24).
+  `Authorization/BlockedGate` is a per-request check, because `LockoutEnd` is
+  read at sign-in only: a blocked person used to carry on until Identity next
+  revalidated their cookie, thirty minutes by default. **A rule about what an
+  account may do belongs in the pipeline, not in the sign-in path.**
+
 - **A manager may rule that one submission does not count** (2026-08-24),
   specified in `docs/specs/EXCLUDED_SUBMISSIONS.md` in the workspace. One column
   is the whole fact — `Submission.ExcludedAt`, non-null means excluded — and four

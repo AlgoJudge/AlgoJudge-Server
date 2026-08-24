@@ -84,7 +84,7 @@ namespace AlgoJudge.Server.Controllers
     [ApiController]
     [Route("users")]
     [Authorize]
-    public class UsersController(IUserService users) : ControllerBase
+    public class UsersController(IUserService users, IAccountMergeService merges) : ControllerBase
     {
         /// <summary>The lookup a grant editor cannot do without.</summary>
         [HttpGet]
@@ -125,12 +125,52 @@ namespace AlgoJudge.Server.Controllers
             string id, [FromBody] UserUpdateInputDto input, CancellationToken ct) =>
             users.UpdateAsync(id, input, ct);
 
-        /// <summary>Blocking stops sign-in; it does not touch what they may do once in.</summary>
+        /// <summary>
+        /// Blocking stops sign-in <b>and every request after it</b>.
+        /// <para>
+        /// This said it did not touch what somebody already signed in may do,
+        /// and that was true: <c>LockoutEnd</c> is checked at sign-in, so a
+        /// blocked person carried on until Identity next revalidated their
+        /// cookie — half an hour by default. <c>Authorization/BlockedGate</c>
+        /// closed that.
+        /// </para>
+        /// </summary>
         [HttpPost("{id}/blocked")]
         [ProducesResponseType<ManagedUserDto>(StatusCodes.Status200OK)]
         public Task<ManagedUserDto> SetBlocked(
             string id, [FromBody] BlockedInputDto input, CancellationToken ct) =>
             users.SetBlockedAsync(id, input.Blocked, input.Reason, ct);
+
+        /// <summary>
+        /// What carrying this account's work onto another would move, and what
+        /// would stop it. Changes nothing.
+        /// </summary>
+        [HttpPost("{id}/merge-preview")]
+        [ProducesResponseType<MergePreviewDto>(StatusCodes.Status200OK)]
+        public Task<MergePreviewDto> MergePreview(
+            string id, [FromBody] MergeInputDto input, CancellationToken ct) =>
+            merges.PreviewAsync(id, input.TargetUserId, ct);
+
+        /// <summary>
+        /// Carries this account's work onto another and blocks this one. The
+        /// emptied account is removed a day later, and until then an undo puts
+        /// everything back where it was.
+        /// </summary>
+        [HttpPost("{id}/merge")]
+        [ProducesResponseType<AccountMergeDto>(StatusCodes.Status200OK)]
+        public Task<AccountMergeDto> Merge(
+            string id, [FromBody] MergeInputDto input, CancellationToken ct) =>
+            merges.MergeAsync(id, input.TargetUserId, ct);
+
+        /// <summary>
+        /// Gives the work back and unblocks the account it came from. Offered
+        /// only while that account is still whole, which is the day after the
+        /// merge.
+        /// </summary>
+        [HttpPost("merges/{mergeId:guid}/undo")]
+        [ProducesResponseType<AccountMergeDto>(StatusCodes.Status200OK)]
+        public Task<AccountMergeDto> UndoMerge(Guid mergeId, CancellationToken ct) =>
+            merges.UndoAsync(mergeId, ct);
 
         [HttpPost("{id}/approve")]
         [ProducesResponseType<ManagedUserDto>(StatusCodes.Status200OK)]

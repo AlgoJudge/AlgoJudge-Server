@@ -275,19 +275,7 @@ namespace AlgoJudge.Server.Services
 
             return grants.Any(g =>
                 (g.SourceProviderId is null || !gone.Contains(g.SourceProviderId.Value))
-                && Parse(g.Permissions).Count > 0);
-        }
-
-        private static IReadOnlyList<string> Parse(string json)
-        {
-            try
-            {
-                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                return [];
-            }
+                && Permissions.Parse(g.Permissions).Count > 0);
         }
 
         public async Task AnonymiseAsync(User user, CancellationToken ct)

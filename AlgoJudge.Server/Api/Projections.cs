@@ -113,6 +113,21 @@ namespace AlgoJudge.Server.Api
         /// whoever creates accounts, not with the model.
         /// </para>
         /// </summary>
+        public static Contracts.AccountMergeDto Merge(Database.Models.AccountMerge merge) => new()
+        {
+            Id = Contracts.Wire.Id(merge.Id),
+            SourceUserId = merge.SourceUserId,
+            TargetUserId = merge.TargetUserId,
+            MergedAt = Contracts.Wire.At(merge.MergedAt),
+            MergedByUserId = merge.MergedByUserId,
+            AnonymiseAfter = Contracts.Wire.At(merge.AnonymiseAfter),
+            SourceAnonymisedAt = Contracts.Wire.At(merge.SourceAnonymisedAt),
+            UndoneAt = Contracts.Wire.At(merge.UndoneAt),
+            // Once, and only while the account it would give back is still
+            // whole — an anonymised one has nothing left to hand over.
+            CanUndo = merge.UndoneAt is null && merge.SourceAnonymisedAt is null,
+        };
+
         public static string DisplayName(User user)
         {
             if (user.Anonymized) return user.UserName ?? "—";

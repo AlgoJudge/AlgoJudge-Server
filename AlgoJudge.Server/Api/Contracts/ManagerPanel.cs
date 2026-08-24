@@ -635,4 +635,68 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Title { get; init; }
         public string? ValidFrom { get; init; }
     }
+
+    /* ── carrying one account's work onto another ─────────────────────────── */
+
+    public record MergeInputDto
+    {
+        /// <summary>The account that keeps everything.</summary>
+        public required string TargetUserId { get; init; }
+    }
+
+    /// <summary>
+    /// What a merge would move, and what would stop it.
+    /// <para>
+    /// <b>The preview is the guard.</b> A manager decides that two accounts are
+    /// one person, and nothing but their own care stands behind that — so the
+    /// screen states whose work, how much of it, and onto whom, before anything
+    /// moves.
+    /// </para>
+    /// </summary>
+    public record MergePreviewDto
+    {
+        public required string SourceUserId { get; init; }
+        public required string SourceLogin { get; init; }
+        public required string SourceName { get; init; }
+        public required bool SourceIsTemporary { get; init; }
+        public required string TargetUserId { get; init; }
+        public required string TargetLogin { get; init; }
+        public required string TargetName { get; init; }
+        public required int Submissions { get; init; }
+        public required int Questions { get; init; }
+        public required int Activities { get; init; }
+        public required IReadOnlyList<string> ActivityNames { get; init; }
+
+        /// <summary>
+        /// Why it would be refused. Empty means it would go through.
+        /// <para>
+        /// There is one reason, and it is not about the work: an account holding
+        /// permissions over the whole installation is refused, because grants
+        /// move with a merge and a system grant is privilege rather than work.
+        /// </para>
+        /// </summary>
+        public required IReadOnlyList<string> Blockers { get; init; }
+    }
+
+    public record AccountMergeDto
+    {
+        public required string Id { get; init; }
+        public required string SourceUserId { get; init; }
+        public required string TargetUserId { get; init; }
+        public required string MergedAt { get; init; }
+        public required string MergedByUserId { get; init; }
+
+        /// <summary>
+        /// When the emptied account is anonymised, which is also when an undo
+        /// stops being offered. Until then it is only blocked, so an undo gives
+        /// it back whole.
+        /// </summary>
+        public required string AnonymiseAfter { get; init; }
+
+        public string? SourceAnonymisedAt { get; init; }
+        public string? UndoneAt { get; init; }
+
+        /// <summary>Whether an undo is still offered.</summary>
+        public required bool CanUndo { get; init; }
+    }
 }
