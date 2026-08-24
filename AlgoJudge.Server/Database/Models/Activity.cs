@@ -122,6 +122,18 @@ namespace AlgoJudge.Server.Database.Models
         public int? MaxSubmissionsPerProblem { get; set; }
 
         /// <summary>
+        /// Which Runners judge this activity's submissions. Empty means the
+        /// default pool, which is every Runner nobody has tagged.
+        /// <para>
+        /// A round may override it — see <see cref="Series.RunnerTags"/> — and
+        /// usually should: pinning a whole course to a laboratory sends its
+        /// homework there too, including whatever is submitted from home at
+        /// night while those machines are off.
+        /// </para>
+        /// </summary>
+        public List<string> RunnerTags { get; set; } = [];
+
+        /// <summary>
         /// Archived: still readable, accepting nothing new — no submissions, no
         /// questions, no edits.
         /// <para>

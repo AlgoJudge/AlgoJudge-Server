@@ -129,13 +129,31 @@ namespace AlgoJudge.Server.Services
                 .Include(s => s.AddressRules)
                 .ToListAsync(ct);
 
+            // Read once for the whole page rather than per round.
+            var pools = await RunnerTags.ApprovedPoolsAsync(context, ct);
+
             var result = new List<ManagedSeriesDto>(series.Count);
             foreach (var round in series)
             {
-                result.Add(Projections.ManagedSeries(round, await AssignmentsAsync(round, ct)));
+                result.Add(Projections.ManagedSeries(
+                    round,
+                    await AssignmentsAsync(round, ct),
+                    RunnerTags.CountMatching(pools, round.RunnerTags ?? activity.RunnerTags)));
             }
             return result;
         }
+
+        /// <summary>
+        /// How many approved Runners reach this round — its own pools, or its
+        /// activity's where it does not override them.
+        /// </summary>
+        private async Task<int> MatchingRunnersAsync(Series round, CancellationToken ct) =>
+            RunnerTags.CountMatching(
+                await RunnerTags.ApprovedPoolsAsync(context, ct),
+                round.RunnerTags ?? await context.Activities.AsNoTracking()
+                    .Where(a => a.Id == round.ActivityId)
+                    .Select(a => a.RunnerTags)
+                    .FirstAsync(ct));
 
         /// <summary>
         /// Writes a round's importance and address rules, and refuses the pair
@@ -177,6 +195,15 @@ namespace AlgoJudge.Server.Services
             }
 
             if (input.RestrictionsEnabled is { } enabled) round.RestrictionsEnabled = enabled;
+
+            if (input.RunnerTags is { } runnerTags)
+            {
+                // Empty goes back to inheriting the activity's, rather than being
+                // stored as an empty override — a round wanting the general
+                // Runners while its activity is pinned writes `default` out.
+                var tags = RunnerTags.Validated(runnerTags, "The round's Runner tags");
+                round.RunnerTags = tags.Count == 0 ? null : tags;
+            }
 
             if (input.AddressRules is { } rules)
             {
@@ -304,7 +331,8 @@ namespace AlgoJudge.Server.Services
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
                 .Include(s => s.AddressRules)
                 .FirstAsync(s => s.Id == series.Id, ct);
-            return Projections.ManagedSeries(stored, await AssignmentsAsync(stored, ct));
+            return Projections.ManagedSeries(
+                stored, await AssignmentsAsync(stored, ct), await MatchingRunnersAsync(stored, ct));
         }
 
         /// <summary>
@@ -391,7 +419,8 @@ namespace AlgoJudge.Server.Services
             var stored = await context.Series
                 .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
                 .FirstAsync(s => s.Id == seriesId, ct);
-            return Projections.ManagedSeries(stored, await AssignmentsAsync(stored, ct));
+            return Projections.ManagedSeries(
+                stored, await AssignmentsAsync(stored, ct), await MatchingRunnersAsync(stored, ct));
         }
     
         /// <summary>

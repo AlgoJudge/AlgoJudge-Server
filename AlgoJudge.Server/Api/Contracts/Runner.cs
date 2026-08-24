@@ -39,6 +39,19 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </para>
         /// </summary>
         public bool External { get; init; }
+        /// <summary>
+        /// Which pools this Runner belongs to, from its own configuration.
+        /// <para>
+        /// <b>A seed, honoured on the first registration only.</b> Every other
+        /// field here is refreshed whenever a Runner registers again, which is
+        /// how it reports a restart; this one is not. Afterwards the operator
+        /// owns it, because a Runner that could re-declare its tags on restart
+        /// would move itself into an examination's queue without anybody
+        /// approving that.
+        /// </para>
+        /// <para>Optional, and absent means the default pool.</para>
+        /// </summary>
+        public IReadOnlyList<string>? Tags { get; init; }
         /// <summary>Host facts, stored opaquely and shown in the panel.</summary>
         public object? Machine { get; init; }
     }

@@ -163,6 +163,24 @@ namespace AlgoJudge.Server.Database.Models
         public bool RestrictionsEnabled { get; set; } = true;
 
         /// <summary>
+        /// Which Runners judge this round's submissions, overriding
+        /// <see cref="Activity.RunnerTags"/>.
+        /// <para>
+        /// <b>Null inherits</b>, and is what every round holds until somebody
+        /// decides otherwise. A round pinned to somewhere else names it; a round
+        /// that wants the general Runners while its course is pinned to a
+        /// laboratory writes <c>default</c> out, which is why that tag is
+        /// ordinary text anybody may type.
+        /// </para>
+        /// <para>
+        /// So there are two states here and not three. An empty list would be a
+        /// third way of writing one of them, and two spellings of one meaning is
+        /// how a manager ends up unable to tell which they chose.
+        /// </para>
+        /// </summary>
+        public List<string>? RunnerTags { get; set; }
+
+        /// <summary>
         /// Optimistic concurrency, so two Server instances cannot both open the
         /// same series and two managers cannot lose one another's shift.
         /// </summary>

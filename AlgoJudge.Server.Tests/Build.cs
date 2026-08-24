@@ -27,7 +27,8 @@ public static class Build
 {
     /// <summary>An activity with one open round and one problem worth 50, ready to submit to.</summary>
     public static async Task<(string Slug, string RoundId)> ActivityAsync(
-        ServerFixture server, bool external = false)
+        ServerFixture server, bool external = false, string[]? runnerTags = null,
+        string problemType = "standard-io@1")
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
         var slug = "T" + Guid.NewGuid().ToString("N")[..9].ToUpperInvariant();
@@ -41,6 +42,7 @@ public static class Build
             timeZone = "Europe/Warsaw",
             joinPolicy = "open",
             attachmentVisibility = new[] { new { name = "source", visibility = "participant" } },
+            runnerTags = runnerTags ?? [],
         });
 
         var round = await PostAsync(admin, $"/api/v1/activities/{slug}/series", new
@@ -56,7 +58,7 @@ public static class Build
         {
             slug = "p-" + slug.ToLowerInvariant(),
             name = "Test problem",
-            type = "standard-io@1",
+            type = problemType,
             external,
         });
         var problemId = problem.GetProperty("id").GetString()!;
@@ -99,7 +101,8 @@ public static class Build
     /// </para>
     /// </summary>
     public static async Task<string> SecondRoundAsync(
-        ServerFixture server, string activitySlug, string roundSlug = "r2")
+        ServerFixture server, string activitySlug, string roundSlug = "r2",
+        string[]? runnerTags = null)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
@@ -109,6 +112,7 @@ public static class Build
             name = "Round " + roundSlug,
             startDate = DateTime.UtcNow.AddHours(-1).ToString("O"),
             endDate = DateTime.UtcNow.AddDays(1).ToString("O"),
+            runnerTags = runnerTags ?? [],
         });
         var roundId = round.GetProperty("id").GetString()!;
 
@@ -197,7 +201,7 @@ public static class Build
     }
 
     public static async Task<JsonElement> SubmitAsync(
-        HttpClient client, string activitySlug, string source)
+        HttpClient client, string activitySlug, string source, string problemSlug = "A")
     {
         var bytes = Encoding.UTF8.GetBytes(source);
         var checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
@@ -214,7 +218,14 @@ public static class Build
         };
 
         var response = await client.PostAsync(
-            $"/api/v1/activities/{activitySlug}/problems/A/submissions", content);
+            $"/api/v1/activities/{activitySlug}/problems/{problemSlug}/submissions", content);
+        await Sign.Succeeded(response);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    public static async Task<JsonElement> GetAsync(HttpClient client, string path)
+    {
+        var response = await client.GetAsync(path);
         await Sign.Succeeded(response);
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
@@ -251,7 +262,8 @@ public static class Build
     /// the fixture, because they are the same database either way.
     /// </param>
     public static async Task<StubRunner> RunnerAsync(
-        ServerFixture server, WebApplicationFactory<Program>? host = null, bool external = false)
+        ServerFixture server, WebApplicationFactory<Program>? host = null, bool external = false,
+        string[]? tags = null, string[]? problemTypes = null)
     {
         var anonymous = server.CreateClient();
 
@@ -267,8 +279,11 @@ public static class Build
             product = "AlgoJudge-Runner-Stub",
             version = "0.0.1",
             publicKey = pub,
-            problemTypes = new[] { "standard-io@1" },
+            problemTypes = problemTypes ?? ["standard-io@1"],
             external,
+            // Declared at registration, which is the only door they come in
+            // through — the panel owns them from the next restart onwards.
+            tags = tags ?? [],
         });
 
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
@@ -277,7 +292,7 @@ public static class Build
 
         var stub = new StubRunner(
             (host ?? (WebApplicationFactory<Program>)server).CreateClient(),
-            runnerId, registered.GetProperty("fingerprint").GetString()!, priv);
+            runnerId, registered.GetProperty("fingerprint").GetString()!, pub, priv);
         await stub.AuthenticateAsync();
         return stub;
     }
@@ -288,10 +303,13 @@ public static class Build
 /// whole Server-facing contract, and none of it needs to run code.
 /// </summary>
 public sealed class StubRunner(
-    HttpClient client, string id, string fingerprint, Ed25519PrivateKeyParameters key)
+    HttpClient client, string id, string fingerprint, string publicKey, Ed25519PrivateKeyParameters key)
 {
     public HttpClient Client { get; } = client;
     public string Id { get; } = id;
+
+    /// <summary>Kept so a test can register the same key again — which is what a restart is.</summary>
+    public string PublicKey { get; } = publicKey;
 
     public async Task AuthenticateAsync()
     {

@@ -905,8 +905,10 @@ namespace AlgoJudge.Server.Services
                 ?? throw new NotFoundException("Runner");
 
             // One of the two things about a Runner the operator owns rather than
-            // the Runner reporting it.
-            runner.Tags = tags.Distinct().ToList();
+            // the Runner reporting it — and, since 2026-08-24, what decides
+            // which work it is given. Normalised so that `Lab-A` here and
+            // `lab-a` on an activity cannot be two pools that read as one.
+            runner.Tags = RunnerTags.Validated(tags, "The Runner's tags");
             await context.SaveChangesAsync(ct);
             var projectedRunner = await ProjectRunnerAsync(runner, ct);
             await AnnounceRunnerAsync(projectedRunner, null, ct);

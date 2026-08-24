@@ -138,6 +138,24 @@ namespace AlgoJudge.Server.Services
             return ToDto(trial);
         }
 
+        /// <summary>
+        /// The same reservation as the job queue, on its own table, and the
+        /// same pool filter — a Runner reserved for an examination measures no
+        /// packages while it runs. A constant, so nothing built from a value
+        /// reaches the database.
+        /// </summary>
+        private const string ClaimSql = $$"""
+            SELECT t."Id" AS "Value" FROM "Trials" t
+            LEFT JOIN "Activities" a ON a."Id" = t."ActivityId"
+            WHERE t."State" = 0
+              AND t."ProblemType" = ANY({0})
+              AND t."PackageFileId" IS NOT NULL
+              AND ({{RunnerTags.TrialTagsSql}}) && {1}::text[]
+            ORDER BY t."CreatedAt"
+            FOR UPDATE OF t SKIP LOCKED
+            LIMIT 1
+            """;
+
         public async Task<ClaimedTrialDto?> ClaimAsync(DbRunner runner, int? leaseSeconds, CancellationToken ct)
         {
             // Drained on the same terms as the job queue, and for the same
@@ -169,16 +187,16 @@ namespace AlgoJudge.Server.Services
             // `SKIP LOCKED` so two Runners never take the same row, and the
             // entity loaded through EF afterwards so `xmin` comes with it.
             var types = (object)runner.ProblemTypes.ToArray();
+
+            // **A trial follows its activity's tags too**, and it is the half
+            // that is easy to leave out: without this, a Runner reserved for an
+            // examination is still handed package measurements while the
+            // examination runs, and the reservation is worth nothing. A trial
+            // with no activity is general work — there is no round above it.
+            var tags = (object)RunnerTags.Effective(runner.Tags);
+
             var claimedId = await context.Database
-                .SqlQueryRaw<Guid>("""
-                    SELECT t."Id" AS "Value" FROM "Trials" t
-                    WHERE t."State" = 0
-                      AND t."ProblemType" = ANY({0})
-                      AND t."PackageFileId" IS NOT NULL
-                    ORDER BY t."CreatedAt"
-                    FOR UPDATE OF t SKIP LOCKED
-                    LIMIT 1
-                    """, types)
+                .SqlQueryRaw<Guid>(ClaimSql, types, tags)
                 .ToListAsync(ct);
 
             if (claimedId.Count == 0)

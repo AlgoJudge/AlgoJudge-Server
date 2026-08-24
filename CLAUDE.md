@@ -203,6 +203,34 @@ After cloning, inspect the solution and project files, then document:
   refusal carries `account.expired` rather than `account.blocked`, because the
   manager's screen has told the two apart since before either was enforced.
 
+- **A Runner is reserved by tagging it** (2026-08-24), specified in
+  `docs/specs/RUNNER_ROUTING.md` in the workspace. A Runner carries tags, so does
+  the work, and they are paired when the two lists **share at least one** —
+  unlike GitLab, whose runner must hold every tag a job asks for. Tags are pools
+  rather than requirements here because capability is already answered by
+  `ProblemTypes` and `External`. Four things are easy to get wrong:
+  - **An empty list means `default`, on both sides, and that is the whole of the
+    exclusivity.** Tagging a Runner takes it out of the general pool and tagging
+    work takes it away from the general Runners — neither half had to be written,
+    and neither can be forgotten. It is also why the migration is a no-op.
+  - **There are two claim paths.** `TrialService` hands out package measurements
+    on its own table, and a reservation that covered only `RunnerService` would
+    leave a Runner held for an examination timing somebody's packages while it
+    ran. A trial with no activity is general work.
+  - **A round overrides its activity, and `null` is not `[]`.** Null inherits;
+    a round wanting the general Runners while its course is pinned writes
+    `default` out, so one meaning keeps one spelling. Nothing stores an empty
+    override.
+  - **A Runner seeds its tags at its first registration and never again.** Every
+    other field it reports is refreshed on re-registration, which is how a
+    restart is reported; this one is not, because a Runner that could re-declare
+    its tags would put itself into an examination's pool with nobody approving
+    it.
+  Also: the pool clause is read at claim time rather than stamped on the job, so
+  retagging redirects work already queued; and `ProblemTypes` had driven dispatch
+  since it was written with **no test proving it** — that one is now the first
+  test in `RunnerRoutingTests`.
+
 - **A blocked account stops working now** (2026-08-24).
   `Authorization/BlockedGate` is a per-request check, because `LockoutEnd` is
   read at sign-in only: a blocked person used to carry on until Identity next

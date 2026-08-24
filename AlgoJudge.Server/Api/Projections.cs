@@ -265,7 +265,8 @@ namespace AlgoJudge.Server.Api
             IEnumerable<FileReference> documents,
             int seriesCount,
             int problemCount,
-            int participantCount) => new()
+            int participantCount,
+            int matchingRunners) => new()
             {
                 Id = Contracts.Wire.Id(activity.Id),
                 Slug = activity.Slug,
@@ -294,13 +295,16 @@ namespace AlgoJudge.Server.Api
                 SeriesCount = seriesCount,
                 ProblemCount = problemCount,
                 ParticipantCount = participantCount,
+                RunnerTags = activity.RunnerTags,
+                MatchingRunners = matchingRunners,
             };
 
         // ── series ────────────────────────────────────────────────────────────
 
         public static ManagedSeriesDto ManagedSeries(
             Series series,
-            IEnumerable<ManagedSeriesProblemDto> problems) => new()
+            IEnumerable<ManagedSeriesProblemDto> problems,
+            int matchingRunners) => new()
             {
                 Id = Contracts.Wire.Id(series.Id),
                 ActivityId = Contracts.Wire.Id(series.ActivityId),
@@ -324,6 +328,8 @@ namespace AlgoJudge.Server.Api
                     .Select(r => new AddressRuleDto { Network = r.Network.ToString(), Note = r.Note })
                     .OrderBy(r => r.Network, StringComparer.Ordinal)
                     .ToList(),
+                RunnerTags = series.RunnerTags,
+                MatchingRunners = matchingRunners,
                 Problems = problems.ToList(),
             };
 

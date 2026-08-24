@@ -10854,6 +10854,13 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "runnerTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -12544,6 +12551,17 @@
           "participantCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "runnerTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "matchingRunners": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -13051,6 +13069,17 @@
           },
           "restrictionsEnabled": {
             "type": "boolean"
+          },
+          "runnerTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "matchingRunners": {
+            "type": "integer",
+            "format": "int32"
           },
           "problems": {
             "type": "array",
@@ -14838,6 +14867,13 @@
           "external": {
             "type": "boolean"
           },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
           "machine": {
             "nullable": true
           }
@@ -15020,6 +15056,13 @@
           },
           "restrictionsEnabled": {
             "type": "boolean",
+            "nullable": true
+          },
+          "runnerTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           }
         },
