@@ -118,6 +118,10 @@ namespace AlgoJudge.Server.Services
                 // reconfigured to forward work says so on its next registration
                 // rather than keeping the answer it gave when it first started.
                 existing.External = input.External;
+                // **`Tags` is deliberately absent from this list.** It is seeded
+                // from the Runner's configuration once, below, and belongs to
+                // the operator afterwards — a restart must not be able to move a
+                // Runner into an examination's pool.
                 existing.Machine = input.Machine is null ? null : JsonSerializer.Serialize(input.Machine);
                 existing.Address = address;
                 existing.LastSeenAt = clock.GetUtcNow().UtcDateTime;
@@ -135,6 +139,10 @@ namespace AlgoJudge.Server.Services
                 State = RunnerState.PendingApproval,
                 ProblemTypes = input.ProblemTypes.ToList(),
                 External = input.External,
+                // Seeded here and nowhere else, so that thirty laboratory
+                // machines can be deployed from one Compose file rather than
+                // tagged one at a time in the panel.
+                Tags = RunnerTags.Validated(input.Tags, "The Runner's tags"),
                 Machine = input.Machine is null ? null : JsonSerializer.Serialize(input.Machine),
                 // Read from the connection, never reported. A machine is a bad
                 // witness to how it is reached.
@@ -271,6 +279,27 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
+        /// The three filters a job passes before anybody is handed it: what this
+        /// Runner can evaluate, whether it forwards work, and which pool it is
+        /// in. A constant, so nothing built from a value reaches the database.
+        /// </summary>
+        private const string ClaimSql = $$"""
+            SELECT j."Id" AS "Value" FROM "EvaluationJobs" j
+            JOIN "Submissions" s ON s."Id" = j."SubmissionId"
+            JOIN "SeriesProblems" sp ON sp."Id" = s."SeriesProblemId"
+            JOIN "Problems" p ON p."Id" = sp."ProblemId"
+            JOIN "Series" se ON se."Id" = sp."SeriesId"
+            JOIN "Activities" a ON a."Id" = sp."ActivityId"
+            WHERE j."State" = 0
+              AND p."Type" = ANY({0})
+              AND p."External" = {1}
+              AND ({{RunnerTags.WorkTagsSql}}) && {2}::text[]
+            ORDER BY j."CreatedAt"
+            FOR UPDATE OF j SKIP LOCKED
+            LIMIT 1
+            """;
+
+        /// <summary>
         /// Takes one queued job, atomically.
         /// <para>
         /// <c>FOR UPDATE SKIP LOCKED</c> is the whole mechanism: two Runners
@@ -338,6 +367,13 @@ namespace AlgoJudge.Server.Services
             // this was written for.
             var external = (object)runner.External;
 
+            // **Which pool this Runner is in**, and the third filter of three.
+            // The other two say what it can do; this one says whose work it may
+            // be given, and it is the only one an operator sets. `RunnerTags`
+            // owns both halves of the comparison — see the note there on why an
+            // empty list is `default` rather than "anything".
+            var tags = (object)RunnerTags.Effective(runner.Tags);
+
             // The lock is taken on the id alone, and the row is loaded through EF
             // afterwards inside the same transaction.
             //
@@ -346,19 +382,13 @@ namespace AlgoJudge.Server.Services
             // token maps to — and EF refuses a row it cannot find every mapped
             // column in. Locking by id keeps the raw SQL to the one thing EF
             // genuinely cannot express.
+            //
+            // **The tags are read here rather than stamped on the job**, so
+            // retagging an activity redirects work that is already queued. A
+            // stamp would leave yesterday's queue going to yesterday's Runners,
+            // with nothing on any screen to say so.
             var claimedId = await context.Database
-                .SqlQueryRaw<Guid>("""
-                    SELECT j."Id" AS "Value" FROM "EvaluationJobs" j
-                    JOIN "Submissions" s ON s."Id" = j."SubmissionId"
-                    JOIN "SeriesProblems" sp ON sp."Id" = s."SeriesProblemId"
-                    JOIN "Problems" p ON p."Id" = sp."ProblemId"
-                    WHERE j."State" = 0
-                      AND p."Type" = ANY({0})
-                      AND p."External" = {1}
-                    ORDER BY j."CreatedAt"
-                    FOR UPDATE OF j SKIP LOCKED
-                    LIMIT 1
-                    """, types, external)
+                .SqlQueryRaw<Guid>(ClaimSql, types, external, tags)
                 .ToListAsync(ct);
 
             if (claimedId.Count == 0)

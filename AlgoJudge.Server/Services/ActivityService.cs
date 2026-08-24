@@ -333,7 +333,9 @@ namespace AlgoJudge.Server.Services
                 g => g.ActivityId == activity.Id && !g.IsSystem && g.State == GrantState.Active, ct);
 
             return Projections.ManagedActivity(
-                activity, await DocumentsAsync(activity.Id, ct), seriesCount, problemCount, participantCount);
+                activity, await DocumentsAsync(activity.Id, ct), seriesCount, problemCount, participantCount,
+                RunnerTags.CountMatching(
+                    await RunnerTags.ApprovedPoolsAsync(context, ct), activity.RunnerTags));
         }
 
         public async Task<bool> IsPublishedAsync(Guid id, CancellationToken ct) =>
@@ -588,6 +590,7 @@ namespace AlgoJudge.Server.Services
                 MaxUploadBytes = input.MaxUploadBytes ?? 8L * 1024 * 1024,
                 MaxAttachments = input.MaxAttachments ?? 1,
                 MaxSubmissionsPerProblem = input.MaxSubmissionsPerProblem,
+                RunnerTags = RunnerTags.Validated(input.RunnerTags, "The activity's Runner tags"),
             };
 
             foreach (var rule in input.AttachmentVisibility ?? [])

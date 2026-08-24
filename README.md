@@ -33,7 +33,7 @@ always used `Problem`; only the documentation lagged.
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Background work | **six hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the file collector, the storage migrator |
 | Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage` behind loopback and a token |
-| Schema | **13 migrations**, the earliest `20260807222825_InitialCreate` |
+| Schema | **29 migrations**, the earliest `20260807222825_InitialCreate` — this line said 13 until 2026-08-24, and had been wrong since some time in the twenties |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
 **Twenty-seven `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:

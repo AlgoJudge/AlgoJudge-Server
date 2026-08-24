@@ -158,6 +158,10 @@ namespace AlgoJudge.Server.Services
             if (input.MaxUploadBytes is { } upload) activity.MaxUploadBytes = upload;
             if (input.MaxAttachments is { } attachments) activity.MaxAttachments = attachments;
             activity.MaxSubmissionsPerProblem = input.MaxSubmissionsPerProblem;
+            if (input.RunnerTags is { } runnerTags)
+            {
+                activity.RunnerTags = RunnerTags.Validated(runnerTags, "The activity's Runner tags");
+            }
 
             if (input.JoinPolicy is { } policy)
             {

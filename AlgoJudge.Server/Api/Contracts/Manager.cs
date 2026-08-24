@@ -78,6 +78,21 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int ProblemCount { get; init; }
         /// <summary>Read from the grants, never stored, and staff are excluded.</summary>
         public required int ParticipantCount { get; init; }
+
+        /// <summary>Which Runners judge this activity. Empty is the default pool.</summary>
+        public required IReadOnlyList<string> RunnerTags { get; init; }
+
+        /// <summary>
+        /// How many approved Runners those tags reach.
+        /// <para>
+        /// <b>It counts the tags and nothing else</b> — not problem types, not
+        /// whether a Runner forwards work. A larger number than zero is
+        /// therefore not a promise that anything can be judged; zero is a
+        /// promise that nothing can, which is the answer worth having on the
+        /// screen where the tags are typed.
+        /// </para>
+        /// </summary>
+        public required int MatchingRunners { get; init; }
     }
 
     public record ActivityInputDto
@@ -106,6 +121,12 @@ namespace AlgoJudge.Server.Api.Contracts
         public long? MaxUploadBytes { get; init; }
         public int? MaxAttachments { get; init; }
         public int? MaxSubmissionsPerProblem { get; init; }
+
+        /// <summary>
+        /// Which Runners judge this activity. Absent leaves it alone; empty is
+        /// the default pool. A round may override it.
+        /// </summary>
+        public IReadOnlyList<string>? RunnerTags { get; init; }
     }
 
     public record ManagedSeriesProblemDto
@@ -194,6 +215,20 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </summary>
         public required bool RestrictionsEnabled { get; init; }
 
+        /// <summary>
+        /// This round's own Runner pools, or **null** where it takes its
+        /// activity's. Null and empty are the same answer; a round that wants
+        /// the general Runners while its activity is pinned carries `default`.
+        /// </summary>
+        public IReadOnlyList<string>? RunnerTags { get; init; }
+
+        /// <summary>
+        /// How many approved Runners the tags in force here reach. See
+        /// <see cref="ManagedActivityDto.MatchingRunners"/> for what it does not
+        /// count.
+        /// </summary>
+        public required int MatchingRunners { get; init; }
+
         public required IReadOnlyList<ManagedSeriesProblemDto> Problems { get; init; }
     }
 
@@ -233,6 +268,18 @@ namespace AlgoJudge.Server.Api.Contracts
         public IReadOnlyList<AddressRuleDto>? AddressRules { get; init; }
 
         public bool? RestrictionsEnabled { get; init; }
+
+        /// <summary>
+        /// Which Runners judge this round, overriding the activity's. Absent
+        /// leaves it alone; **empty goes back to inheriting**, as `addressRules`
+        /// above clears itself.
+        /// <para>
+        /// A round that wants the general Runners while its activity is pinned
+        /// writes `["default"]` rather than an empty list — the two would
+        /// otherwise be two spellings of one state and one spelling of another.
+        /// </para>
+        /// </summary>
+        public IReadOnlyList<string>? RunnerTags { get; init; }
     }
 
     public record SeriesProblemInputDto

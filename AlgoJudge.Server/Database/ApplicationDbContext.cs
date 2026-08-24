@@ -104,6 +104,11 @@ namespace AlgoJudge.Server.Database
                 e.Property(a => a.RankingType).HasMaxLength(64);
                 e.Property(a => a.TimeZone).HasMaxLength(64);
                 e.Property(a => a.Props).HasColumnType("jsonb");
+                // The default is the migration's problem, not this one's — but it
+                // belongs in the model too, or the next `migrations add` sees a
+                // default nothing declared and quietly drops it.
+                e.Property(a => a.RunnerTags).HasColumnType("text[]")
+                    .HasDefaultValueSql("'{}'::text[]");
                 // Listing filters on it on every arrival at the activity list.
                 e.HasIndex(a => new { a.Unlisted, a.ArchivedAt });
             });
@@ -128,6 +133,9 @@ namespace AlgoJudge.Server.Database
                 e.Property(s => s.Slug).HasMaxLength(32);
                 e.Property(s => s.Name).HasMaxLength(200);
                 e.Property(s => s.Version).IsRowVersion();
+                // Nullable on purpose: null inherits the activity's, an empty
+                // array overrides it back to the default pool.
+                e.Property(s => s.RunnerTags).HasColumnType("text[]");
                 e.HasOne(s => s.Activity)
                     .WithMany(a => a.Series)
                     .HasForeignKey(s => s.ActivityId)
