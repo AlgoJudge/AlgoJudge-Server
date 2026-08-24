@@ -204,6 +204,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IClaimMappingService, ClaimMappingService>();
             builder.Services.AddScoped<IFederatedSignInService, FederatedSignInService>();
             builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
+            builder.Services.AddScoped<IAccountMergeService, AccountMergeService>();
             builder.Services.AddScoped<IUserService, UserService>();
             builder.Services.AddScoped<IManagerWriteService, ManagerWriteService>();
             builder.Services.AddScoped<IManagerReadService, ManagerReadService>();
@@ -232,6 +233,8 @@ namespace AlgoJudge.Server
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.LeaseReaper>());
             builder.Services.AddSingleton<Workers.DeletionSweeper>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.DeletionSweeper>());
+            builder.Services.AddSingleton<Workers.MergeSweeper>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Workers.MergeSweeper>());
 
             // Takes addresses back out of sessions past their window. The column
             // it acts on was indexed and never written until 2026-08-23; see
@@ -419,6 +422,12 @@ namespace AlgoJudge.Server
             // an anonymous 503 hiding a 401 — and after the exception handler,
             // so throwing gets `application/problem+json` for free.
             app.UseMaintenanceGate();
+
+            // After it, and for the same reason it sits where it does: the
+            // refusal should be the last word rather than an anonymous 403
+            // covering a 401. A blocked account stops working here rather than
+            // whenever Identity next revalidates its cookie.
+            app.UseBlockedGate();
 
             // After authentication, so it knows who is asking, and last so it
             // records only requests that actually got somewhere.

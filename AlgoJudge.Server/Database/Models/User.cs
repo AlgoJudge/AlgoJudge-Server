@@ -52,6 +52,16 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public string? BlockedReason { get; set; }
 
+        /// <summary>
+        /// Whether the account is blocked, in memory.
+        /// <para>
+        /// The same rule as the filter in <c>UserService.ListAsync</c>, which
+        /// has to stay written out because EF cannot translate a method. Two
+        /// spellings of one rule, and this comment is the thread between them.
+        /// </para>
+        /// </summary>
+        public bool IsBlocked(DateTimeOffset now) => LockoutEnd is { } end && end > now;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? LastSeenAt { get; set; }

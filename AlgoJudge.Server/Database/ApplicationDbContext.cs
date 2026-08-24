@@ -37,6 +37,7 @@ namespace AlgoJudge.Server.Database
         public DbSet<UserIdentity> UserIdentities { get; set; }
         public DbSet<FederatedSignInAttempt> FederatedSignInAttempts { get; set; }
         public DbSet<AccountDeletionRequest> AccountDeletionRequests { get; set; }
+        public DbSet<AccountMerge> AccountMerges { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -692,6 +693,34 @@ namespace AlgoJudge.Server.Database
                 e.HasOne(r => r.User)
                     .WithMany()
                     .HasForeignKey(r => r.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<AccountMerge>(e =>
+            {
+                e.ToTable("AccountMerges");
+                e.Property(m => m.SourceUserId).HasMaxLength(450);
+                e.Property(m => m.TargetUserId).HasMaxLength(450);
+                e.Property(m => m.MergedByUserId).HasMaxLength(450);
+                e.Property(m => m.UndoneByUserId).HasMaxLength(450);
+                e.Property(m => m.Moved).HasColumnType("jsonb");
+
+                // The sweeper's only query: what is due to be anonymised.
+                e.HasIndex(m => new { m.SourceAnonymisedAt, m.AnonymiseAfter });
+                // Both screens that show a merge ask by the account they are on.
+                e.HasIndex(m => m.TargetUserId);
+                e.HasIndex(m => m.SourceUserId);
+
+                // Both restrict, and both can: a user row is never removed in
+                // this product, only emptied, so neither key ever stands in the
+                // way of anything.
+                e.HasOne(m => m.Source)
+                    .WithMany()
+                    .HasForeignKey(m => m.SourceUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(m => m.Target)
+                    .WithMany()
+                    .HasForeignKey(m => m.TargetUserId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

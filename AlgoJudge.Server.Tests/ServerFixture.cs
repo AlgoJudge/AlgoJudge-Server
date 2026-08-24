@@ -100,11 +100,12 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         WithWebHostBuilder(builder => builder.UseSetting("Admin:Token", "")).CreateClient();
 
     /// <summary>
-    /// The seven the application registers through a factory: the drainer, the
+    /// The eight the application registers through a factory: the drainer, the
     /// lease reaper, the deletion sweeper, the address sweeper, the series
-    /// scheduler, the file collector and the storage migrator.
+    /// scheduler, the file collector, the storage migrator and the merge
+    /// sweeper.
     /// </summary>
-    private const int ExpectedSweepers = 7;
+    private const int ExpectedSweepers = 8;
 
     /// <summary>
     /// The one registered by type: <see cref="Lti.Workers.GradeSyncWorker"/>.

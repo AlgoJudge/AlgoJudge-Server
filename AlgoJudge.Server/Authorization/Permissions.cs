@@ -139,6 +139,14 @@ namespace AlgoJudge.Server.Authorization
         public const string UserBlock = "user:block";
         public const string UserCreateTemporary = "user:create:temporary";
 
+        /// <summary>
+        /// Carry one account's work onto another. **Its own key, not folded into
+        /// `user:update`**: this hands one person's submissions and points to
+        /// somebody else, and it should not arrive with ordinary account
+        /// editing.
+        /// </summary>
+        public const string UserMerge = "user:merge";
+
         public const string GrantReadAll = "grant:read:all";
         public const string GrantUpdate = "grant:update";
 
@@ -263,6 +271,7 @@ namespace AlgoJudge.Server.Authorization
             Define(UserUpdate, "user", PermissionScope.Global),
             Define(UserBlock, "user", PermissionScope.Global),
             Define(UserCreateTemporary, "user", PermissionScope.Both),
+            Define(UserMerge, "user", PermissionScope.Global),
 
             Define(GrantReadAll, "grant", PermissionScope.Both),
             Define(GrantUpdate, "grant", PermissionScope.Both),
@@ -308,6 +317,25 @@ namespace AlgoJudge.Server.Authorization
             permissions.Any(key => !NotStaffConferring.Contains(key));
 
         /// <summary>Whether every key is one the catalogue describes.</summary>
+        /// <summary>
+        /// The keys out of a stored grant, or none when the column will not
+        /// parse. One reader, because two would disagree the day the column
+        /// changes shape — and one of them decides whether an account is
+        /// privileged enough to refuse a merge.
+        /// </summary>
+        public static IReadOnlyList<string> Parse(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return [];
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return [];
+            }
+        }
+
         public static IReadOnlyList<string> Unknown(IEnumerable<string> permissions) =>
             permissions.Where(key => !Known.Contains(key)).Distinct().ToList();
 
