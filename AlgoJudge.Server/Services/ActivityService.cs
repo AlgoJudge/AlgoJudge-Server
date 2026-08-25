@@ -631,6 +631,7 @@ namespace AlgoJudge.Server.Services
                 // forced rather than left to disagree with it.
                 Unlisted = policy == JoinPolicy.Closed || (input.Unlisted ?? false),
                 HideEndedSeriesProblems = input.HideEndedSeriesProblems ?? false,
+                ShowGroupMembers = input.ShowGroupMembers ?? false,
                 Props = Opaque.Store(input.Props, "props"),
                 MaxUploadBytes = input.MaxUploadBytes ?? 8L * 1024 * 1024,
                 MaxAttachments = input.MaxAttachments ?? 1,

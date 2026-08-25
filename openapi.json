@@ -10919,6 +10919,10 @@
             "type": "boolean",
             "nullable": true
           },
+          "showGroupMembers": {
+            "type": "boolean",
+            "nullable": true
+          },
           "maxUploadBytes": {
             "type": "integer",
             "format": "int64",
@@ -12619,6 +12623,9 @@
             "nullable": true
           },
           "hideEndedSeriesProblems": {
+            "type": "boolean"
+          },
+          "showGroupMembers": {
             "type": "boolean"
           },
           "maxUploadBytes": {
