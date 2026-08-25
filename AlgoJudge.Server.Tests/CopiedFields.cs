@@ -49,7 +49,16 @@ public static class CopiedFields
         ],
         [typeof(Series)] =
         [
-            nameof(Series.Name), nameof(Series.HideProblemsWhilePaused),
+            nameof(Series.Name),
+            // **Pause state, and carried anyway** — argued 2026-08-25 and kept.
+            // `SeriesGate` reads it only while `PausedAt` is set, and a copy has
+            // none, so carrying it is inert. What decided it is the other
+            // direction: if the product ever makes this a setting chosen in
+            // advance, a copy that had stopped carrying it would silently drop
+            // one — and **this test would not fire**, because it catches a field
+            // that is *added*, never one that changes meaning. Free now, and
+            // right then.
+            nameof(Series.HideProblemsWhilePaused),
             nameof(Series.RevealProblemCount), nameof(Series.Importance),
             nameof(Series.ImportanceScope), nameof(Series.RestrictionsEnabled),
             nameof(Series.RunnerTags),
