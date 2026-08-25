@@ -406,6 +406,20 @@ instance table really is a singleton, that the committed `openapi.json` still
 matches what is served, that registration is closed by default, and that
 `aj-admin` works inside the shipped image.
 
+**Regenerate `openapi.json` from the running stack, not from the test host.**
+
+```sh
+docker compose -f example-server-development-docker-compose.yaml up -d --build
+curl -sS http://127.0.0.1:8080/api/v1/swagger/v1/swagger.json -o openapi.json
+```
+
+The test host serves the same document — Swagger is mapped in Development and
+`WebApplicationFactory` runs there — and it is **not interchangeable**. It emits
+the paths in a different order for identical code, and CI compares the two files
+**textually**, so a document taken from a test produces a diff of a hundred and
+twenty-four moved lines against an endpoint that is correct in every respect.
+Learned on 2026-08-25, which is what this paragraph is for.
+
 Architecture rules that apply here: the Server does not compile or execute code,
 does not implement a sandbox or a checker, and must not depend on one Runner
 implementation. Adding an activity or problem type must not require a change to
