@@ -351,7 +351,18 @@ public class GroupTests(ServerFixture server)
             r => r.GetProperty("id").GetString() == who);
     }
 
-    /// <summary>The roster is printed only where the activity says to.</summary>
+    /// <summary>
+    /// The roster is printed only where the activity says to — and the activity
+    /// is told through its own API.
+    /// <para>
+    /// <b>This wrote the column straight into the database until 2026-08-26</b>,
+    /// because nothing else could: <c>ShowGroupMembers</c> reached no DTO, so the
+    /// setting <c>ResultsService</c> reads was writable from nowhere and every
+    /// activity had held the default since groups arrived. The test passed
+    /// throughout — <b>a test that reaches past the API to arrange its own
+    /// premise cannot notice that the API has no way to arrange it</b>.
+    /// </para>
+    /// </summary>
     [Fact]
     public async Task The_roster_is_printed_only_where_the_activity_says_to()
     {
@@ -366,15 +377,59 @@ public class GroupTests(ServerFixture server)
         var off = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/activities/{slug}/results");
         Assert.Empty(Row(off, group).GetProperty("members").EnumerateArray());
 
-        await using (var context = server.NewContext())
-        {
-            var activity = await context.Activities.FirstAsync(a => a.Slug == slug);
-            activity.ShowGroupMembers = true;
-            await context.SaveChangesAsync();
-        }
+        await Sign.Succeeded(await SetRosterAsync(admin, slug, shown: true));
 
         var on = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/activities/{slug}/results");
         Assert.NotEmpty(Row(on, group).GetProperty("members").EnumerateArray());
+
+        // And back off again: a switch that only travels one way is half a
+        // switch, and `null` meaning "leave it alone" makes `false` the easy
+        // half to lose.
+        await Sign.Succeeded(await SetRosterAsync(admin, slug, shown: false));
+
+        var again = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/activities/{slug}/results");
+        Assert.Empty(Row(again, group).GetProperty("members").EnumerateArray());
+    }
+
+    /// <summary>
+    /// The manager's own read carries it back.
+    /// <para>
+    /// Without this the settings screen can save the switch and cannot draw it,
+    /// so every visit shows it off however it was left.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_roster_setting_reads_back_where_the_form_looks_for_it()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var admin = await AdminAsync(server);
+
+        var fresh = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/manager/activities/{slug}");
+        Assert.False(fresh.GetProperty("showGroupMembers").GetBoolean());
+
+        await Sign.Succeeded(await SetRosterAsync(admin, slug, shown: true));
+
+        var saved = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/manager/activities/{slug}");
+        Assert.True(saved.GetProperty("showGroupMembers").GetBoolean());
+    }
+
+    /// <summary>
+    /// Saves the activity the way its settings screen does: read what is there,
+    /// send it back with one field changed.
+    /// </summary>
+    private static async Task<HttpResponseMessage> SetRosterAsync(
+        HttpClient admin, string slug, bool shown)
+    {
+        var activity = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/manager/activities/{slug}");
+        return await admin.PutAsJsonAsync($"/api/v1/activities/{slug}", new
+        {
+            slug = activity.GetProperty("slug").GetString(),
+            name = activity.GetProperty("name").GetString(),
+            type = activity.GetProperty("type").GetString(),
+            rankingType = activity.GetProperty("rankingType").GetString(),
+            timeZone = activity.GetProperty("timeZone").GetString(),
+            showGroupMembers = shown,
+        });
     }
 
     /// <summary>

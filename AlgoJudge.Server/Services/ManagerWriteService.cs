@@ -154,6 +154,7 @@ namespace AlgoJudge.Server.Services
             if (input.Modules is { } modules) activity.HasQuestions = modules.Questions;
             if (input.ScoreVisibility is { } visibility) activity.ScoreVisibility = ParseScoreVisibility(visibility);
             if (input.HideEndedSeriesProblems is { } hide) activity.HideEndedSeriesProblems = hide;
+            if (input.ShowGroupMembers is { } roster) activity.ShowGroupMembers = roster;
             if (input.Props is not null) activity.Props = Opaque.Store(input.Props, "props");
             if (input.MaxUploadBytes is { } upload) activity.MaxUploadBytes = upload;
             if (input.MaxAttachments is { } attachments) activity.MaxAttachments = attachments;

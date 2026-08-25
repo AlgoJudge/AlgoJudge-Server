@@ -288,6 +288,7 @@ namespace AlgoJudge.Server.Api
                 Unlisted = activity.Unlisted,
                 JoinPassword = activity.JoinPolicy == Database.Models.JoinPolicy.Password ? activity.JoinPassword : null,
                 HideEndedSeriesProblems = activity.HideEndedSeriesProblems,
+                ShowGroupMembers = activity.ShowGroupMembers,
                 MaxUploadBytes = activity.MaxUploadBytes,
                 MaxAttachments = activity.MaxAttachments,
                 MaxSubmissionsPerProblem = activity.MaxSubmissionsPerProblem,

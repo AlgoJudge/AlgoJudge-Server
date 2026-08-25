@@ -70,6 +70,17 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>A join code, not a credential. A manager reads it back on purpose.</summary>
         public string? JoinPassword { get; init; }
         public required bool HideEndedSeriesProblems { get; init; }
+
+        /// <summary>
+        /// Whether a group's ranking row also names who is in it.
+        /// <para>
+        /// <b>Manager-only, and deliberately.</b> The participant's
+        /// <c>ActivityDto</c> has no counterpart: a reader is sent the roster or
+        /// is not, and a flag beside the effect would invite a screen to decide
+        /// a disclosure the Server has already decided.
+        /// </para>
+        /// </summary>
+        public required bool ShowGroupMembers { get; init; }
         public required long MaxUploadBytes { get; init; }
         public required int MaxAttachments { get; init; }
         public int? MaxSubmissionsPerProblem { get; init; }
@@ -118,6 +129,17 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>Absent or empty removes it. Meaningful only under `password`.</summary>
         public string? JoinPassword { get; init; }
         public bool? HideEndedSeriesProblems { get; init; }
+
+        /// <summary>
+        /// Whether a group's ranking row also names who is in it. Absent leaves
+        /// it alone.
+        /// <para>
+        /// <b>It had no member here until 2026-08-26</b>, so the column
+        /// <c>ResultsService</c> reads was writable from nowhere and every
+        /// activity had held the default since groups arrived.
+        /// </para>
+        /// </summary>
+        public bool? ShowGroupMembers { get; init; }
         public long? MaxUploadBytes { get; init; }
         public int? MaxAttachments { get; init; }
         public int? MaxSubmissionsPerProblem { get; init; }
