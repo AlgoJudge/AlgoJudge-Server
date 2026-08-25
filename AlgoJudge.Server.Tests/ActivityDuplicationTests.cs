@@ -196,6 +196,86 @@ public class ActivityDuplicationTests(ServerFixture server)
             .Where(g => g.ActivityId == copy).ToListAsync());
     }
 
+    /// <summary>
+    /// <b>Every field classified as carried actually arrives.</b>
+    ///
+    /// <para>
+    /// Nine did not, until 2026-08-25 — <c>ShowGroupMembers</c>, both
+    /// <c>RunnerTags</c>, <c>Importance</c>, <c>ImportanceScope</c>,
+    /// <c>AddressRules</c>, <c>RestrictionsEnabled</c>, <c>Spec</c> and
+    /// <c>Props</c>. Each arrived after this code was written and nothing
+    /// brought it in. The suite was green throughout: it compared the fields
+    /// somebody had thought to list.
+    /// </para>
+    ///
+    /// <para>
+    /// The two that hurt: <c>Spec</c> carries the languages the submit form
+    /// offers, so a copied contest offered none; <c>AddressRules</c> is the
+    /// room, so a copy of a round closed to one laboratory was open to
+    /// everywhere and said nothing about it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_copy_carries_every_field_that_is_meant_to_travel()
+    {
+        var manager = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var (slug, _) = await Build.ActivityAsync(server);
+        var source = await DatedAsync(slug);
+        await Build.DistinctiveAsync(server, source.ActivityId);
+
+        var copy = await DuplicateAsync(manager, source.ActivityId, source.Start!.Value.AddDays(371));
+
+        await using var context = server.NewContext();
+        var before = await Loaded(context, source.ActivityId);
+        var after = await Loaded(context, copy);
+
+        CopiedFields.AssertCarried(before, after);
+
+        var was = before.Series.OrderBy(s => s.Order).ToList();
+        var now = after.Series.OrderBy(s => s.Order).ToList();
+        Assert.Equal(was.Count, now.Count);
+        Assert.NotEmpty(was);
+
+        foreach (var (b, a) in was.Zip(now))
+        {
+            CopiedFields.AssertCarried(b, a);
+
+            // An activity copy keeps the round's own slug and place; only the
+            // activity around it is new.
+            Assert.Equal(b.Slug, a.Slug);
+            Assert.Equal(b.Order, a.Order);
+
+            // **The room travels.** Compared as a set of ranges rather than by
+            // count: a copy writing one rule for a round that had two is a copy
+            // that opens a door, and two counts of one would agree.
+            Assert.Equal(
+                b.AddressRules.Select(r => r.Network.ToString()).OrderBy(n => n),
+                a.AddressRules.Select(r => r.Network.ToString()).OrderBy(n => n));
+
+            var mine = b.SeriesProblems.OrderBy(x => x.Order).ToList();
+            var theirs = a.SeriesProblems.OrderBy(x => x.Order).ToList();
+            Assert.Equal(mine.Count, theirs.Count);
+
+            foreach (var (x, y) in mine.Zip(theirs))
+            {
+                CopiedFields.AssertCarried(x, y);
+                Assert.Equal(x.Slug, y.Slug);
+            }
+        }
+
+        // One of the rounds is deliberately empty, so this is asked of the
+        // activity rather than of each round — and asked at all, because every
+        // assertion above holds vacuously for an activity with no assignments.
+        Assert.True(was.Sum(s => s.SeriesProblems.Count) > 0,
+            "no assignments were compared, so this test proves nothing");
+    }
+
+    private static Task<Activity> Loaded(ApplicationDbContext context, Guid id) =>
+        context.Activities.AsNoTracking()
+            .Include(a => a.Series).ThenInclude(s => s.SeriesProblems)
+            .Include(a => a.Series).ThenInclude(s => s.AddressRules)
+            .FirstAsync(a => a.Id == id);
+
     [Fact]
     public async Task A_slug_somebody_else_holds_is_refused()
     {

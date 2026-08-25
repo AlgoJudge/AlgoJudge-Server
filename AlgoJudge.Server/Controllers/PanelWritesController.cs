@@ -111,7 +111,8 @@ namespace AlgoJudge.Server.Controllers
     [Authorize]
     public class SeriesAdminController(
         IManagerWriteService writes,
-        IManagerReadService panel
+        IManagerReadService panel,
+        ISeriesService series
     ) : ControllerBase
     {
         [HttpPut("{seriesId:guid}")]
@@ -119,6 +120,21 @@ namespace AlgoJudge.Server.Controllers
         public Task<ManagedSeriesDto> Update(
             Guid seriesId, [FromBody] SeriesInputDto input, CancellationToken ct) =>
             writes.UpdateSeriesAsync(seriesId, input, ct);
+
+        /// <summary>
+        /// Copies a round, with the problems assigned to it, into this activity
+        /// or another one. Nothing that happened travels and the copy is shut.
+        /// </summary>
+        [HttpPost("{seriesId:guid}/duplicate")]
+        [ProducesResponseType<ManagedSeriesDto>(StatusCodes.Status201Created)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<ManagedSeriesDto>> Duplicate(
+            Guid seriesId, [FromBody] DuplicateSeriesDto input, CancellationToken ct)
+        {
+            var copy = await series.DuplicateAsync(
+                seriesId, input.TargetActivityId, input.Slug ?? "", input.StartsAt, ct);
+            return Created($"/api/v1/series/{copy.Id}", copy);
+        }
 
         [HttpDelete("{seriesId:guid}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
