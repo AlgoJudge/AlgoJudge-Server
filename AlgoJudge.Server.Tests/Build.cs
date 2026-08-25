@@ -5,6 +5,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Org.BouncyCastle.Crypto.Generators;
@@ -295,6 +297,89 @@ public static class Build
             runnerId, registered.GetProperty("fingerprint").GetString()!, pub, priv);
         await stub.AuthenticateAsync();
         return stub;
+    }
+
+    /// <summary>
+    /// Moves every field a copy is supposed to carry off the value a new entity
+    /// already holds.
+    ///
+    /// <para>
+    /// <b>Without this the copy tests prove nothing.</b> A dropped field leaves
+    /// the property initializer's value in the copy, and a source still sitting
+    /// on that value compares equal either way — which is exactly how nine
+    /// fields were dropped under a passing suite. <c>CopiedFields.AssertCarried</c>
+    /// refuses to run against a source that has not been through here.
+    /// </para>
+    ///
+    /// <para>
+    /// Written straight to the context rather than through the API: the point is
+    /// to reach every stored field, including the pairs the write path refuses
+    /// to accept together, and a copy has to carry those too.
+    /// </para>
+    /// </summary>
+    public static async Task DistinctiveAsync(ServerFixture server, Guid activityId)
+    {
+        await using var context = server.NewContext();
+
+        var activity = await context.Activities.FirstAsync(a => a.Id == activityId);
+        activity.Type = "course@1";
+        activity.RankingType = "points";
+        activity.TimeZone = "Europe/Lisbon";
+        activity.HasQuestions = false;
+        activity.ScoreVisibility = ScoreVisibility.ManagersOnly;
+        activity.ShowGroupMembers = true;
+        activity.JoinPolicy = JoinPolicy.Open;
+        activity.Unlisted = true;
+        activity.HideEndedSeriesProblems = true;
+        activity.Props = """{"marker":"activity"}""";
+        activity.MaxUploadBytes = 12_345_678;
+        activity.MaxAttachments = 5;
+        activity.MaxSubmissionsPerProblem = 7;
+        activity.RunnerTags = ["lab-north"];
+
+        var assignments = await context.SeriesProblems
+            .Where(sp => sp.ActivityId == activityId)
+            .ToListAsync();
+        foreach (var assignment in assignments)
+        {
+            assignment.Name = "Named for the copy";
+            assignment.MaxPoints = 42;
+            assignment.Config = """{"languages":["cpp17-gcc"]}""";
+            assignment.Spec = """{"languages":["cpp17-gcc","python3"]}""";
+            assignment.Props = """{"marker":"assignment"}""";
+            assignment.MaxUploadBytes = 4096;
+            assignment.MaxAttachments = 3;
+            assignment.MaxSubmissions = 9;
+        }
+
+        // **The rounds are written without being tracked, and the rules as rows
+        // of their own.** `Series` carries `xmin` as a concurrency token, so
+        // loading one with its collection to add a child turns a fixture into a
+        // fight with the row version. `LockdownTests` found this first.
+        var rounds = await context.Series
+            .Where(s => s.ActivityId == activityId)
+            .Select(s => s.Id)
+            .ToListAsync();
+
+        foreach (var id in rounds)
+        {
+            context.SeriesAddressRules.Add(new SeriesAddressRule
+            {
+                SeriesId = id,
+                Network = System.Net.IPNetwork.Parse("192.168.7.0/24"),
+                Note = "the room",
+            });
+
+            await context.Series.Where(s => s.Id == id).ExecuteUpdateAsync(u => u
+                .SetProperty(s => s.HideProblemsWhilePaused, true)
+                .SetProperty(s => s.RevealProblemCount, false)
+                .SetProperty(s => s.Importance, SeriesImportance.Exam)
+                .SetProperty(s => s.ImportanceScope, SeriesImportanceScope.Installation)
+                .SetProperty(s => s.RestrictionsEnabled, false)
+                .SetProperty(s => s.RunnerTags, new List<string> { "lab-north", "quiet" }));
+        }
+
+        await context.SaveChangesAsync();
     }
 }
 

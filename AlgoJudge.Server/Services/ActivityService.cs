@@ -372,6 +372,7 @@ namespace AlgoJudge.Server.Services
             await permissions.RequireAsync(Permissions.ActivityCreate, null, ct);
             var source = await context.Activities
                 .Include(a => a.Series).ThenInclude(r => r.SeriesProblems)
+                .Include(a => a.Series).ThenInclude(r => r.AddressRules)
                 .Include(a => a.AttachmentRules)
                 .FirstOrDefaultAsync(a => a.Id == id, ct)
                 ?? throw new NotFoundException("Activity");
@@ -403,6 +404,11 @@ namespace AlgoJudge.Server.Services
                 StartDate = shift(source.StartDate),
                 EndDate = shift(source.EndDate),
                 HasQuestions = source.HasQuestions,
+                ShowGroupMembers = source.ShowGroupMembers,
+                // The pool the copy is judged on. A copy that fell back to the
+                // general Runners would be sent to machines the original was
+                // deliberately kept off.
+                RunnerTags = [.. source.RunnerTags],
                 JoinPolicy = source.JoinPolicy,
                 // **Not the password.** The people who took the activity this was
                 // copied from know it, and a new cohort would be joinable by the
@@ -436,6 +442,10 @@ namespace AlgoJudge.Server.Services
                     RankingVisibleTo = shift(round.RankingVisibleTo),
                     HideProblemsWhilePaused = round.HideProblemsWhilePaused,
                     RevealProblemCount = round.RevealProblemCount,
+                    Importance = round.Importance,
+                    ImportanceScope = round.ImportanceScope,
+                    RestrictionsEnabled = round.RestrictionsEnabled,
+                    RunnerTags = round.RunnerTags is null ? null : [.. round.RunnerTags],
                     // **Six fields of state are left at their defaults**, named
                     // here because leaving them out is the point: a copy has
                     // never opened, never closed and never announced anything.
@@ -443,6 +453,21 @@ namespace AlgoJudge.Server.Services
                     // treat the copy as already announced and stay silent about a
                     // round nobody was ever told about.
                 };
+
+                // **The room, and it travels.** Next year may be a different
+                // room, and a copy is still made restricted: a manager removing
+                // a rule knows the original was closed, where a manager handed
+                // an open copy of a closed round is told nothing. A dropped
+                // restriction fails open.
+                foreach (var rule in round.AddressRules)
+                {
+                    copied.AddressRules.Add(new SeriesAddressRule
+                    {
+                        SeriesId = copied.Id,
+                        Network = rule.Network,
+                        Note = rule.Note,
+                    });
+                }
 
                 foreach (var assignment in round.SeriesProblems.OrderBy(a => a.Order))
                 {
@@ -460,6 +485,12 @@ namespace AlgoJudge.Server.Services
                         Order = assignment.Order,
                         MaxPoints = assignment.MaxPoints,
                         Config = assignment.Config,
+                        // `Spec` is what the submit form offers, `Props` what
+                        // the type needs to identify the problem. Both were
+                        // dropped until 2026-08-25, so a copied contest offered
+                        // no language at all.
+                        Spec = assignment.Spec,
+                        Props = assignment.Props,
                         MaxUploadBytes = assignment.MaxUploadBytes,
                         MaxAttachments = assignment.MaxAttachments,
                         MaxSubmissions = assignment.MaxSubmissions,
@@ -511,9 +542,23 @@ namespace AlgoJudge.Server.Services
                 .OrderBy(d => d)
                 .FirstOrDefault() ?? source.StartDate;
 
+            return ShiftBy(anchor, startsAt, Zone(source.TimeZone));
+        }
+
+        /// <summary>
+        /// The same shift, from an anchor a caller chooses.
+        /// <para>
+        /// Shared with <see cref="SeriesService"/>, which copies one round and
+        /// anchors on that round's own start, in the <b>target</b> activity's
+        /// zone — the round will run there, so that is the clock its end and its
+        /// freeze should keep their hour on.
+        /// </para>
+        /// </summary>
+        internal static Func<DateTime?, DateTime?> ShiftBy(
+            DateTime? anchor, DateTime startsAt, TimeZoneInfo zone)
+        {
             if (anchor is null) return _ => null;
 
-            var zone = Zone(source.TimeZone);
             var from = TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.SpecifyKind(anchor.Value, DateTimeKind.Utc), zone);
             var to = TimeZoneInfo.ConvertTimeFromUtc(
@@ -535,7 +580,7 @@ namespace AlgoJudge.Server.Services
         /// Windows and Linux disagree about zone ids, and a copy refusing to
         /// happen over that would be worse than one measured in UTC.
         /// </summary>
-        private static TimeZoneInfo Zone(string id)
+        internal static TimeZoneInfo Zone(string id)
         {
             try
             {

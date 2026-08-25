@@ -497,6 +497,25 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int Minutes { get; init; }
     }
 
+    /// <summary>What a copy of a round needs that cannot be derived from it.</summary>
+    public record DuplicateSeriesDto
+    {
+        /// <summary>
+        /// Where the copy goes. <b>Absent copies in place</b>, into the round's
+        /// own activity, which is how a second sitting of the same round is made.
+        /// </summary>
+        public Guid? TargetActivityId { get; init; }
+
+        /// <summary>The copy's slug, unique within the target activity.</summary>
+        public string? Slug { get; init; }
+
+        /// <summary>
+        /// When the copy begins. Its end and its ranking dates move by the same
+        /// amount, on the wall clock of the activity it is copied into.
+        /// </summary>
+        public required DateTime StartsAt { get; init; }
+    }
+
     public record PauseInputDto
     {
         /// <summary>Take the statements away as well, not only the clock.</summary>

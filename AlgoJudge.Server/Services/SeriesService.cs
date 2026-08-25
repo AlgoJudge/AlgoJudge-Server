@@ -14,6 +14,8 @@ namespace AlgoJudge.Server.Services
         Task<IReadOnlyList<SeriesDto>> ListForParticipantAsync(string activityIdOrSlug, CancellationToken ct);
         Task<IReadOnlyList<ManagedSeriesDto>> ListManagedAsync(string activityIdOrSlug, CancellationToken ct);
         Task<ManagedSeriesDto> CreateAsync(string activityIdOrSlug, SeriesInputDto input, CancellationToken ct);
+        Task<ManagedSeriesDto> DuplicateAsync(
+            Guid seriesId, Guid? targetActivityId, string slug, DateTime startsAt, CancellationToken ct);
         Task<ManagedSeriesDto> AttachProblemAsync(Guid seriesId, SeriesProblemInputDto input, CancellationToken ct);
     }
 
@@ -333,6 +335,162 @@ namespace AlgoJudge.Server.Services
                 .FirstAsync(s => s.Id == series.Id, ct);
             return Projections.ManagedSeries(
                 stored, await AssignmentsAsync(stored, ct), await MatchingRunnersAsync(stored, ct));
+        }
+
+        /// <summary>
+        /// Copies one round, with its assignments, into this activity or another.
+        /// <para>
+        /// <b>The same rule as an activity copy, one level down</b>: the shape
+        /// travels and the history does not. The problems assigned, their pinned
+        /// versions and their settings come; the submissions, the state and the
+        /// announcements do not, so the copy has never opened.
+        /// </para>
+        /// <para>
+        /// <b>The library problem is referenced, not copied.</b> Two activities
+        /// setting the same problem is the ordinary case and what the library is
+        /// for; duplicating the problem would make a correction reach one of them.
+        /// </para>
+        /// </summary>
+        public async Task<ManagedSeriesDto> DuplicateAsync(
+            Guid seriesId, Guid? targetActivityId, string slug, DateTime startsAt, CancellationToken ct)
+        {
+            var source = await context.Series
+                .AsNoTracking()
+                .Include(s => s.SeriesProblems)
+                .Include(s => s.AddressRules)
+                .FirstOrDefaultAsync(s => s.Id == seriesId, ct)
+                ?? throw new NotFoundException("Series");
+
+            // **Rights over both ends, and they are different questions.**
+            // Reading a round means running the activity it is in; putting one
+            // into another activity means running that one too. Without the
+            // second, copying would be a way of setting work in somebody else's
+            // course.
+            await permissions.RequireAsync(Permissions.ActivityUpdate, source.ActivityId, ct);
+
+            var target = targetActivityId is { } into
+                ? await context.Activities.FirstOrDefaultAsync(a => a.Id == into, ct)
+                    ?? throw new NotFoundException("Activity")
+                : await context.Activities.FirstAsync(a => a.Id == source.ActivityId, ct);
+
+            await permissions.RequireAsync(Permissions.ActivityUpdate, target.Id, ct);
+            await permissions.RequireAsync(Permissions.ProblemAttach, target.Id, ct);
+
+            if (target.ArchivedAt is not null)
+            {
+                throw new ConflictException("An archived activity accepts no changes", "activity.archived");
+            }
+
+            slug = slug.Trim();
+            if (slug.Length == 0) throw new ValidationException("A slug is required", "slug.required");
+            if (await context.Series.AnyAsync(s => s.ActivityId == target.Id && s.Slug == slug, ct))
+            {
+                throw new ConflictException(
+                    "A series with that slug already exists in this activity", "series.slug.taken");
+            }
+
+            // Anchored on this round's own start rather than the activity's, and
+            // measured where the copy will run.
+            var shift = ActivityService.ShiftBy(
+                source.StartDate, startsAt, ActivityService.Zone(target.TimeZone));
+
+            var copy = new Series
+            {
+                ActivityId = target.Id,
+                Slug = slug,
+                Name = source.Name,
+                Order = await context.Series.CountAsync(s => s.ActivityId == target.Id, ct) + 1,
+                StartDate = shift(source.StartDate),
+                EndDate = shift(source.EndDate),
+                RankingFreezeAt = shift(source.RankingFreezeAt),
+                RankingRevealAt = shift(source.RankingRevealAt),
+                RankingVisibleFrom = shift(source.RankingVisibleFrom),
+                RankingVisibleTo = shift(source.RankingVisibleTo),
+                HideProblemsWhilePaused = source.HideProblemsWhilePaused,
+                RevealProblemCount = source.RevealProblemCount,
+                Importance = source.Importance,
+                ImportanceScope = source.ImportanceScope,
+                RestrictionsEnabled = source.RestrictionsEnabled,
+                RunnerTags = source.RunnerTags is null ? null : [.. source.RunnerTags],
+                // Shut, unannounced, unpaused — the scheduler opens it. Same six
+                // fields the activity copy leaves alone, and for the same reason.
+                IsOpen = false,
+            };
+
+            foreach (var rule in source.AddressRules)
+            {
+                copy.AddressRules.Add(new SeriesAddressRule
+                {
+                    SeriesId = copy.Id,
+                    Network = rule.Network,
+                    Note = rule.Note,
+                });
+            }
+
+            // **An assignment slug is unique across the activity, not the round**,
+            // so a copy made in place collides on every one of them. Freeing them
+            // is what makes copying a round into its own activity work at all.
+            var taken = await context.SeriesProblems
+                .Where(sp => sp.ActivityId == target.Id)
+                .Select(sp => sp.Slug)
+                .ToListAsync(ct);
+            var used = new HashSet<string>(taken, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var assignment in source.SeriesProblems.OrderBy(a => a.Order).ThenBy(a => a.Id))
+            {
+                copy.SeriesProblems.Add(new SeriesProblem
+                {
+                    Series = copy,
+                    ActivityId = target.Id,
+                    ProblemId = assignment.ProblemId,
+                    // A pinned version travels, as it does in an activity copy: a
+                    // copy following the newest version would set different work.
+                    PinnedProblemVersionId = assignment.PinnedProblemVersionId,
+                    Slug = FreeAssignmentSlug(assignment.Slug, used),
+                    Name = assignment.Name,
+                    Order = assignment.Order,
+                    MaxPoints = assignment.MaxPoints,
+                    Config = assignment.Config,
+                    Spec = assignment.Spec,
+                    Props = assignment.Props,
+                    MaxUploadBytes = assignment.MaxUploadBytes,
+                    MaxAttachments = assignment.MaxAttachments,
+                    MaxSubmissions = assignment.MaxSubmissions,
+                });
+            }
+
+            context.Series.Add(copy);
+            await context.SaveChangesAsync(ct);
+
+            var stored = await context.Series
+                .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
+                .Include(s => s.AddressRules)
+                .FirstAsync(s => s.Id == copy.Id, ct);
+            return Projections.ManagedSeries(
+                stored, await AssignmentsAsync(stored, ct), await MatchingRunnersAsync(stored, ct));
+        }
+
+        /// <summary>
+        /// The slug the copy of an assignment gets, marking it used.
+        /// <para>
+        /// Suffixed rather than refused: a copy of a round is a bulk act, and
+        /// stopping it on the first collision would mean renaming by hand before
+        /// anything could be copied at all. The truncation keeps the tail, so
+        /// two long slugs differing at the end stay different.
+        /// </para>
+        /// </summary>
+        private static string FreeAssignmentSlug(string basis, HashSet<string> used)
+        {
+            if (used.Add(basis)) return basis;
+
+            for (var suffix = 2; suffix < 100; suffix++)
+            {
+                var candidate = $"{basis}-{suffix}";
+                if (candidate.Length > 32) candidate = candidate[^32..];
+                if (used.Add(candidate)) return candidate;
+            }
+            throw new ConflictException(
+                $"Could not find a free slug for a copy of {basis}", "assignment.slug.exhausted");
         }
 
         /// <summary>
