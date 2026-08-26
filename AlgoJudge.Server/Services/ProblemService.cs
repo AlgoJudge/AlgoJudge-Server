@@ -280,15 +280,25 @@ namespace AlgoJudge.Server.Services
                 });
             }
 
-            // Statements. The name follows from the language, so nobody types it
-            // and nobody can mistype it.
+            // Statements. The name follows from the language and from what the
+            // bytes are, so nobody types it and nobody can mistype it.
             if (input.Statements is { } statements)
             {
                 foreach (var statement in statements)
                 {
+                    var fileId = Guid.Parse(statement.FileId);
+                    // The media type this Server recorded when the bytes arrived,
+                    // never a caller's word for it. Absent means no such file,
+                    // and `AttachAsync` is what says so.
+                    var mimeType = await context.Files
+                        .Where(f => f.Id == fileId)
+                        .Select(f => f.MimeType)
+                        .FirstOrDefaultAsync(ct);
+
                     await AttachAsync(
-                        Guid.Parse(statement.FileId),
-                        PackageNames.StatementName(statement.Language),
+                        fileId,
+                        PackageNames.StatementName(
+                            statement.Language, PackageNames.StatementExtension(mimeType)),
                         FileScope.Participant,
                         statement.Language);
                 }
