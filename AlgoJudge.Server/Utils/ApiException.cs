@@ -138,6 +138,23 @@ namespace AlgoJudge.Server.Utils
             "The bytes of this file are not reachable from this Server right now",
             "storage.unavailable");
 
+    /// <summary>
+    /// A service this installation depends on refused, or did not answer.
+    /// <para>
+    /// <b>Never the far end's own status.</b> The caller asked this Server for
+    /// something and this Server could not get it — repeating an upstream 401
+    /// would tell a browser its own session had ended, and
+    /// <c>CoreApiHttp</c> drops the session on one.
+    /// </para>
+    /// <para>
+    /// The code says which refusal it was, so the Client can write the sentence.
+    /// The message names no credential and no endpoint.
+    /// </para>
+    /// </summary>
+    public class UpstreamException(
+        string message, string code, int status = StatusCodes.Status502BadGateway)
+        : ApiException(status, message, code);
+
     /// <summary>The request body was larger than the ceiling that applies to it.</summary>
     public class PayloadTooLargeException(long limitBytes)
         : ApiException(StatusCodes.Status413PayloadTooLarge,

@@ -350,6 +350,7 @@ namespace AlgoJudge.Server.Controllers
         IInstanceService instances,
         IDocumentService documents,
         IPermissionService permissions,
+        IAccessKeyMinting minting,
         Realtime.IEventHub events
     ) : ControllerBase
     {
@@ -417,10 +418,13 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>
-        /// Hands a named secret to a caller that needs it.
+        /// Hands a caller the credential it needs for a named service.
         /// <para>
-        /// <b>The one place a stored secret comes back out</b>, and it exists
-        /// because the thing that needs this one runs in a manager's browser.
+        /// <b>What comes back is not always what is stored.</b> Where the service
+        /// mints short-lived credentials, this exchanges the stored key for one
+        /// and answers with that, carrying the instant it dies. The stored key
+        /// stays in this process. Where it does not, the stored value comes back
+        /// as it always has.
         /// </para>
         /// <para>
         /// <b>Today there is one key and one gate.</b> `uvaexplorer` is handed to
@@ -450,7 +454,18 @@ namespace AlgoJudge.Server.Controllers
                 .FirstOrDefaultAsync(k => k.Name == key, ct)
                 ?? throw new NotFoundException($"The key {key}");
 
-            return new AccessKeyValueDto { Name = stored.Name, Value = stored.Value };
+            if (!minting.Mints(key))
+            {
+                return new AccessKeyValueDto { Name = stored.Name, Value = stored.Value };
+            }
+
+            var credential = await minting.MintAsync(key, stored.Value, ct);
+            return new AccessKeyValueDto
+            {
+                Name = stored.Name,
+                Value = credential.Value,
+                ExpiresAt = Wire.At(credential.ExpiresAt),
+            };
         }
 
         /// <summary>One spelling, so a name cannot be set twice in two cases.</summary>
