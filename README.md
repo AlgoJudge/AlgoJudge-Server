@@ -175,6 +175,9 @@ AJ_Forwarded__KnownProxies=none                # or this, when nothing sits in f
 AJ_Retention__SessionOriginDays=30             # optional; the aj_session cookie's own life
 AJ_Retention__SubmissionOriginDays=365         # optional; a submission's address is evidence in a contest
 
+# Where the problem picker's credentials are minted, for a self-hosted archive.
+AJ_UvaExplorer__Origin=https://uvaexplorer.example   # optional; defaults to the hosted one
+
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
 deadline at all** — measured 2026-08-23, an unassigned `AmazonS3Config` carries a
 `Timeout` of twenty-four days — and this Server holds a gate across its S3 calls
@@ -182,6 +185,15 @@ while it checks the bucket, so one unanswered request would have queued every
 upload in the installation behind it with no end. Ten minutes is generous
 against the 128 MiB ceiling on a single write; lower it only where the link is
 known.
+
+**The access key stored for `uvaexplorer` is never handed to a browser** (since
+2026-08-26). An administrator sets the long-lived `uexpl_…` key in the instance
+settings; when a manager opens the problem picker, this Server exchanges it at
+`{UvaExplorer:Origin}/api/access/token` for an hourly `uexplt_…` token and sends
+only that. The picker puts whatever it is given into an iframe address, which is
+why the exchange exists. **A failed exchange is a refusal, never a fallback to
+the stored key** — and an installation holding no key at all gets a 404, which
+the Client reads as "browse the public archive".
 
 **`Forwarded__KnownProxies` is required and has no default.** Until 2026-08-23
 the Server trusted `X-Forwarded-For` from whoever sent it, which is not "no

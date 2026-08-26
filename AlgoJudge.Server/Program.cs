@@ -196,6 +196,10 @@ namespace AlgoJudge.Server
 
             builder.Services.AddScoped<IFileService, FileService>();
             builder.Services.AddScoped<IExternalFetchService, ExternalFetchService>();
+            builder.Services.AddScoped<IAccessKeyMinting, AccessKeyMinting>();
+            // Short: a manager is waiting on a button before an iframe opens.
+            builder.Services.AddHttpClient(nameof(AccessKeyMinting),
+                http => http.Timeout = TimeSpan.FromSeconds(15));
             builder.Services.AddScoped<IInstanceService, InstanceService>();
             builder.Services.AddScoped<IActivityService, ActivityService>();
             builder.Services.AddScoped<Services.IActivityGroupService, Services.ActivityGroupService>();

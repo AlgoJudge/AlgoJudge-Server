@@ -10,17 +10,26 @@ namespace AlgoJudge.Server.Database.Models
     /// them means a second one is a row rather than a migration.
     /// </para>
     /// <para>
-    /// <b>These are readable, and that is the whole point and the whole
-    /// danger.</b> Every other secret in this product is write-only: a provider
-    /// secret goes in and no endpoint answers with it. This one has to reach a
-    /// manager's browser, because the thing that needs it runs there. So it is
-    /// stored to be given back, and the only thing standing in front of it is
-    /// the permission on the endpoint that gives it.
+    /// <b>These are readable, and that is the whole danger.</b> Every other
+    /// secret in this product is write-only: a provider secret goes in and no
+    /// endpoint answers with it. These are stored to be given back, and the only
+    /// thing standing in front of one is the permission on the endpoint that
+    /// gives it.
     /// </para>
     /// <para>
-    /// <b>Consequence, written down rather than discovered:</b> today there is
-    /// one key and one gate. A second key must bring its own — an AI provider's
-    /// credential handed out because somebody may import problems would be a
+    /// <b>The one key there is no longer leaves this process</b> (2026-08-26).
+    /// This said the value <i>had</i> to reach a manager's browser because the
+    /// picker runs there; that stopped being true when UVa Explorer began minting
+    /// hourly tokens, and the browser now gets one of those. What is stored here
+    /// is what the token is minted <i>from</i> — see
+    /// <c>Services/AccessKeyMinting.cs</c>.
+    /// </para>
+    /// <para>
+    /// <b>So a new key is readable until somebody decides otherwise</b>, which is
+    /// the sentence worth keeping: the next one to arrive should be asked whether
+    /// it can be minted before it is handed out whole. And today there is one key
+    /// and one gate — a second must bring its own, because an AI provider's
+    /// credential handed out on the strength of "may import problems" is a
     /// mistake nobody would see until the bill arrived.
     /// </para>
     /// </summary>
