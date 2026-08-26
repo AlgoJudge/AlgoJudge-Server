@@ -403,8 +403,36 @@ namespace AlgoJudge.Server.Api
         public static bool IsPackage(string name) =>
             name == Archive || name == Samples;
 
-        /// <summary>`content.md`, or `content-en.md` for a translation.</summary>
-        public static string StatementName(string? language) =>
-            string.IsNullOrWhiteSpace(language) ? Statement : $"{StatementPrefix}-{language}.md";
+        /// <summary>
+        /// `content.md`, `content-en.md`, `content.pdf` — the language from the
+        /// caller, <b>the extension from the bytes</b>.
+        /// <para>
+        /// This assumed <c>.md</c> until 2026-08-26, and the UVa import is where
+        /// that showed: it stores the archive's PDF as the statement, the name
+        /// said <c>content.md</c>, and the Client decides how to draw a statement
+        /// purely from its extension — so a PDF was handed to a Markdown parser.
+        /// The name is what carries the type here; nothing else does.
+        /// </para>
+        /// </summary>
+        public static string StatementName(string? language, string extension = "md") =>
+            string.IsNullOrWhiteSpace(language)
+                ? $"{StatementPrefix}.{extension}"
+                : $"{StatementPrefix}-{language}.{extension}";
+
+        /// <summary>
+        /// Which of those a stored file is.
+        /// <para>
+        /// <b>Two answers on purpose.</b> A PDF is drawn in a frame and anything
+        /// else is rendered as Markdown, which is the whole of what the Client
+        /// does with a statement — so a third answer here would be a name no
+        /// renderer keys on. Read from the media type the Server itself recorded
+        /// when the bytes arrived, never from a caller's word for it.
+        /// </para>
+        /// </summary>
+        public static string StatementExtension(string? mimeType) =>
+            mimeType?.Split(';')[0].Trim() is { } media
+            && media.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)
+                ? "pdf"
+                : "md";
     }
 }
