@@ -209,8 +209,8 @@ namespace AlgoJudge.Server.Authorization
 
             // **The same rule the registration enforces**, stated twice because
             // two different pieces of code apply it: an issuer is https, except
-            // on loopback, where a development Authentik has no certificate
-            // anybody would trust.
+            // on loopback, where a development Authentik or Keycloak has no
+            // certificate anybody would trust.
             //
             // The default is `true`, and against an http authority it fails at
             // the challenge with a message that mentions neither TLS nor the

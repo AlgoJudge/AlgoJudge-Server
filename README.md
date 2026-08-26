@@ -386,6 +386,48 @@ may rename themselves to it, and the administrator may not rename itself away:
 the password endpoint resets *the account named `admin`*, so the name is what the
 endpoint points at.
 
+## Registering an identity provider
+
+The Server sees a **plain OIDC provider** and nothing else — it holds no field
+that only one product could fill, and it never learns which one is behind a
+registration. What follows is therefore not a list of supported products; it is
+the two AlgoJudge itself deploys, and what to type for each.
+
+Both are supported and neither is a fallback:
+
+| | `AlgoJudge-Identity-Keycloak` | `AlgoJudge-Identity-Authentik` |
+|---|---|---|
+| `issuer` | `https://auth.example/realms/algojudge` | `https://auth.example/application/o/algojudge` |
+| `claimPath` | `groups` | `groups` |
+| `scopes` | `openid profile email` | `openid profile email` |
+| `accountUrl` | `…/realms/algojudge/account/` | `…/if/user/` |
+| `deletionUrl` | `…/realms/algojudge/account/#/personal-info` | the unenrolment flow's own URL |
+| `deletionChannelEnabled` | **`false` — it cannot send one** | `true`, once the provider id and secret are set there |
+
+**`claimPath` is `groups` for both, and that is a choice made in the Keycloak
+realm rather than a fact about Keycloak.** Its default group claim is
+`realm_access.roles`; the AlgoJudge realm declares a group-membership mapper
+emitting `groups` with bare names instead, so an installation moving between the
+two deployments changes neither the path nor a single mapping rule. A provider
+emitting the nested shape works too — `ClaimMappingService` walks a dotted path
+and flattens both a repeated claim and a JSON array, and `FederatedSignInTests`
+drives a whole sign-in through each.
+
+**Turn the deletion channel off for Keycloak.** It has no outbound webhook
+without a third-party extension, so nothing will ever call the back channel; a
+provider left with it enabled is an operator waiting for a report that cannot
+arrive. Somebody deleting their identity there still has to end their AlgoJudge
+account through `POST /account/deletion-requests`, and that deployment's own
+deletion screen says so.
+
+**Neither issuer may be plain HTTP** except on loopback, which is exempted so a
+development stack can be registered. Over plain HTTP on a real network, whoever
+answers first decides who your users are.
+
+`AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` is the accepted
+record for the model; each deployment's own repository carries what it can and
+cannot do.
+
 ## Migrations
 
 In the Development environment the application applies pending migrations on
