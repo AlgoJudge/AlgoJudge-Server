@@ -85,6 +85,11 @@ namespace AlgoJudge.Server
             // instance could read the first's cookie. See `Authorization/KeyRing.cs`.
             var keyRing = KeyRing.Add(builder.Services, builder.Configuration, builder.Environment);
 
+            // The operator's view of that ring, and the two things they may do
+            // to it. Registered beside the ring rather than with the services,
+            // because it is the same subject.
+            builder.Services.AddSingleton<IKeyRingOperations, KeyRingOperations>();
+
             builder.Services.AddAuthorization();
             builder.Services.AddIdentityApiEndpoints<User>(options =>
             {

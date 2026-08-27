@@ -51,9 +51,28 @@ Usage:
   aj-admin storage migrate             move every file to the store taking new writes
   aj-admin storage cancel              call off a migration that is under way
 
+  aj-admin keyring status              what encrypts the session cookies, and what needs doing
+  aj-admin keyring rotate              write a new key now; nobody is signed out
+  aj-admin keyring revoke --yes        revoke every key; EVERYBODY is signed out
+
 The password is never taken as an argument: arguments are visible to every other
 process on the machine through `ps`, and land in shell history. With a terminal
 this prompts; without one it reads the first line of stdin.
+
+`keyring status` is also the validation: it says whether every stored key can
+still be read with the certificates configured today. A key it cannot read is a
+certificate that was dropped instead of kept, and every session minted under
+that key is already gone.
+
+`keyring rotate` is what to run after configuring DataProtection__Certificates
+on an installation that already had keys — encryption applies to a key when it
+is written, so without this the existing plaintext key stays in place until the
+ring rotates on its own, ninety days out.
+
+`keyring revoke` ends every session on the installation, and is the answer to a
+database dump that leaked: a key that has been revoked cannot mint a cookie this
+Server will accept. With several instances it takes effect here at once and
+elsewhere when their key ring next refreshes.
 
 `storage migrate` moves what is already stored; changing Storage__Default only
 decides where the next upload goes. It waits for its window and for the
@@ -186,6 +205,39 @@ Asked for. It starts in its window and only once the evaluation
     esac
 }
 
+cmd_keyring() {
+    local which=${1-}
+    case "$which" in
+        status)
+            request GET /admin/keyring
+            ;;
+        rotate)
+            request POST /admin/keyring/rotate
+            printf '
+A new key. Nobody was signed out: the previous key stays readable,
+' >&2
+            printf 'which is what lets every open session carry on.
+' >&2
+            ;;
+        revoke)
+            # **The word, not a boolean.** A flag that defaults to false is still
+            # a flag somebody sets while reading the other half of a sentence,
+            # and this one ends every session on the installation.
+            [ "${2-}" = "--yes" ] || die 'this signs out every session. Repeat it as `aj-admin keyring revoke --yes`'
+            local reason=${3-}
+            local query="confirm=revoke"
+            [ -n "$reason" ] && query+="&reason=$(urlencode "$reason")"
+            request POST "/admin/keyring/revoke?$query"
+            printf '
+Everybody is signed out. The next request mints a key, encrypted if a
+' >&2
+            printf 'certificate is configured; `aj-admin keyring status` says which it is.
+' >&2
+            ;;
+        *) usage ;;
+    esac
+}
+
 cmd_password() {
     local password
     if [ -t 0 ]; then
@@ -216,6 +268,7 @@ cmd_password() {
 case "${1-}" in
     status)      shift; cmd_status "$@" ;;
     storage)     shift; cmd_storage "$@" ;;
+    keyring)     shift; cmd_keyring "$@" ;;
     maintenance) shift; cmd_maintenance "$@" ;;
     password)    shift; cmd_password "$@" ;;
     *)           usage ;;
