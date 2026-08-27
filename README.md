@@ -26,7 +26,7 @@ always used `Problem`; only the documentation lagged.
 
 | Area | State |
 |---|---|
-| API | **153 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27, counted on 2026-08-10 and never re-counted; it is a count, so it drifts unless somebody runs it |
+| API | **155 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27 and 153 until 2026-08-28; it is a count, so it drifts unless somebody runs it |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
 | Authorization | a real permission model: **48 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
@@ -426,6 +426,61 @@ their ring next refreshes.
 unencrypted form."* when it **creates** a key, so an installation running on a
 key made months ago logs nothing at all. The absence of that line is not evidence
 the keys are encrypted — `aj-admin keyring status` is.
+
+## Configuring an installation from files
+
+An installation's own settings — its name, how it admits people, its welcome page
+and its policies, its mark — normally arrive by somebody clicking through the
+manager panel. They can arrive from a directory instead:
+
+```
+preconfig/
+├── algojudge.yml
+├── pages/welcome.md        and home, terms, privacy, cookies, accessibility
+└── logo.svg                or .png, or .webp
+```
+
+Point the Server at it and it is read:
+
+```bash
+AJ_Preconfiguration__Path=/etc/algojudge/preconfig
+```
+
+`preconfig.example/` in this repository is a working template, and is what the
+development Compose file mounts. The format is specified in
+`docs/specs/PRECONFIGURATION.md` in the workspace.
+
+**Applied at the first start of an empty installation, and never again by a
+boot.** After that it is a command, run by somebody who meant it:
+
+```bash
+docker compose exec algojudge aj-admin config status   # what would change
+docker compose exec algojudge aj-admin config apply    # change it
+```
+
+`status` writes nothing, so it is safe to run at any time; `apply` performs
+exactly what `status` listed.
+
+Four things about it are worth knowing before it surprises you:
+
+- **It adds; it never withdraws.** A setting the file leaves out is left as it
+  is, not reset to a default, and a document the directory does not carry stays
+  published. Removing something is done in the panel, by somebody who chose to.
+- **A page is republished only when its contents differ**, compared by SHA-256.
+  Publishing *adds* a revision rather than replacing one, so an apply that
+  republished everything would grow a privacy policy's history on every run.
+- **Nothing records what was applied.** `aj-admin config status` derives the
+  answer from the database each time, so it cannot be stale. An empty `changes`
+  list is the whole of "this installation matches its files".
+- **A first start that cannot read the directory does not start.** A typo stops
+  the deployment rather than bringing up an installation that is half what was
+  asked for — and it can only happen on a start somebody is watching, because no
+  later restart reads the files at all.
+
+A value that must not sit in a repository is written as `${VARIABLE}` and read
+from the Server's environment; a variable that resolves to nothing refuses the
+apply rather than storing its own name. No setting in the current format is a
+secret — the rule is there for the ones that come.
 
 ## The published image
 

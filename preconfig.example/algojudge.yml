@@ -1,0 +1,56 @@
+# What an installation says about itself, read from disk.
+#
+# **A template, and it must stay one.** It is committed, so it may never hold a
+# value belonging to a real deployment and never a secret of any kind. A value
+# that has to stay out of a repository is written as ${VARIABLE} and read from
+# the environment; an unresolved one refuses the apply rather than being stored
+# as the text of its own name.
+#
+# The development Compose file mounts this directory and points
+# AJ_Preconfiguration__Path at it, so the development stack is configured from
+# here — which is also what keeps this file from quietly rotting.
+#
+# Applied at the **first** start of an empty installation, and afterwards only
+# when somebody runs `aj-admin config apply`. See docs/specs/PRECONFIGURATION.md
+# in the workspace.
+
+format: algojudge-preconfiguration
+version: 1
+
+instance:
+  # What this installation calls itself, beside the product's name. Leave the
+  # key out entirely and it stays unnamed, which is a real state rather than a
+  # missing value.
+  name: "AlgoJudge (development)"
+
+  # Every key below is optional, and **absent means leave alone** — never "reset
+  # to the default". They are written out here at their shipped values so the
+  # whole surface is visible in one place; deleting any line changes nothing.
+  localRegistrationEnabled: false
+  requireEmail: false
+  requireConfirmedEmail: false
+  showLogo: true
+  showLocalSignIn: true
+  accountDeletionEnabled: true
+  externalJudgingEnabled: false
+  seriesRestrictionsEnabled: true
+
+  # The whole list, replaced rather than added to. An empty list means this
+  # installation fetches nothing from anywhere.
+  externalFetchHosts:
+    - onlinejudge.org
+
+# Pages live beside this file, in `pages/`, named after what they are:
+#
+#     pages/welcome.md          what somebody not signed in reads
+#     pages/home.md             the landing page for somebody who is
+#     pages/terms.md            pages/privacy.md
+#     pages/cookies.md          pages/accessibility.md
+#
+# A translation is `<kind>-<language>.md` with a BCP-47 subtag — `welcome-en.md`
+# — exactly as a problem statement is named. See docs/specs/CONTENT_FORMAT.md.
+#
+# A mark goes beside them as `logo.svg`, `logo.png` or `logo.webp`, with
+# `logo-en.svg` for one per language. None is shipped here on purpose: the
+# development stack should show the Client's placeholder, which is visibly a
+# placeholder, rather than a mark that belongs to nobody.

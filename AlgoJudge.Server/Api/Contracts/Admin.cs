@@ -106,4 +106,46 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int Revoked { get; init; }
         public required string Reason { get; init; }
     }
+
+    /// <summary>One thing the files on disk would change, or have changed.</summary>
+    public record PreconfigurationChangeDto
+    {
+        /// <summary><c>instance.name</c>, <c>document.privacy.en</c>, <c>logo</c>.</summary>
+        public required string Target { get; init; }
+
+        /// <summary>
+        /// What the database holds. For a document this is a shortened checksum,
+        /// or <c>not published</c> — never the text, which can be tens of
+        /// kilobytes and is readable through the ordinary file endpoint anyway.
+        /// </summary>
+        public required string Current { get; init; }
+
+        public required string Proposed { get; init; }
+    }
+
+    /// <summary>
+    /// What the files would do, or did.
+    /// <para>
+    /// <b>The dry run and the act answer the same shape</b>, from the same walk.
+    /// A preview computed differently from the thing it previews is a preview
+    /// nobody can act on.
+    /// </para>
+    /// </summary>
+    public record PreconfigurationPlanDto
+    {
+        /// <summary>The directory read, as this Server sees it.</summary>
+        public required string Directory { get; init; }
+
+        /// <summary>Whether this was carried out, or only worked out.</summary>
+        public required bool Applied { get; init; }
+
+        /// <summary>Empty means the database already says what the files say.</summary>
+        public required IReadOnlyList<PreconfigurationChangeDto> Changes { get; init; }
+
+        /// <summary>
+        /// What an operator should know without it stopping the apply — a page
+        /// whose front matter the Client will refuse to render, for instance.
+        /// </summary>
+        public required IReadOnlyList<string> Warnings { get; init; }
+    }
 }
