@@ -339,24 +339,56 @@ not share a ring even sharing a table.
 
 ### Encrypting the keys themselves
 
-Optional, and off unless configured. Without it the keys are stored as plain XML
-and Data Protection says so in a startup warning; whoever can read that table
-can also write a row into `AspNetUsers`, so this buys less than it looks — it is
-here for installations whose database is somebody else's to hold.
+Optional, and off unless configured. Without it the keys are stored as plain XML;
+whoever can read that table can also write a row into `AspNetUsers`, so this buys
+less than it looks — it is here for installations whose database is somebody
+else's to hold.
 
 ```bash
 AJ_DataProtection__Certificates__0__Path=/run/secrets/keyring.pfx
-AJ_DataProtection__Certificates__0__Password=…
+AJ_DataProtection__Certificates__0__Password=…   # omit for a PFX with no password
 ```
 
-**The first listed encrypts new keys; every one listed can decrypt old ones.**
-So rotating means putting the new certificate at the head and *keeping the old
-one in the list*: keys encrypted with a certificate nobody supplies any more are
-keys nobody can read, which looks exactly like having no key ring at all.
+A PKCS#12 file carrying its private key:
 
-A PKCS#12 file carrying its private key. One that is missing, unreadable, or
-carries no private key stops the Server at startup rather than at the first
-sign-in.
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout keyring.key -out keyring.crt \
+    -days 3650 -nodes -subj "/CN=algojudge-key-ring"
+openssl pkcs12 -export -out keyring.pfx -inkey keyring.key -in keyring.crt \
+    -passout pass:the-password-you-will-configure
+```
+
+Mount it read-only and point the setting at it. One that is missing, unreadable,
+or carries **no private key** stops the Server at startup rather than at the
+first sign-in — the last of those would otherwise encrypt a ring it could never
+read back.
+
+**The first listed encrypts new keys; every one listed can decrypt old ones.** So
+rotating means putting the new certificate at the head and *keeping the old one
+in the list*: keys encrypted with a certificate nobody supplies any more are keys
+nobody can read, which looks exactly like having no key ring at all.
+
+#### Turning it on later does nothing until the ring rotates
+
+Measured on the development stack, 2026-08-27, and worth knowing before an
+operator concludes it did not work:
+
+- Adding the setting to an installation that already has a key is **not
+  disruptive and not effective**. Sessions continue — the existing plaintext key
+  is still readable — and that key **stays plaintext**. Data Protection encrypts
+  a key when it *writes* one, and it writes one only when the current key is near
+  expiry, which is 90 days.
+- To have an encrypted key **now**, delete the existing rows
+  (`DELETE FROM "DataProtectionKeys";`) and restart. The next key is written
+  encrypted — and **everybody currently signed in is signed out**, because the
+  key their cookie was minted under is gone. Do it in the same window as the
+  migration, or plan for it.
+- **The warning names a key, not a startup.** Data Protection logs *"No XML
+  encryptor configured. Key {id} may be persisted to storage in unencrypted
+  form."* when it **creates** a key. An installation running on a key made
+  months ago logs nothing, so the absence of that line is not evidence the keys
+  are encrypted. `SELECT "Xml" FROM "DataProtectionKeys"` is: a plaintext key
+  carries `<masterKey>`, an encrypted one carries `<encryptedSecret>`.
 
 ## The published image
 
