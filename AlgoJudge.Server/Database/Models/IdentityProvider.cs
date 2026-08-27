@@ -38,14 +38,21 @@ namespace AlgoJudge.Server.Database.Models
     /// <c>AlgoJudge-Identity-Keycloak</c> and <c>AlgoJudge-Identity-Authentik</c>,
     /// both supported since 2026-08-26 — and neither is named anywhere in this
     /// model. That the Authentik one implements the deletion channel with an
-    /// event matcher policy and a webhook, and that the Keycloak one cannot
-    /// implement it at all, is known only to those repositories.
+    /// event matcher policy and a webhook, and the Keycloak one with an Event
+    /// Listener SPI provider, is known only to those repositories.
     /// </para>
     /// <para>
     /// Nothing here may grow a field that only one product could fill. Two
     /// products behind one model is the evidence for that rule rather than an
     /// exception to it: what differs between them is which of the optional
     /// switches an operator sets, and every one of those already exists.
+    /// <para>
+    /// 2026-08-27 is the strongest evidence so far. The Keycloak deployment
+    /// gained a deletion back channel it had been documented as unable to have,
+    /// built a completely different way from the Authentik one — and
+    /// <b>not one line here changed</b>. A model that had grown a field for "how
+    /// this product reports a deletion" would have had to.
+    /// </para>
     /// </para>
     /// </summary>
     public class IdentityProvider
