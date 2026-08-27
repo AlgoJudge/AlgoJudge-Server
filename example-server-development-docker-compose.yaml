@@ -100,6 +100,20 @@ services:
     # was the old default, and it lets a visitor state their own address. Behind
     # nginx this becomes the address the proxy reaches the Server from.
     - AJ_Forwarded__KnownProxies=none
+    # **What this installation says about itself**, from files rather than from
+    # somebody clicking through the panel. Applied at the first start of an
+    # empty database and never again on a boot; afterwards it is
+    # `aj-admin config apply`. The path is the mount below.
+    #
+    # Pointed at the committed example on purpose: a development stack
+    # configured from it is a development stack that notices the day this stops
+    # working. See `docs/specs/PRECONFIGURATION.md` in the workspace.
+    - AJ_Preconfiguration__Path=/etc/algojudge/preconfig
+    volumes:
+    # Read-only, because nothing in the Server writes back to it and a
+    # container that could rewrite its own configuration is a container that
+    # can disagree with the repository it came from.
+    - ./preconfig.example:/etc/algojudge/preconfig:ro
 
 volumes:
   algojudge_dev_db_data:

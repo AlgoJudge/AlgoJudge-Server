@@ -247,6 +247,10 @@ namespace AlgoJudge.Server
 
             builder.Services.AddScoped<Seeder>();
 
+            // What this installation says about itself, from files an operator
+            // mounted. See `Preconfiguration/PreconfigurationService.cs`.
+            builder.Services.AddScoped<Preconfiguration.IPreconfiguration, Preconfiguration.PreconfigurationService>();
+
             // Recovery for a Runner that died holding a job. Registered as a
             // singleton so it can be resolved in tests and swept on demand.
             builder.Services.AddSingleton<Workers.MaintenanceDrainer>();
@@ -472,8 +476,29 @@ namespace AlgoJudge.Server
 
             using (var scope = app.Services.CreateScope())
             {
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+                // **Read before the seeder runs**, which is the whole of it: the
+                // seeder creates both of these itself, so afterwards every
+                // installation looks configured. Two conditions rather than one
+                // because a database restored from a dump older than the
+                // `Instance` table has no row either — and it does have users.
+                var fresh = !db.Instance.Any() && !db.Users.Any();
+
                 var seed = scope.ServiceProvider.GetRequiredService<Seeder>();
                 seed.EnsureAsync(app.Environment.IsDevelopment()).GetAwaiter().GetResult();
+
+                // A fresh installation takes what the files say; one that has
+                // been running does not, ever. An administrator's choice in the
+                // panel must not be undone by a boot, so the second time is
+                // `aj-admin config apply` and somebody meaning it.
+                var preconfiguration = scope.ServiceProvider
+                    .GetRequiredService<Preconfiguration.IPreconfiguration>();
+
+                if (fresh && preconfiguration.Configured)
+                {
+                    preconfiguration.ApplyAsync(default).GetAwaiter().GetResult();
+                }
             }
 
             // Said once, at start, so an operator learns the state of the door

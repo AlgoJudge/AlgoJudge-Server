@@ -55,6 +55,9 @@ Usage:
   aj-admin keyring rotate              write a new key now; nobody is signed out
   aj-admin keyring revoke --yes        revoke every key; EVERYBODY is signed out
 
+  aj-admin config status               what the files on disk would change
+  aj-admin config apply                change it
+
 The password is never taken as an argument: arguments are visible to every other
 process on the machine through `ps`, and land in shell history. With a terminal
 this prompts; without one it reads the first line of stdin.
@@ -73,6 +76,15 @@ ring rotates on its own, ninety days out.
 database dump that leaked: a key that has been revoked cannot mint a cookie this
 Server will accept. With several instances it takes effect here at once and
 elsewhere when their key ring next refreshes.
+
+`config status` reads the directory AJ_Preconfiguration__Path names and says
+what differs from the database. It writes nothing, so it is safe to run at any
+time; `config apply` performs exactly what it listed.
+
+Applying **adds and never withdraws**: a setting the file leaves out is left
+alone rather than reset, and a document the directory does not carry stays
+published. A page is republished only when its contents differ, so applying
+twice does not grow a policy's revision history.
 
 `storage migrate` moves what is already stored; changing Storage__Default only
 decides where the next upload goes. It waits for its window and for the
@@ -238,6 +250,24 @@ Everybody is signed out. The next request mints a key, encrypted if a
     esac
 }
 
+cmd_config() {
+    local which=${1-}
+    case "$which" in
+        status)
+            request GET /admin/config
+            ;;
+        apply)
+            request POST /admin/config/apply
+            printf '
+What `changes` lists is what was written. An empty list means the
+' >&2
+            printf 'database already said what the files say.
+' >&2
+            ;;
+        *) usage ;;
+    esac
+}
+
 cmd_password() {
     local password
     if [ -t 0 ]; then
@@ -269,6 +299,7 @@ case "${1-}" in
     status)      shift; cmd_status "$@" ;;
     storage)     shift; cmd_storage "$@" ;;
     keyring)     shift; cmd_keyring "$@" ;;
+    config)      shift; cmd_config "$@" ;;
     maintenance) shift; cmd_maintenance "$@" ;;
     password)    shift; cmd_password "$@" ;;
     *)           usage ;;

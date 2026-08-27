@@ -269,6 +269,53 @@ jobs:
             http://127.0.0.1:8080/api/v1/account)
           test "$code" = "401" || { echo "a revoke left a session working: $code" >&2; exit 1; }
 
+      # **The item's own promise, in a container.** The stack is configured from
+      # `preconfig.example/`, mounted read-only by the compose file, so this
+      # asks the only question that matters: did an installation nobody clicked
+      # through come up saying what the files say.
+      - name: The installation configured itself from disk
+        run: |
+          compose="docker compose -f example-server-development-docker-compose.yaml"
+
+          curl -fsS http://127.0.0.1:8080/api/v1/instance -o instance.json
+
+          if ! grep -q 'AlgoJudge (development)' instance.json; then
+            echo "the instance was not named from the files:" >&2
+            cat instance.json >&2
+            exit 1
+          fi
+
+          grep -q '"kind":"welcome"' instance.json || {
+            echo "no welcome page was published" >&2
+            exit 1
+          }
+
+          # And the operator's own view agrees there is nothing left to do.
+          $compose exec -T algojudge aj-admin config status | grep -q '"changes":\[\]'
+
+      # **Applying is idempotent, and that is not free.** Publishing adds a
+      # revision, so an apply that republished whatever it found would grow a
+      # policy's history on every run. Checked here rather than only in the
+      # suite because this is the image an operator actually types into.
+      - name: Applying again changes nothing
+        run: |
+          compose="docker compose -f example-server-development-docker-compose.yaml"
+          revisions() {
+            $compose exec -T postgres psql -U algojudge -d algojudge -tAc \
+              "SELECT count(*) FROM \"FileReferences\" WHERE \"Name\" = 'welcome'"
+          }
+
+          $compose exec -T algojudge aj-admin config apply | grep -q '"changes":\[\]'
+
+          before=$(revisions)
+          $compose exec -T algojudge aj-admin config apply > /dev/null
+          after=$(revisions)
+
+          test "$before" = "$after" || {
+            echo "applying twice grew the revisions: $before then $after" >&2
+            exit 1
+          }
+
       - name: Compose down
         if: always()
         run: docker compose -f example-server-development-docker-compose.yaml down -v

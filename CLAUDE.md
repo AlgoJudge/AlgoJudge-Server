@@ -286,6 +286,29 @@ After cloning, inspect the solution and project files, then document:
     them decrypt; dropping the old one makes existing keys unreadable, which
     looks exactly like having no ring at all.
 
+- **An installation can be stood up from files on disk** (2026-08-28), specified
+  in `docs/specs/PRECONFIGURATION.md` in the workspace. `Preconfiguration/` is
+  the whole of it — a YAML file, `pages/*.md` and a mark, read from
+  `AJ_Preconfiguration__Path`. Five things are easy to get wrong:
+  - **It applies at the first start and never again on a boot.** "Fresh" is
+    checked **before the seeder runs**, because the seeder creates both halves
+    of the test itself; and it is two conditions, no `Instance` row **and** no
+    user, because a dump older than that table has no row either. A file
+    re-read on every start would silently undo the panel.
+  - **It adds and never withdraws.** An absent key means *leave alone*, not
+    *reset*, and a document the directory does not carry stays published. The
+    same reading `InstanceSettingsInputDto` already gives an absent field.
+  - **The comparison is SHA-256 against what is published**, and there is no
+    state row and no migration. Publishing *adds* a revision, so an apply that
+    republished what it found would grow a privacy policy's history on every
+    run — which is the history the versioning exists for.
+  - **`aj-admin` cannot do this work.** The image has no `curl`, no `wget` and
+    no `jq`, so the directory is read by the Server from a mount and the command
+    is a trigger. That is why it is an endpoint rather than a subcommand.
+  - **YamlDotNet is the first third-party parser here**, on one path that never
+    touches a request body. YAML rather than TOML because the product had
+    already chosen it twice, for `config.yml` and for statement front matter.
+
 ## Layout
 
 The frontend is in

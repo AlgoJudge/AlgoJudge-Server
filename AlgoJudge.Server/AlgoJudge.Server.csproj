@@ -65,6 +65,20 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.5" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <!--
+      YAML, for the pre-configuration an installation is stood up from. See
+      `Preconfiguration/` and `docs/specs/PRECONFIGURATION.md` in the workspace.
+
+      **The first third-party parser in this Server**, and worth saying out
+      loud: everything else here reads JSON through the framework. It is used on
+      one path — an operator's file on a mounted volume, read at first start or
+      on `aj-admin config apply` — and never on a request body.
+
+      YAML rather than TOML because the product already made this choice twice
+      for hand-edited files: a package's `config.yml`, and the front matter of
+      every statement. A third serialisation would be a third set of traps.
+    -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>

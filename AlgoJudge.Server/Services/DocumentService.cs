@@ -38,6 +38,18 @@ namespace AlgoJudge.Server.Services
         TimeProvider clock
     ) : IDocumentService
     {
+        /// <summary>
+        /// The reference name a mark is published under — one per language, so
+        /// the default and a translation cannot collide.
+        /// <para>
+        /// Here rather than on a caller because there are two: the panel's
+        /// <c>PUT /instance/logo</c>, and the pre-configuration read from disk.
+        /// Two spellings of this would publish two marks nothing ever compares.
+        /// </para>
+        /// </summary>
+        public static string LogoName(string? language) =>
+            string.IsNullOrWhiteSpace(language) ? "logo" : $"logo-{language}";
+
         public async Task PublishAsync(
             FileOwnerKind ownerKind, Guid ownerId, string kind,
             PublishDocumentInputDto input, CancellationToken ct)

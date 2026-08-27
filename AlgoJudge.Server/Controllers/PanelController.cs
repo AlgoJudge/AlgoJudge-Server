@@ -564,12 +564,12 @@ namespace AlgoJudge.Server.Controllers
             {
                 // Absent removes the mark, and the instance falls back to the
                 // placeholder the Client ships — visibly a placeholder.
-                await documents.UnpublishAsync(FileOwnerKind.InstanceLogo, instance.Id, LogoName(input.Language), ct);
+                await documents.UnpublishAsync(FileOwnerKind.InstanceLogo, instance.Id, DocumentService.LogoName(input.Language), ct);
             }
             else
             {
                 await documents.PublishAsync(
-                    FileOwnerKind.InstanceLogo, instance.Id, LogoName(input.Language),
+                    FileOwnerKind.InstanceLogo, instance.Id, DocumentService.LogoName(input.Language),
                     new PublishDocumentInputDto
                     {
                         Statements = [new NewStatementDto { FileId = input.FileId, Language = input.Language }],
@@ -578,13 +578,6 @@ namespace AlgoJudge.Server.Controllers
 
             return await AnnounceAsync(ct);
         }
-
-        /// <summary>
-        /// The logo is one reference per language, named so the default and a
-        /// translation cannot collide.
-        /// </summary>
-        private static string LogoName(string? language) =>
-            string.IsNullOrWhiteSpace(language) ? "logo" : $"logo-{language}";
 
         /// <summary>
         /// Publishing <b>adds</b> a revision with a date rather than replacing
