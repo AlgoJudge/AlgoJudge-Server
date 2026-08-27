@@ -79,6 +79,12 @@ namespace AlgoJudge.Server
             // place. See `Services/RequestOrigin.cs`.
             builder.Services.AddScoped<Services.IRequestOrigin, Services.RequestOrigin>();
 
+            // **What encrypts the session cookie, and where those keys live.**
+            // Unconfigured, the framework's ring is process-local and not
+            // durable, so every restart signed everybody out and no second
+            // instance could read the first's cookie. See `Authorization/KeyRing.cs`.
+            var keyRing = KeyRing.Add(builder.Services, builder.Configuration, builder.Environment);
+
             builder.Services.AddAuthorization();
             builder.Services.AddIdentityApiEndpoints<User>(options =>
             {
@@ -312,6 +318,8 @@ namespace AlgoJudge.Server
             });
 
             var app = builder.Build();
+
+            KeyRing.Announce(app.Logger, keyRing);
 
             // **Resolved here so a missing setting stops the Server here.**
             // `Configure` is lazy, so without this line the refusal would

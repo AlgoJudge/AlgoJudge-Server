@@ -1,12 +1,22 @@
 using AlgoJudge.Server.Database.Models;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using File = AlgoJudge.Server.Database.Models.File;
 
 namespace AlgoJudge.Server.Database
 {
-    public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<User>(options)
+    public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        : IdentityDbContext<User>(options), IDataProtectionKeyContext
     {
+        /// <summary>
+        /// The keys that encrypt every session cookie. Not a product table: it
+        /// is the framework's, and it is here because this context already
+        /// carries the framework's account tables and an installation should
+        /// have one database to back up. See <see cref="Authorization.KeyRing"/>.
+        /// </summary>
+        public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
+
         public DbSet<Instance> Instance { get; set; }
         public DbSet<Models.AccessKey> AccessKeys { get; set; }
         public DbSet<MaintenanceState> Maintenance { get; set; }

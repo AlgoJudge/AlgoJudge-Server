@@ -304,6 +304,60 @@ resolved the row a moment ago still finds it. A run works for at most
 killing the process loses nothing, because what has moved is recorded on the
 files themselves.
 
+## What encrypts a session cookie
+
+A signed-in browser holds a cookie this Server encrypted, and the keys for that
+have to outlive the process. **They live in the database, and nothing needs
+configuring** — `database` is what an installation gets when nobody says
+otherwise.
+
+```bash
+AJ_DataProtection__Kind=database   # the default; the keys live beside everything else
+AJ_DataProtection__Kind=ephemeral  # in memory, lost on restart — Development only
+```
+
+**Until 2026-08-27 there was no configuration at all**, so the framework built a
+key ring local to the process. Every restart signed everybody out, a federated
+sign-in that was in flight lost its `state` and `nonce`, and a second instance
+could not read a cookie the first had minted.
+
+`ephemeral` **refuses to start** unless the environment is Development. It is
+the arrangement above with a name, and on a real installation it presents as
+people being signed out at random — which gets diagnosed as flakiness rather
+than as configuration.
+
+A kind this Server does not implement also refuses to start. **Redis is not
+implemented**, deliberately: it is a second stateful service to back up and to
+restore correctly, and this product asks a self-hosted installation for one
+database and no more. `docs/specs/AUTHENTICATION.md` §10 in the workspace
+carries the decision and what would reverse it.
+
+**Two things to know before running more than one instance.** Every instance
+needs the same database, and the application name is fixed in code — Data
+Protection mixes it into every purpose, and two instances that disagree would
+not share a ring even sharing a table.
+
+### Encrypting the keys themselves
+
+Optional, and off unless configured. Without it the keys are stored as plain XML
+and Data Protection says so in a startup warning; whoever can read that table
+can also write a row into `AspNetUsers`, so this buys less than it looks — it is
+here for installations whose database is somebody else's to hold.
+
+```bash
+AJ_DataProtection__Certificates__0__Path=/run/secrets/keyring.pfx
+AJ_DataProtection__Certificates__0__Password=…
+```
+
+**The first listed encrypts new keys; every one listed can decrypt old ones.**
+So rotating means putting the new certificate at the head and *keeping the old
+one in the list*: keys encrypted with a certificate nobody supplies any more are
+keys nobody can read, which looks exactly like having no key ring at all.
+
+A PKCS#12 file carrying its private key. One that is missing, unreadable, or
+carries no private key stops the Server at startup rather than at the first
+sign-in.
+
 ## The published image
 
 Released images are pushed to GitHub's container registry when a `v*` tag is

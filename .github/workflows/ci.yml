@@ -188,6 +188,51 @@ jobs:
             exit 1
           fi
 
+      # The keys that encrypt a session cookie live in the database, and the
+      # Server says which arrangement it is running. Two claims, so two checks:
+      # a table can exist while nothing writes to it.
+      - name: The key ring is in the database, and says so
+        run: |
+          compose="docker compose -f example-server-development-docker-compose.yaml"
+
+          $compose exec -T postgres psql -U algojudge -d algojudge -c '\dt' \
+            | grep -q DataProtectionKeys
+          $compose logs --no-color algojudge | grep -q 'key ring: database'
+
+      # **The promise of the item, end to end.** Everything above could hold
+      # with the ring still in memory; only a restart asks the question the
+      # release list asked. It is here rather than in the suite because the
+      # suite cannot restart a process — two hosts share a machine, and a
+      # machine-wide directory would carry a ring between them.
+      - name: A restart does not sign anybody out
+        run: |
+          compose="docker compose -f example-server-development-docker-compose.yaml"
+          jar=$(mktemp)
+
+          curl -fsS -c "$jar" -o /dev/null -X POST \
+            'http://127.0.0.1:8080/api/v1/identity/login?useSessionCookies=true' \
+            -H 'content-type: application/json' \
+            -d '{"email":"admin","password":"admin-development-only"}'
+
+          grep -q 'AspNetCore.Identity.Application' "$jar" \
+            || { echo "signing in left no identity cookie" >&2; exit 1; }
+
+          $compose restart algojudge
+
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:8080/api/v1/health && break
+            sleep 2
+          done
+
+          code=$(curl -s -b "$jar" -o /dev/null -w '%{http_code}' \
+            http://127.0.0.1:8080/api/v1/account)
+
+          test "$code" = "200" || {
+            echo "the session did not survive the restart: /account answered $code" >&2
+            $compose logs --no-color algojudge | tail -40 >&2
+            exit 1
+          }
+
       - name: Compose down
         if: always()
         run: docker compose -f example-server-development-docker-compose.yaml down -v

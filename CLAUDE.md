@@ -68,6 +68,9 @@ After cloning, inspect the solution and project files, then document:
   because the framework declares it that way. **This line used to say the
   migration was outstanding** — it was done, and the note outlived it. Checked
   2026-08-10: 41 `Guid` and 16 `Guid?` key or foreign-key properties, no `int`.
+  **Since 2026-08-27 there is exactly one `int` key**, `DataProtectionKeys.Id`,
+  and it is the framework's table rather than this product's model — the same
+  exception as `User.Id`, for the same reason.
 - `Activity.Type` is the type discriminator, formatted `name@version`. No
   separate `typeId` and `typeVersion` columns.
 - `main` is the integration and default branch. `devel` no longer exists.
@@ -257,6 +260,31 @@ After cloning, inspect the solution and project files, then document:
     corrects — so a contestant who stops earning is carried back in at **zero**.
     The reason is cleared on erasure while `ExcludedAt` stays, and it travels in
     the participant's own data export.
+
+- **The keys that encrypt a session cookie live in the database** (2026-08-27),
+  specified in `docs/specs/AUTHENTICATION.md` §10 and decided in
+  `AlgoJudge-Design/adr/DATA_PROTECTION_KEY_RING_2026-08-27.md`. Nothing called
+  `AddDataProtection()` before, so the framework built a ring local to the
+  process: every restart signed everybody out, and a second instance could not
+  read the first's cookie. `Authorization/KeyRing.cs` is the whole of it —
+  `DataProtection:Kind`, `database` by default, `ephemeral` refused outside
+  Development, Redis refused by name. Four things are easy to get wrong:
+  - **`SetApplicationName` is load-bearing and looks decorative.** The
+    discriminator falls back to the content root, so two containers built from
+    different paths silently do not share a ring while sharing everything else.
+    It is fixed in code because changing it signs everybody out.
+  - **A cookie test on one machine does not prove the store.** The framework's
+    default ring persists to a directory under the profile, which two hosts in
+    one test process share exactly as they would share a table — the sabotage
+    caught this. `The_ring_follows_the_database_and_not_the_machine` is the test
+    that discriminates, by giving one host a database of its own.
+  - **`/identity/manage/info` is not a "am I signed in" endpoint here.** It
+    throws for an account with no address, and this product has those on purpose
+    — the seeded administrator is one. `GET /api/v1/account` is the product's
+    own answer.
+  - **The certificate list rotates by prepending.** The first encrypts, all of
+    them decrypt; dropping the old one makes existing keys unreadable, which
+    looks exactly like having no ring at all.
 
 ## Layout
 
