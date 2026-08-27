@@ -332,6 +332,12 @@ restore correctly, and this product asks a self-hosted installation for one
 database and no more. `docs/specs/AUTHENTICATION.md` §10 in the workspace
 carries the decision and what would reverse it.
 
+**A database backup now holds what mints a session cookie.** It did not before —
+the keys lived in the container and died with it — so a dump that used to carry
+accounts and no way to impersonate one now carries both. Nothing was weakened;
+keys that survive a restart are the point. But it is worth knowing on the day you
+set backups up, and the certificate below is the mitigation.
+
 **Two things to know before running more than one instance.** Every instance
 needs the same database, and the application name is fixed in code — Data
 Protection mixes it into every purpose, and two instances that disagree would
