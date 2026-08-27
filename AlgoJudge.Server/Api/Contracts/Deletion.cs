@@ -21,17 +21,24 @@ namespace AlgoJudge.Server.Api.Contracts
     /// <summary>
     /// What a provider sends over the back channel.
     /// <para>
-    /// **Generic on purpose.** That Authentik produces this with an event
-    /// matcher policy and a webhook transport is known only to
-    /// `AlgoJudge-Identity-Authentik`; the Server sees a plain OIDC provider that
-    /// may report a deletion, and nothing in this shape could only be filled in
-    /// by one product.
+    /// **Generic on purpose**, and <b>both</b> supported deployments now fill it
+    /// in. That Authentik produces it with an event matcher policy and a webhook
+    /// transport, and Keycloak with an Event Listener SPI provider of its own, is
+    /// known only to those repositories; the Server sees a plain OIDC provider
+    /// that may report a deletion, and nothing in this shape could only be filled
+    /// in by one product.
     /// <para>
-    /// **The other supported deployment cannot send this at all.** Keycloak has
-    /// no outbound webhook without a third-party extension, so a Keycloak
-    /// provider is registered with its deletion channel off. That costs nothing
-    /// here: the switch is per provider precisely because trusting one directory
-    /// to say "this person is gone" says nothing about another.
+    /// <b>This said Keycloak could not send one at all, until 2026-08-27.</b>
+    /// That was true — it has no outbound webhook in configuration — and the
+    /// owner decided to close the gap in that deployment rather than live with
+    /// it. <b>Nothing changed here</b>, which is the interesting part: two
+    /// products arriving at one contract from opposite directions is what this
+    /// shape was designed for.
+    /// </para>
+    /// <para>
+    /// The switch stays **per provider** regardless. Trusting one directory to
+    /// say "this person is gone" says nothing about another, and an operator may
+    /// still register a provider with the channel off.
     /// </para>
     /// </para>
     /// </summary>

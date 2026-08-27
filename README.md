@@ -402,7 +402,7 @@ Both are supported and neither is a fallback:
 | `scopes` | `openid profile email` | `openid profile email` |
 | `accountUrl` | `…/realms/algojudge/account/` | `…/if/user/` |
 | `deletionUrl` | `…/realms/algojudge/account/#/personal-info` | the unenrolment flow's own URL |
-| `deletionChannelEnabled` | **`false` — it cannot send one** | `true`, once the provider id and secret are set there |
+| `deletionChannelEnabled` | `true`, once the provider id and secret are set there | `true`, once the provider id and secret are set there |
 
 **`claimPath` is `groups` for both, and that is a choice made in the Keycloak
 realm rather than a fact about Keycloak.** Its default group claim is
@@ -413,12 +413,25 @@ emitting the nested shape works too — `ClaimMappingService` walks a dotted pat
 and flattens both a repeated claim and a JSON array, and `FederatedSignInTests`
 drives a whole sign-in through each.
 
-**Turn the deletion channel off for Keycloak.** It has no outbound webhook
-without a third-party extension, so nothing will ever call the back channel; a
-provider left with it enabled is an operator waiting for a report that cannot
-arrive. Somebody deleting their identity there still has to end their AlgoJudge
-account through `POST /account/deletion-requests`, and that deployment's own
-deletion screen says so.
+**Both can carry the deletion channel, since 2026-08-27.** Anything written
+before that says to turn it off for Keycloak, and that was right at the time —
+Keycloak has no outbound webhook in configuration. It now ships an Event Listener
+SPI provider of its own, and the Server did not change for it: the report arrives
+on the same endpoint, in the same shape, with the same header.
+
+Turning it on is the same act for either. Register the provider with the channel
+enabled, take the provider id and the shared secret it mints, and put both into
+that deployment's `.env` — **the secret is write-only here**, so a lost one is
+generated again rather than looked up.
+
+The one difference worth knowing when a report does not arrive: **Authentik
+retries across a restart and Keycloak does not.** Authentik's worker keeps a
+queue in its database; the Keycloak extension retries in memory for about ninety
+seconds, then prints one `ERROR` naming the subject and the request id, for an
+operator to replay by hand. Either way the Server answers **404** to a wrong
+provider id, a wrong secret and a channel switched off alike — deliberately
+indistinguishable, so nobody can learn which by asking, and worth remembering
+when diagnosing from the other side.
 
 **Neither issuer may be plain HTTP** except on loopback, which is exempted so a
 development stack can be registered. Over plain HTTP on a real network, whoever
