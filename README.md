@@ -26,13 +26,13 @@ always used `Problem`; only the documentation lagged.
 
 | Area | State |
 |---|---|
-| API | **132 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity` |
+| API | **153 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27, counted on 2026-08-10 and never re-counted; it is a count, so it drifts unless somebody runs it |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
 | Authorization | a real permission model: **48 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Background work | **six hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the file collector, the storage migrator |
-| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage` behind loopback and a token |
+| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage` and `/admin/keyring` behind loopback and a token |
 | Schema | **29 migrations**, the earliest `20260807222825_InitialCreate` — this line said 13 until 2026-08-24, and had been wrong since some time in the twenties |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
@@ -332,6 +332,12 @@ restore correctly, and this product asks a self-hosted installation for one
 database and no more. `docs/specs/AUTHENTICATION.md` §10 in the workspace
 carries the decision and what would reverse it.
 
+**A database backup now holds what mints a session cookie.** It did not before —
+the keys lived in the container and died with it — so a dump that used to carry
+accounts and no way to impersonate one now carries both. Nothing was weakened;
+keys that survive a restart are the point. But it is worth knowing on the day you
+set backups up, and the certificate below is the mitigation.
+
 **Two things to know before running more than one instance.** Every instance
 needs the same database, and the application name is fixed in code — Data
 Protection mixes it into every purpose, and two instances that disagree would
@@ -339,24 +345,87 @@ not share a ring even sharing a table.
 
 ### Encrypting the keys themselves
 
-Optional, and off unless configured. Without it the keys are stored as plain XML
-and Data Protection says so in a startup warning; whoever can read that table
-can also write a row into `AspNetUsers`, so this buys less than it looks — it is
-here for installations whose database is somebody else's to hold.
+Optional, and off unless configured. Without it the keys are stored as plain XML;
+whoever can read that table can also write a row into `AspNetUsers`, so this buys
+less than it looks — it is here for installations whose database is somebody
+else's to hold.
 
 ```bash
 AJ_DataProtection__Certificates__0__Path=/run/secrets/keyring.pfx
-AJ_DataProtection__Certificates__0__Password=…
+AJ_DataProtection__Certificates__0__Password=…   # omit for a PFX with no password
 ```
 
-**The first listed encrypts new keys; every one listed can decrypt old ones.**
-So rotating means putting the new certificate at the head and *keeping the old
-one in the list*: keys encrypted with a certificate nobody supplies any more are
-keys nobody can read, which looks exactly like having no key ring at all.
+A PKCS#12 file carrying its private key:
 
-A PKCS#12 file carrying its private key. One that is missing, unreadable, or
-carries no private key stops the Server at startup rather than at the first
-sign-in.
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout keyring.key -out keyring.crt \
+    -days 3650 -nodes -subj "/CN=algojudge-key-ring"
+openssl pkcs12 -export -out keyring.pfx -inkey keyring.key -in keyring.crt \
+    -passout pass:the-password-you-will-configure
+```
+
+Mount it read-only and point the setting at it. One that is missing, unreadable,
+or carries **no private key** stops the Server at startup rather than at the
+first sign-in — the last of those would otherwise encrypt a ring it could never
+read back.
+
+**The first listed encrypts new keys; every one listed can decrypt old ones.** So
+rotating means putting the new certificate at the head and *keeping the old one
+in the list*: keys encrypted with a certificate nobody supplies any more are keys
+nobody can read, which looks exactly like having no key ring at all.
+
+#### Turning it on later does nothing until the ring rotates
+
+Measured on the development stack, 2026-08-27, and worth knowing before an
+operator concludes it did not work: **adding the setting to an installation that
+already has a key is neither disruptive nor effective**. Sessions continue — the
+existing plaintext key is still readable — and that key **stays plaintext**,
+because Data Protection encrypts a key when it *writes* one and it writes one
+only near the current key's expiry, ninety days out.
+
+`aj-admin keyring rotate` writes one now. See below.
+
+### Operating the key ring
+
+```bash
+docker compose exec server aj-admin keyring status
+docker compose exec server aj-admin keyring rotate
+docker compose exec server aj-admin keyring revoke --yes [reason]
+```
+
+**`status` is also the validation.** It reports which arrangement is in force,
+every key with its dates and whether it is stored encrypted or in plain text,
+and — the part nothing else answers — **whether this Server can still read each
+key**. A key it cannot read is a certificate that was dropped instead of kept,
+and every session minted under that key is already gone. It also names the two
+problems an operator otherwise meets as symptoms: a certificate configured over
+a plaintext key, and usable plaintext keys still sitting in the store.
+
+**`rotate` signs nobody out.** It writes a new key, active immediately, and the
+previous key stays readable — which is exactly what lets every open session carry
+on. This is what to run after configuring a certificate on an installation that
+already had keys.
+
+**`revoke` signs everybody out**, and that is the point of it: a revoked key
+cannot mint a cookie this Server will accept, so it is the answer to a database
+dump that leaked. It requires `--yes`, because a flag that defaults to false is
+still a flag somebody sets while reading the other half of a sentence.
+
+**Rotating does not remove the plaintext key**, and `status` keeps saying so.
+The old key stays usable until it expires — that is what makes rotating safe —
+so a backup taken in the meantime still carries something that can mint a cookie.
+Only `revoke`, or ninety days, ends that.
+
+**With several instances, neither is immediate.** Data Protection refreshes its
+key ring on a timer and one process's write does not notify another, so a revoke
+takes effect on the instance you ran it against at once and on the others when
+their ring next refreshes.
+
+**The unencrypted-key warning names a key, not a startup.** Data Protection logs
+*"No XML encryptor configured. Key {id} may be persisted to storage in
+unencrypted form."* when it **creates** a key, so an installation running on a
+key made months ago logs nothing at all. The absence of that line is not evidence
+the keys are encrypted — `aj-admin keyring status` is.
 
 ## The published image
 

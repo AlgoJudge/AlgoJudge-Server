@@ -233,6 +233,42 @@ jobs:
             exit 1
           }
 
+      # The key-ring commands, in the image that ships them, and against a live
+      # session — because the whole difference between the two is what happens
+      # to somebody who is signed in. Run last: the revoke ends every session on
+      # the stack, so nothing after it could sign in with what it had.
+      - name: The key-ring commands do what they say
+        run: |
+          compose="docker compose -f example-server-development-docker-compose.yaml"
+          jar=$(mktemp)
+
+          $compose exec -T algojudge aj-admin keyring status | grep -q '"kind":"database"'
+
+          # Refused without the word, and the refusal is not a silent success.
+          if $compose exec -T algojudge aj-admin keyring revoke; then
+            echo "a revoke without --yes was accepted" >&2
+            exit 1
+          fi
+
+          curl -fsS -c "$jar" -o /dev/null -X POST \
+            'http://127.0.0.1:8080/api/v1/identity/login?useSessionCookies=true' \
+            -H 'content-type: application/json' \
+            -d '{"email":"admin","password":"admin-development-only"}'
+
+          # **Rotate keeps everybody signed in.** That is the property that makes
+          # it the safe half of the pair, and it is the one worth pinning.
+          $compose exec -T algojudge aj-admin keyring rotate | grep -q '"isActive":true'
+          code=$(curl -s -b "$jar" -o /dev/null -w '%{http_code}' \
+            http://127.0.0.1:8080/api/v1/account)
+          test "$code" = "200" || { echo "a rotate signed somebody out: $code" >&2; exit 1; }
+
+          # And revoke does not.
+          $compose exec -T algojudge aj-admin keyring revoke --yes 'ci checks the tool' \
+            | grep -q '"reason":"ci checks the tool"'
+          code=$(curl -s -b "$jar" -o /dev/null -w '%{http_code}' \
+            http://127.0.0.1:8080/api/v1/account)
+          test "$code" = "401" || { echo "a revoke left a session working: $code" >&2; exit 1; }
+
       - name: Compose down
         if: always()
         run: docker compose -f example-server-development-docker-compose.yaml down -v

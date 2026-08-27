@@ -124,6 +124,12 @@ namespace AlgoJudge.Server.Authorization
                 protection.UnprotectKeysWithAnyCertificate([.. certificates]);
             }
 
+            // What was decided, kept for the operator's endpoint to report.
+            // Read from here rather than from configuration a second time: two
+            // readers of one setting are two chances to disagree about what is
+            // in force, and this one has already applied it.
+            services.AddSingleton(new KeyRingSettings(kind, certificates));
+
             return kind;
         }
 
