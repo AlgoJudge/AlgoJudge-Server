@@ -25,6 +25,19 @@
     <PackageReference Include="AWSSDK.S3" Version="4.0.102.1" />
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.0" />
+    <!--
+      The Data Protection key ring, in the database this installation already
+      has. See `Authorization/KeyRing.cs` for why it is not left to the
+      framework's default, and `docs/specs/AUTHENTICATION.md` §10 for why it is
+      not Redis.
+
+      **This adds nothing to the dependency closure.** Both halves of it —
+      `Microsoft.AspNetCore.DataProtection` and
+      `Microsoft.EntityFrameworkCore.Relational` — are already pulled by the two
+      references around it. Pinned to 8.0.0 to match them, so the packages that
+      share a schema also share a version.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
     <!--
       The LTI module validates a platform's `id_token` and signs its own client
