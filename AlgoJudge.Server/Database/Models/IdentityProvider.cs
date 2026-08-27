@@ -33,11 +33,19 @@ namespace AlgoJudge.Server.Database.Models
     /// validated rather than documented.
     /// </para>
     /// <para>
-    /// The Server sees a <b>plain OIDC provider</b> and nothing more. That
-    /// Authentik happens to sit behind one of these, and implements the deletion
-    /// channel with an event matcher policy and a webhook, is known only to
-    /// <c>AlgoJudge-Identity</c>. Nothing here may grow a field that only one
-    /// product could fill.
+    /// The Server sees a <b>plain OIDC provider</b> and nothing more.
+    /// <b>Two</b> deployments sit behind these in practice —
+    /// <c>AlgoJudge-Identity-Keycloak</c> and <c>AlgoJudge-Identity-Authentik</c>,
+    /// both supported since 2026-08-26 — and neither is named anywhere in this
+    /// model. That the Authentik one implements the deletion channel with an
+    /// event matcher policy and a webhook, and that the Keycloak one cannot
+    /// implement it at all, is known only to those repositories.
+    /// </para>
+    /// <para>
+    /// Nothing here may grow a field that only one product could fill. Two
+    /// products behind one model is the evidence for that rule rather than an
+    /// exception to it: what differs between them is which of the optional
+    /// switches an operator sets, and every one of those already exists.
     /// </para>
     /// </summary>
     public class IdentityProvider

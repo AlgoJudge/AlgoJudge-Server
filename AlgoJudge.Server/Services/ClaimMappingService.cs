@@ -133,6 +133,12 @@ namespace AlgoJudge.Server.Services
         /// <c>realm_access.roles</c>, Authentik the first under <c>groups</c>,
         /// and an installation should not have to know which.
         /// </para>
+        /// <para>
+        /// Both are driven through a whole sign-in in <c>FederatedSignInTests</c>
+        /// and not only through this method. Until 2026-08-26 the nested shape was
+        /// covered here and nowhere else, so "either provider works" rested on a
+        /// unit test of one function.
+        /// </para>
         /// </summary>
         public IReadOnlyList<string> ValuesAt(ClaimsPrincipal principal, string dottedPath)
         {

@@ -541,6 +541,82 @@ public class FederatedSignInTests(ServerFixture server)
             Assert.Single(after.EnumerateArray()).GetProperty("deletionUrl").GetString());
     }
 
+    /// <summary>
+    /// The whole sign-in, through a provider configured the way a Keycloak
+    /// deployment is: the role list nested under <c>realm_access.roles</c>.
+    /// <para>
+    /// <b>Only <see cref="IClaimMappingService.ValuesAt"/> was covered for that
+    /// shape.</b> Every test that drove a sign-in from end to end used a repeated
+    /// <c>groups</c> claim, so "this Server supports either" rested on a unit
+    /// test of one function and on nothing that provisioned an account. Since
+    /// 2026-08-26 there are two supported identity deployments and this is the
+    /// shape the second one can be configured to emit.
+    /// </para>
+    /// <para>
+    /// Nothing in the Server knows which product is behind a provider, and this
+    /// test is not evidence that it should: what it pins is that a <b>dotted</b>
+    /// claim path works everywhere a flat one does.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_nested_claim_path_provisions_the_account_and_grants_the_mapped_template()
+    {
+        var provider = await NewProviderAsync(
+            "nested",
+            rules: [("algojudge-lecturers", "manager")],
+            claimPath: "realm_access.roles");
+
+        var outcome = await SignInAsync(provider, Token("nested-0001",
+            ("realm_access", """{"roles":["algojudge-lecturers","offline_access"]}"""),
+            ("preferred_username", "a.nowak"),
+            ("given_name", "Anna"),
+            ("family_name", "Nowak"),
+            ("email", "a.nowak@example.invalid"),
+            ("email_verified", "true")));
+
+        Assert.True(outcome.Admitted);
+        Assert.Equal("a.nowak", outcome.User!.UserName);
+        Assert.Null(outcome.User.PasswordHash);
+
+        var contribution = await ContributionAsync(provider, outcome.User.Id);
+        Assert.NotNull(contribution);
+        Assert.Contains("submission:read:all", Parse(contribution!.Permissions));
+
+        // The value beside it in the same array maps to nothing, and mapping
+        // nothing is not the same as mapping everything.
+        Assert.DoesNotContain("system:administrator", Parse(contribution.Permissions));
+    }
+
+    /// <summary>
+    /// And a path that does not match the token's shape maps nobody.
+    /// <para>
+    /// The other half of the test above, because a mapping that succeeded
+    /// whatever the path said would make that one pass for the wrong reason. A
+    /// provider pointed at <c>groups</c> while its issuer emits
+    /// <c>realm_access.roles</c> is a configuration mistake somebody will make
+    /// while moving between the two deployments, and it must fail closed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_path_that_does_not_match_the_token_grants_nothing()
+    {
+        var provider = await NewProviderAsync(
+            "mismatched",
+            rules: [("algojudge-lecturers", "manager")],
+            claimPath: "groups");
+
+        var outcome = await SignInAsync(provider, Token("mismatched-0001",
+            ("realm_access", """{"roles":["algojudge-lecturers"]}"""),
+            ("preferred_username", "b.nowak")));
+
+        Assert.False(outcome.Admitted);
+
+        // And no account was made. `deny` creating one would leave somebody a
+        // login that can never be used.
+        await using var context = server.NewContext();
+        Assert.False(await context.Users.AnyAsync(u => u.UserName == "b.nowak"));
+    }
+
     // ── the plumbing these tests are made of ──────────────────────────────────
 
     private static ClaimsPrincipal Token(string subject, params (string Type, string Value)[] claims)
@@ -561,7 +637,8 @@ public class FederatedSignInTests(ServerFixture server)
         string slug,
         (string Value, string Template)[] rules,
         string? unmapped = null,
-        string? defaultTemplate = null)
+        string? defaultTemplate = null,
+        string claimPath = "groups")
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
@@ -572,7 +649,7 @@ public class FederatedSignInTests(ServerFixture server)
             issuer = $"https://{slug}.example.invalid",
             clientId = "algojudge",
             clientSecret = "secret-for-the-suite",
-            claimPath = "groups",
+            claimPath,
             unmappedBehavior = unmapped,
             defaultTemplateName = defaultTemplate,
             mappingRules = rules.Select(r => new { claimValue = r.Value, templateName = r.Template }),

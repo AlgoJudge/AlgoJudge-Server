@@ -23,9 +23,16 @@ namespace AlgoJudge.Server.Api.Contracts
     /// <para>
     /// **Generic on purpose.** That Authentik produces this with an event
     /// matcher policy and a webhook transport is known only to
-    /// `AlgoJudge-Identity`; the Server sees a plain OIDC provider that may
-    /// report a deletion, and nothing in this shape could only be filled in by
-    /// one product.
+    /// `AlgoJudge-Identity-Authentik`; the Server sees a plain OIDC provider that
+    /// may report a deletion, and nothing in this shape could only be filled in
+    /// by one product.
+    /// <para>
+    /// **The other supported deployment cannot send this at all.** Keycloak has
+    /// no outbound webhook without a third-party extension, so a Keycloak
+    /// provider is registered with its deletion channel off. That costs nothing
+    /// here: the switch is per provider precisely because trusting one directory
+    /// to say "this person is gone" says nothing about another.
+    /// </para>
     /// </para>
     /// </summary>
     public record ProviderDeletionInputDto

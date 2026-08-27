@@ -432,7 +432,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// An absolute HTTPS issuer, with loopback exempted so a development
-        /// Authentik on <c>http://localhost</c> can be registered.
+        /// Authentik or Keycloak on <c>http://localhost</c> can be registered.
         /// <para>
         /// Not decoration: the issuer is half the federated key and the origin
         /// every token is validated against. Over plain HTTP on a real network,
