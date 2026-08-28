@@ -65,7 +65,29 @@ namespace AlgoJudge.Server.Storage
             live.State = StorageMigrationState.Cancelled;
             live.FinishedAt = clock.GetUtcNow().UtcDateTime;
             live.Detail = "called off by an operator";
-            await context.SaveChangesAsync(ct);
+
+            try
+            {
+                await context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException conflict)
+            {
+                // The worker moved it between the read and the write. If it
+                // reached an end state there is nothing left to call off, which
+                // is the same answer as finding none — the operator asked for a
+                // migration to stop and it has.
+                foreach (var entry in conflict.Entries) await entry.ReloadAsync(ct);
+
+                if (live.State is not (StorageMigrationState.Requested or StorageMigrationState.Running))
+                {
+                    return null;
+                }
+
+                throw new ConflictException(
+                    "The migration changed while it was being called off. Ask again.",
+                    "storage.migration.conflict");
+            }
+
             return live;
         }
 

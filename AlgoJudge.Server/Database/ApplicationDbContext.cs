@@ -79,6 +79,7 @@ namespace AlgoJudge.Server.Database
                     "CK_Instance_Singleton",
                     $"\"Id\" = '{Models.Instance.SingletonId}'"));
                 e.Property(i => i.ExternalFetchHosts).HasColumnType("text[]");
+                e.Property(i => i.RowVersion).IsRowVersion();
             });
 
             builder.Entity<Models.AccessKey>(e =>
@@ -99,7 +100,7 @@ namespace AlgoJudge.Server.Database
                 e.ToTable(t => t.HasCheckConstraint(
                     "CK_Maintenance_Singleton",
                     $"\"Id\" = '{Models.MaintenanceState.SingletonId}'"));
-                e.Property(m => m.Version).IsRowVersion();
+                e.Property(m => m.RowVersion).IsRowVersion();
             });
 
             builder.Entity<Activity>(e =>
@@ -142,7 +143,7 @@ namespace AlgoJudge.Server.Database
                 e.HasIndex(s => new { s.ActivityId, s.Slug }).IsUnique();
                 e.Property(s => s.Slug).HasMaxLength(32);
                 e.Property(s => s.Name).HasMaxLength(200);
-                e.Property(s => s.Version).IsRowVersion();
+                e.Property(s => s.RowVersion).IsRowVersion();
                 // Nullable on purpose: null inherits the activity's, an empty
                 // array overrides it back to the default pool.
                 e.Property(s => s.RunnerTags).HasColumnType("text[]");
@@ -308,6 +309,7 @@ namespace AlgoJudge.Server.Database
                 // "Is one running" is asked on every worker tick and by the
                 // operator surface, and the answer is almost always no.
                 e.HasIndex(m => m.State);
+                e.Property(m => m.RowVersion).IsRowVersion();
             });
 
             builder.Entity<FileReference>(e =>
@@ -426,7 +428,7 @@ namespace AlgoJudge.Server.Database
                 // Reporting a trial is idempotent for the same reason a result
                 // is, and by the same mechanism.
                 e.HasIndex(t => t.LeaseToken).IsUnique().HasFilter("\"LeaseToken\" IS NOT NULL");
-                e.Property(t => t.Version).IsRowVersion();
+                e.Property(t => t.RowVersion).IsRowVersion();
                 e.HasOne(t => t.Activity)
                     .WithMany()
                     .HasForeignKey(t => t.ActivityId)
@@ -452,7 +454,7 @@ namespace AlgoJudge.Server.Database
                 // is what makes it so — a repeat finds the row rather than
                 // creating a second one.
                 e.HasIndex(j => j.LeaseToken).IsUnique().HasFilter("\"LeaseToken\" IS NOT NULL");
-                e.Property(j => j.Version).IsRowVersion();
+                e.Property(j => j.RowVersion).IsRowVersion();
                 e.HasOne(j => j.Submission)
                     .WithMany(s => s.Jobs)
                     .HasForeignKey(j => j.SubmissionId)
@@ -692,6 +694,7 @@ namespace AlgoJudge.Server.Database
                 e.Property(r => r.Subject).HasMaxLength(256);
                 e.Property(r => r.RequestId).HasMaxLength(128);
                 e.Property(r => r.Detail).HasMaxLength(512);
+                e.Property(r => r.RowVersion).IsRowVersion();
                 // **What makes the back channel idempotent.** A webhook is
                 // retried on any hiccup; without this a second delivery opens a
                 // second window and the first one having been halted stops
@@ -722,6 +725,7 @@ namespace AlgoJudge.Server.Database
                 e.Property(m => m.MergedByUserId).HasMaxLength(450);
                 e.Property(m => m.UndoneByUserId).HasMaxLength(450);
                 e.Property(m => m.Moved).HasColumnType("jsonb");
+                e.Property(m => m.RowVersion).IsRowVersion();
 
                 // The sweeper's only query: what is due to be anonymised.
                 e.HasIndex(m => new { m.SourceAnonymisedAt, m.AnonymiseAfter });

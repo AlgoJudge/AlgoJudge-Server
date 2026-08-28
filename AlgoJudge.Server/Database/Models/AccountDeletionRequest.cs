@@ -90,5 +90,12 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>A sentence for whoever reads the queue. Never a stack trace.</summary>
         public string? Detail { get; set; }
+
+        /// <summary>
+        /// Optimistic concurrency. Halting checks that the request is still
+        /// <c>Pending</c> and the sweeper checks the same thing before carrying
+        /// it out; the two decisions are made from separate reads of this row.
+        /// </summary>
+        public uint RowVersion { get; set; }
     }
 }

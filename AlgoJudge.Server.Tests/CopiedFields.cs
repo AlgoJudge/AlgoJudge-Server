@@ -100,7 +100,7 @@ public static class CopiedFields
             nameof(Series.StartAnnouncedAt), nameof(Series.EndAnnouncedAt),
             nameof(Series.WindowAnnouncedAt), nameof(Series.UnfrozenAnnouncedAt),
             // The concurrency token of a row that does not exist yet.
-            nameof(Series.Version),
+            nameof(Series.RowVersion),
         ],
         [typeof(SeriesProblem)] =
         [

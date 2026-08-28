@@ -160,5 +160,14 @@ namespace AlgoJudge.Server.Database.Models
         /// policy for real, and by somebody who is owed an answer.
         /// </summary>
         public ICollection<FileReference> Files { get; set; } = new List<FileReference>();
+
+        /// <summary>
+        /// Optimistic concurrency. One row with <b>two writers since
+        /// 2026-08-28</b>: the manager panel, and the pre-configuration read
+        /// from disk. The settings endpoint replaces the whole object, so a save
+        /// that started before an apply finished would put every field back
+        /// without either side being told.
+        /// </summary>
+        public uint RowVersion { get; set; }
     }
 }

@@ -101,7 +101,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <c>SKIP LOCKED</c>; this guards everything else that touches a job —
         /// the reaper, a cancellation and a report arriving at once.
         /// </summary>
-        public uint Version { get; set; }
+        public uint RowVersion { get; set; }
 
         public Result? Result { get; set; }
 

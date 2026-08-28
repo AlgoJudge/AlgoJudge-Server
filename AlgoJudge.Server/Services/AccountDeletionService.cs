@@ -181,11 +181,28 @@ namespace AlgoJudge.Server.Services
                 await CarryOutAsync(request, links, ct);
             }
 
-            if (due.Count > 0)
+            if (due.Count == 0) return 0;
+
+            try
             {
+                // **One save for the batch, which is what makes the token
+                // enough.** `CarryOutAsync` and `AnonymiseAsync` write nothing
+                // of their own; they move tracked entities. So an administrator
+                // who halted a request a moment ago does not merely win a
+                // marker — nothing is written at all, and the account is not
+                // emptied.
                 await context.SaveChangesAsync(ct);
-                log.LogInformation("Carried out {Count} account deletion request(s)", due.Count);
             }
+            catch (DbUpdateConcurrencyException conflict)
+            {
+                foreach (var entry in conflict.Entries) await entry.ReloadAsync(ct);
+                log.LogInformation(
+                    "A deletion request was halted while this sweep was carrying it out; "
+                    + "nothing was written. The next sweep will not select it.");
+                return 0;
+            }
+
+            log.LogInformation("Carried out {Count} account deletion request(s)", due.Count);
             return due.Count;
         }
 
@@ -391,19 +408,27 @@ namespace AlgoJudge.Server.Services
             var request = await context.AccountDeletionRequests.FirstOrDefaultAsync(r => r.Id == id, ct)
                 ?? throw new NotFoundException("Deletion request");
 
-            if (request.State != DeletionState.Pending)
+            // Named so it can be asked twice: once now, and once more if the
+            // sweep carries this request out between the read and the write.
+            void Refuse()
             {
-                // A window that has closed cannot be reopened: what it was
-                // holding has already happened, and saying otherwise would offer
-                // an undo that does not exist.
-                throw new ConflictException(
-                    "This request is no longer waiting and cannot be stopped", "deletion.notPending");
+                if (request.State != DeletionState.Pending)
+                {
+                    // A window that has closed cannot be reopened: what it was
+                    // holding has already happened, and saying otherwise would
+                    // offer an undo that does not exist.
+                    throw new ConflictException(
+                        "This request is no longer waiting and cannot be stopped",
+                        "deletion.notPending");
+                }
             }
+
+            Refuse();
 
             request.State = DeletionState.Halted;
             request.HaltedByUserId = actor.Id;
             request.ResolvedAt = clock.GetUtcNow().UtcDateTime;
-            await context.SaveChangesAsync(ct);
+            await Concurrency.SaveAsync(context, _ => { Refuse(); return Task.CompletedTask; }, ct);
 
             return Project(request);
         }

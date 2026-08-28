@@ -53,7 +53,7 @@ namespace AlgoJudge.Server.Database.Models
         public string? Reason { get; set; }
 
         /// <summary>Optimistic concurrency, as elsewhere: PostgreSQL's `xmin`.</summary>
-        public uint Version { get; set; }
+        public uint RowVersion { get; set; }
     }
 
     /// <summary>

@@ -418,16 +418,25 @@ namespace AlgoJudge.Server.Services
             var merge = await context.AccountMerges.FirstOrDefaultAsync(m => m.Id == mergeId, ct)
                 ?? throw new NotFoundException("Merge");
 
-            if (merge.UndoneAt is not null)
+            // Named so it can be asked twice: once now, and once more if the
+            // write below loses to the sweeper. Both answers are this method's
+            // own, so a lost race is refused in the caller's vocabulary rather
+            // than as a concurrency failure.
+            void Refuse()
             {
-                throw new ConflictException("This merge has already been undone", "merge.undone");
+                if (merge.UndoneAt is not null)
+                {
+                    throw new ConflictException("This merge has already been undone", "merge.undone");
+                }
+                if (merge.SourceAnonymisedAt is not null)
+                {
+                    throw new ConflictException(
+                        "The account this came from has been emptied and cannot be given back",
+                        "merge.window.closed");
+                }
             }
-            if (merge.SourceAnonymisedAt is not null)
-            {
-                throw new ConflictException(
-                    "The account this came from has been emptied and cannot be given back",
-                    "merge.window.closed");
-            }
+
+            Refuse();
 
             var moved = JsonSerializer.Deserialize<MovedRows>(merge.Moved) ?? new MovedRows();
             var source = await context.Users.FirstOrDefaultAsync(u => u.Id == merge.SourceUserId, ct)
@@ -446,7 +455,7 @@ namespace AlgoJudge.Server.Services
             merge.UndoneAt = clock.GetUtcNow().UtcDateTime;
             merge.UndoneByUserId = manager.Id;
 
-            await context.SaveChangesAsync(ct);
+            await Concurrency.SaveAsync(context, _ => { Refuse(); return Task.CompletedTask; }, ct);
             await transaction.CommitAsync(ct);
 
             await AnnounceAsync(
@@ -585,7 +594,26 @@ namespace AlgoJudge.Server.Services
                 emptied++;
             }
 
-            await context.SaveChangesAsync(ct);
+            try
+            {
+                // **One save for the whole sweep, and that is what makes the
+                // token enough here.** `AnonymiseAsync` writes nothing of its
+                // own — it moves tracked entities — so the emptying and the
+                // marker land together or not at all. An undo that committed
+                // first therefore does not merely lose a marker: it stops the
+                // account from being emptied, which is the outcome it was
+                // asking for.
+                await context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException conflict)
+            {
+                foreach (var entry in conflict.Entries) await entry.ReloadAsync(ct);
+                log.LogInformation(
+                    "A merge was undone while this sweep was emptying it; nothing was written. "
+                    + "The next sweep will not select it.");
+                return 0;
+            }
+
             return emptied;
         }
     }

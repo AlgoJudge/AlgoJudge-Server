@@ -839,17 +839,33 @@ namespace AlgoJudge.Server.Services
             var runner = await context.Runners.FirstOrDefaultAsync(r => r.Id == id, ct)
                 ?? throw new NotFoundException("Runner");
 
-            // Revocation is permanent, so there is nothing to approve back into.
-            if (runner.State == RunnerState.Revoked)
+            // **Compare and set, rather than read and then write.** Revocation
+            // is permanent, so an approval must not land on a Runner somebody
+            // revoked in between — and the condition rides the statement, so
+            // there is no window between the two.
+            //
+            // Not an optimistic-concurrency token, which is what the rest of
+            // this change uses: `Runners` cannot carry one. `LastSeenAt` is
+            // written on every claim, renewal and report, so a token here would
+            // make a Runner collide with itself on ordinary traffic.
+            var now = clock.GetUtcNow().UtcDateTime;
+            var approver = currentUser.UserId;
+
+            var approvals = await context.Runners
+                .Where(r => r.Id == id && r.State != RunnerState.Revoked)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(r => r.State, RunnerState.Approved)
+                    .SetProperty(r => r.ApprovedAt, now)
+                    .SetProperty(r => r.ApprovedByUserId, approver), ct);
+
+            if (approvals == 0)
             {
                 throw new ConflictException(
                     "A revoked Runner cannot be approved; it must register again", "runner.revoked");
             }
 
-            runner.State = RunnerState.Approved;
-            runner.ApprovedAt = clock.GetUtcNow().UtcDateTime;
-            runner.ApprovedByUserId = currentUser.UserId;
-            await context.SaveChangesAsync(ct);
+            // The statement above does not touch what this context is tracking.
+            await context.Entry(runner).ReloadAsync(ct);
 
             var projectedRunner = await ProjectRunnerAsync(runner, ct);
             await AnnounceRunnerAsync(projectedRunner, null, ct);
@@ -888,7 +904,10 @@ namespace AlgoJudge.Server.Services
                 job.ClaimedAt = null;
             }
 
-            await context.SaveChangesAsync(ct);
+            // The Runner and every job it held move together, so a Runner
+            // somebody else has just touched — or a job the reaper took back
+            // first — stops this whole write rather than half of it.
+            await Concurrency.SaveAsync(context, ct);
             foreach (var job in held) await submissions.AnnounceAsync(job.SubmissionId, ct);
 
             var projectedRunner = await ProjectRunnerAsync(runner, ct);
