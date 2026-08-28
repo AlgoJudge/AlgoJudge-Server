@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AlgoJudge.Server.Lti.Migrations
 {
     /// <inheritdoc />
-    public partial class LtiModule : Migration
+    public partial class LtiInitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -26,6 +26,25 @@ namespace AlgoJudge.Server.Lti.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_LtiLaunchStates", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "LtiLaunchTickets",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Ticket = table.Column<string>(type: "text", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ResourceLinkId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Locale = table.Column<string>(type: "text", nullable: true),
+                    Embedded = table.Column<bool>(type: "boolean", nullable: false),
+                    ReturnUrl = table.Column<string>(type: "text", nullable: true),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LtiLaunchTickets", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -53,6 +72,37 @@ namespace AlgoJudge.Server.Lti.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "LtiRegistrationInvitations",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Code = table.Column<string>(type: "text", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "text", nullable: false),
+                    Note = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UsedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    PlatformId = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LtiRegistrationInvitations", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "LtiSettings",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AccountCreationEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LtiSettings", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "LtiToolKeys",
                 columns: table => new
                 {
@@ -66,6 +116,36 @@ namespace AlgoJudge.Server.Lti.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_LtiToolKeys", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "LtiDeepLinkSessions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Code = table.Column<string>(type: "text", nullable: false),
+                    PlatformId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ContextId = table.Column<string>(type: "text", nullable: false),
+                    ContextTitle = table.Column<string>(type: "text", nullable: true),
+                    ReturnUrl = table.Column<string>(type: "text", nullable: false),
+                    Data = table.Column<string>(type: "text", nullable: true),
+                    AcceptMultiple = table.Column<bool>(type: "boolean", nullable: false),
+                    Locale = table.Column<string>(type: "text", nullable: true),
+                    Embedded = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UsedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LtiDeepLinkSessions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LtiDeepLinkSessions_LtiPlatforms_PlatformId",
+                        column: x => x.PlatformId,
+                        principalTable: "LtiPlatforms",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -104,6 +184,8 @@ namespace AlgoJudge.Server.Lti.Migrations
                     ContextHistory = table.Column<string>(type: "text", nullable: true),
                     ActivityId = table.Column<Guid>(type: "uuid", nullable: false),
                     SeriesId = table.Column<Guid>(type: "uuid", nullable: true),
+                    AgsLineItemsUrl = table.Column<string>(type: "text", nullable: true),
+                    NrpsMembershipsUrl = table.Column<string>(type: "text", nullable: true),
                     Aggregation = table.Column<int>(type: "integer", nullable: false),
                     SharingAcknowledged = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
@@ -172,6 +254,17 @@ namespace AlgoJudge.Server.Lti.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_LtiDeepLinkSessions_Code",
+                table: "LtiDeepLinkSessions",
+                column: "Code",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LtiDeepLinkSessions_PlatformId",
+                table: "LtiDeepLinkSessions",
+                column: "PlatformId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_LtiExternalIdentities_PlatformId_Subject",
                 table: "LtiExternalIdentities",
                 columns: new[] { "PlatformId", "Subject" },
@@ -206,6 +299,17 @@ namespace AlgoJudge.Server.Lti.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_LtiLaunchTickets_ExpiresAt",
+                table: "LtiLaunchTickets",
+                column: "ExpiresAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LtiLaunchTickets_Ticket",
+                table: "LtiLaunchTickets",
+                column: "Ticket",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_LtiLineItems_ResourceLinkId_SeriesProblemId",
                 table: "LtiLineItems",
                 columns: new[] { "ResourceLinkId", "SeriesProblemId" },
@@ -221,6 +325,12 @@ namespace AlgoJudge.Server.Lti.Migrations
                 name: "IX_LtiPlatforms_ProviderId",
                 table: "LtiPlatforms",
                 column: "ProviderId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LtiRegistrationInvitations_Code",
+                table: "LtiRegistrationInvitations",
+                column: "Code",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -245,6 +355,9 @@ namespace AlgoJudge.Server.Lti.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "LtiDeepLinkSessions");
+
+            migrationBuilder.DropTable(
                 name: "LtiExternalIdentities");
 
             migrationBuilder.DropTable(
@@ -252,6 +365,15 @@ namespace AlgoJudge.Server.Lti.Migrations
 
             migrationBuilder.DropTable(
                 name: "LtiLaunchStates");
+
+            migrationBuilder.DropTable(
+                name: "LtiLaunchTickets");
+
+            migrationBuilder.DropTable(
+                name: "LtiRegistrationInvitations");
+
+            migrationBuilder.DropTable(
+                name: "LtiSettings");
 
             migrationBuilder.DropTable(
                 name: "LtiToolKeys");

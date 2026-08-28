@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Lti.Migrations
 {
     [DbContext(typeof(LtiDbContext))]
-    [Migration("20260813213625_LtiSettings")]
-    partial class LtiSettings
+    [Migration("20260828201801_LtiInitialCreate")]
+    partial class LtiInitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,6 +24,65 @@ namespace AlgoJudge.Server.Lti.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("AlgoJudge.Server.Lti.Data.DeepLinkSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AcceptMultiple")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContextId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContextTitle")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Embedded")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Locale")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PlatformId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReturnUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("PlatformId");
+
+                    b.ToTable("LtiDeepLinkSessions", (string)null);
+                });
 
             modelBuilder.Entity("AlgoJudge.Server.Lti.Data.ExternalIdentity", b =>
                 {
@@ -157,6 +216,48 @@ namespace AlgoJudge.Server.Lti.Migrations
                     b.ToTable("LtiLaunchStates", (string)null);
                 });
 
+            modelBuilder.Entity("AlgoJudge.Server.Lti.Data.LaunchTicket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Embedded")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Locale")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ResourceLinkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReturnUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Ticket")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("Ticket")
+                        .IsUnique();
+
+                    b.ToTable("LtiLaunchTickets", (string)null);
+                });
+
             modelBuilder.Entity("AlgoJudge.Server.Lti.Data.LineItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -268,6 +369,43 @@ namespace AlgoJudge.Server.Lti.Migrations
                     b.ToTable("LtiPlatforms", (string)null);
                 });
 
+            modelBuilder.Entity("AlgoJudge.Server.Lti.Data.RegistrationInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("PlatformId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("LtiRegistrationInvitations", (string)null);
+                });
+
             modelBuilder.Entity("AlgoJudge.Server.Lti.Data.ResourceLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -279,6 +417,9 @@ namespace AlgoJudge.Server.Lti.Migrations
 
                     b.Property<int>("Aggregation")
                         .HasColumnType("integer");
+
+                    b.Property<string>("AgsLineItemsUrl")
+                        .HasColumnType("text");
 
                     b.Property<string>("ContextHistory")
                         .HasColumnType("text");
@@ -292,6 +433,9 @@ namespace AlgoJudge.Server.Lti.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NrpsMembershipsUrl")
+                        .HasColumnType("text");
 
                     b.Property<Guid>("PlatformId")
                         .HasColumnType("uuid");
@@ -346,6 +490,17 @@ namespace AlgoJudge.Server.Lti.Migrations
                         .IsUnique();
 
                     b.ToTable("LtiToolKeys", (string)null);
+                });
+
+            modelBuilder.Entity("AlgoJudge.Server.Lti.Data.DeepLinkSession", b =>
+                {
+                    b.HasOne("AlgoJudge.Server.Lti.Data.Platform", "Platform")
+                        .WithMany()
+                        .HasForeignKey("PlatformId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Platform");
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Lti.Data.ExternalIdentity", b =>

@@ -341,6 +341,38 @@ After cloning, inspect the solution and project files, then document:
     applied anywhere; the rename contributes nothing at all, because only the
     property name changed.
 
+- **The schema is one migration per context** (2026-08-28), squashed before
+  0.1.0 while no installation had a database to carry forward. Thirty-one
+  migrations became `InitialCreate`, seven became `LtiInitialCreate`.
+  - **One block is hand-written, and a regeneration loses it.** `FileContents`,
+    at the end of `InitialCreate`: it is not an EF entity — the postgres blob
+    store reads and writes it with raw SQL — so `dotnet ef migrations add` does
+    not produce it, and neither the table nor its `SET STORAGE EXTERNAL` comes
+    back on its own. `FileStorageSchemaTests` is the guard; proved by deleting
+    that one `ALTER TABLE` line and watching `attstorage` go from `e` to `x`.
+  - **Everything else the old chain carried was backfill** — rewriting rows a new
+    database does not have — or shaped a column into what the model already
+    declares, such as the `inet` conversion of `UserSessions.IpAddress`.
+  - **Eleven database defaults were dropped on purpose, and must not be put
+    back.** They were scaffolding from `AddColumn(defaultValue: …)`, never in
+    the model, and each is matched by a CLR initializer. Declaring them with
+    `HasDefaultValue` would be worse than losing them: EF omits a property whose
+    value equals the CLR default, so an explicit `ShowLocalSignIn = false` would
+    be stored as `true`.
+  - **A database from before the squash cannot cross it**: its history names
+    migrations that no longer exist, so the next start tries to create tables
+    that are already there. Development stacks are disposable — `down -v`.
+  - **Verified by diffing two schemas**, not by reading the generated file: the
+    full old chain and the squashed pair were applied to two databases and
+    `pg_dump --schema-only` compared. Once column order is normalised the only
+    differences are the eleven defaults above.
+  - **It found a stale snapshot.** `ApplicationDbContextModelSnapshot.cs` still
+    declared `Runner.RowVersion` — the token that was tried and taken off the
+    same day — because removing a property does not regenerate the snapshot.
+    Nothing read it at run time, but the next `migrations add` would have opened
+    with a drop of a system column. **Regenerate the snapshot after removing a
+    mapped property**, or the next migration carries the ghost.
+
 ## Layout
 
 The frontend is in

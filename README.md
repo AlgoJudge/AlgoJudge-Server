@@ -33,7 +33,7 @@ always used `Problem`; only the documentation lagged.
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Background work | **six hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the file collector, the storage migrator |
 | Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage` and `/admin/keyring` behind loopback and a token |
-| Schema | **29 migrations**, the earliest `20260807222825_InitialCreate` — this line said 13 until 2026-08-24, and had been wrong since some time in the twenties |
+| Schema | **one migration per context**, squashed on 2026-08-28 before 0.1.0 — thirty-one and seven became `InitialCreate` and `LtiInitialCreate`. This line said 13 until 2026-08-24 and 29 until the squash, and had been wrong for most of the twenties |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
 **Twenty-seven `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:
@@ -626,7 +626,34 @@ startup. Outside Development it refuses to start while migrations are pending.
 
 ```bash
 dotnet ef database update --project AlgoJudge.Server
+dotnet ef database update --project AlgoJudge.Server --context LtiDbContext
 ```
+
+**Two contexts, two histories.** `ApplicationDbContext` keeps its migrations in
+`Database/Migrations` and its history in `__EFMigrationsHistory`; the LTI module
+keeps its own in `Lti/Migrations` and `__EFMigrationsHistory_Lti`, and applies
+them itself (`Lti/LtiModule.cs`). A command that names no context gets the first.
+
+**Squashed to one each on 2026-08-28**, before 0.1.0 and therefore before any
+installation had a database to carry forward. What the old chain carried and
+these do not is its backfills — every one of them rewrote rows that a new
+database does not have.
+
+**A database created before the squash cannot be migrated across it.** Its
+`__EFMigrationsHistory` names thirty-one migrations that no longer exist, and
+`InitialCreate` is not among them, so the next start tries to create tables that
+are already there. Development stacks are disposable, so the answer is to drop
+the volume:
+
+```bash
+docker compose -f example-server-development-docker-compose.yaml down -v
+```
+
+**One block in `InitialCreate` is written by hand** and is not generated from the
+model: `FileContents`, which the postgres blob store reads with raw SQL and which
+is not an EF entity. `FileStorageSchemaTests` fails if it goes — including if it
+survives without `SET STORAGE EXTERNAL`, which was checked by removing exactly
+that line.
 
 ## Contributing
 
@@ -642,7 +669,8 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**109 tests, 24 seconds** on the machine this was last run on.
+**638 tests, 4 m 32 s** on the machine this was last run on, two skipped where
+no object store is configured.
 
 CI adds two jobs beside that one: the container image is built, and the
 development stack is brought up and asserted against — that the API answers under

@@ -1109,12 +1109,6 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<string>("RevokedReason")
                         .HasColumnType("text");
 
-                    b.Property<uint>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.Property<int>("State")
                         .HasColumnType("integer");
 
