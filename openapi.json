@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.1",
+  "openapi": "3.0.4",
   "info": {
     "title": "AlgoJudge.Server",
     "version": "1.0"
@@ -17,7 +17,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -83,7 +83,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -154,7 +154,7 @@
             "description": "No Content"
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -183,7 +183,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -241,7 +241,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -275,7 +275,7 @@
             "description": "No Content"
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -323,7 +323,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -390,7 +390,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -468,7 +468,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -527,7 +527,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -679,7 +679,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -814,7 +814,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -899,7 +899,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1040,7 +1040,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1145,7 +1145,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1221,7 +1221,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1320,7 +1320,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1452,7 +1452,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1527,7 +1527,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1575,7 +1575,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1709,7 +1709,7 @@
             }
           },
           "413": {
-            "description": "Client Error",
+            "description": "Content Too Large",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1729,7 +1729,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1787,7 +1787,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1845,7 +1845,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1920,7 +1920,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1965,7 +1965,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2010,7 +2010,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2215,7 +2215,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2244,7 +2244,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2264,7 +2264,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2313,7 +2313,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2333,7 +2333,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2382,7 +2382,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2451,7 +2451,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2516,7 +2516,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2536,7 +2536,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2604,7 +2604,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2644,7 +2644,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2673,7 +2673,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2789,7 +2789,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2843,11 +2843,12 @@
                 "$ref": "#/components/schemas/RegisterRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "400": {
             "description": "Bad Request",
@@ -2890,11 +2891,12 @@
                 "$ref": "#/components/schemas/LoginRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2918,11 +2920,12 @@
                 "$ref": "#/components/schemas/RefreshRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2944,6 +2947,7 @@
           {
             "name": "userId",
             "in": "query",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -2951,6 +2955,7 @@
           {
             "name": "code",
             "in": "query",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -2965,7 +2970,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -2982,11 +2987,12 @@
                 "$ref": "#/components/schemas/ResendConfirmationEmailRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -3003,11 +3009,12 @@
                 "$ref": "#/components/schemas/ForgotPasswordRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "400": {
             "description": "Bad Request",
@@ -3034,11 +3041,12 @@
                 "$ref": "#/components/schemas/ResetPasswordRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "400": {
             "description": "Bad Request",
@@ -3065,11 +3073,12 @@
                 "$ref": "#/components/schemas/TwoFactorRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3101,7 +3110,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3136,11 +3145,12 @@
                 "$ref": "#/components/schemas/InfoRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3202,7 +3212,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3240,7 +3250,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3300,7 +3310,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3359,7 +3369,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3399,7 +3409,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3465,7 +3475,7 @@
         ],
         "responses": {
           "302": {
-            "description": "Redirect"
+            "description": "Found"
           },
           "404": {
             "description": "Not Found",
@@ -3514,7 +3524,7 @@
         ],
         "responses": {
           "302": {
-            "description": "Redirect"
+            "description": "Found"
           }
         }
       }
@@ -3585,7 +3595,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3657,7 +3667,7 @@
             }
           },
           "413": {
-            "description": "Client Error",
+            "description": "Content Too Large",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3677,7 +3687,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3717,10 +3727,10 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "206": {
-            "description": "Success"
+            "description": "Partial Content"
           },
           "304": {
             "description": "Not Modified"
@@ -3746,7 +3756,7 @@
             }
           },
           "503": {
-            "description": "Server Error",
+            "description": "Service Unavailable",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3786,7 +3796,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3875,7 +3885,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3921,7 +3931,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3993,7 +4003,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4022,7 +4032,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4077,7 +4087,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4117,7 +4127,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4157,7 +4167,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4234,7 +4244,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4274,7 +4284,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4344,7 +4354,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4390,7 +4400,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4419,7 +4429,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4486,7 +4496,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4534,7 +4544,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4583,7 +4593,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4629,7 +4639,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4677,7 +4687,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4735,7 +4745,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4772,7 +4782,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4809,7 +4819,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4857,7 +4867,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4935,7 +4945,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4975,7 +4985,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5004,7 +5014,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5042,7 +5052,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5133,7 +5143,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -5145,7 +5155,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       },
@@ -5155,7 +5165,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -5167,7 +5177,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -5190,7 +5200,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5270,7 +5280,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5349,7 +5359,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5398,7 +5408,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5465,7 +5475,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5525,7 +5535,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "404": {
             "description": "Not Found",
@@ -5587,7 +5597,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5656,7 +5666,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5711,7 +5721,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5751,7 +5761,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5791,7 +5801,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5868,7 +5878,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5908,7 +5918,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5989,7 +5999,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6061,7 +6071,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           }
         }
       }
@@ -6073,7 +6083,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6128,7 +6138,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6219,7 +6229,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6268,7 +6278,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6350,7 +6360,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6431,7 +6441,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6460,7 +6470,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6508,7 +6518,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6567,7 +6577,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6660,7 +6670,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6719,7 +6729,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6778,7 +6788,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6902,7 +6912,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6942,7 +6952,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7021,7 +7031,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7080,7 +7090,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7222,7 +7232,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7262,7 +7272,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7302,7 +7312,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7351,7 +7361,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7430,7 +7440,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7459,7 +7469,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7573,7 +7583,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7643,7 +7653,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7691,7 +7701,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7729,7 +7739,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7778,7 +7788,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7855,7 +7865,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7955,7 +7965,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8054,7 +8064,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8094,7 +8104,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8180,7 +8190,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8229,7 +8239,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8287,7 +8297,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "404": {
             "description": "Not Found",
@@ -8358,7 +8368,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8483,7 +8493,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8551,7 +8561,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8619,7 +8629,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8687,7 +8697,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8755,7 +8765,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8826,7 +8836,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8908,7 +8918,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9007,7 +9017,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9086,7 +9096,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9197,7 +9207,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9299,7 +9309,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "OK"
           },
           "404": {
             "description": "Not Found",
@@ -9374,7 +9384,7 @@
             }
           },
           "413": {
-            "description": "Client Error",
+            "description": "Content Too Large",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9394,7 +9404,7 @@
             }
           },
           "422": {
-            "description": "Client Error",
+            "description": "Unprocessable Content",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9625,7 +9635,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9804,7 +9814,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9863,7 +9873,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9942,7 +9952,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10021,7 +10031,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10061,7 +10071,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10124,7 +10134,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10204,7 +10214,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10262,7 +10272,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10385,7 +10395,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10500,7 +10510,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10558,7 +10568,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10616,7 +10626,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10674,7 +10684,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10714,7 +10724,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10753,7 +10763,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10792,7 +10802,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10831,7 +10841,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10866,6 +10876,10 @@
   "components": {
     "schemas": {
       "AccessKeyDto": {
+        "required": [
+          "name",
+          "updatedAt"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -10880,6 +10894,9 @@
         "additionalProperties": false
       },
       "AccessKeyInputDto": {
+        "required": [
+          "value"
+        ],
         "type": "object",
         "properties": {
           "value": {
@@ -10890,6 +10907,10 @@
         "additionalProperties": false
       },
       "AccessKeyValueDto": {
+        "required": [
+          "name",
+          "value"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -10908,6 +10929,11 @@
         "additionalProperties": false
       },
       "AccessTokenResponse": {
+        "required": [
+          "accessToken",
+          "expiresIn",
+          "refreshToken"
+        ],
         "type": "object",
         "properties": {
           "tokenType": {
@@ -10931,6 +10957,11 @@
         "additionalProperties": false
       },
       "AccountLinkDto": {
+        "required": [
+          "displayName",
+          "linkedAt",
+          "providerSlug"
+        ],
         "type": "object",
         "properties": {
           "providerSlug": {
@@ -10957,6 +10988,15 @@
         "additionalProperties": false
       },
       "AccountMergeDto": {
+        "required": [
+          "anonymiseAfter",
+          "canUndo",
+          "id",
+          "mergedAt",
+          "mergedByUserId",
+          "sourceUserId",
+          "targetUserId"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -10998,6 +11038,12 @@
         "additionalProperties": false
       },
       "ActivityDocumentRefDto": {
+        "required": [
+          "fileId",
+          "kind",
+          "sha256",
+          "sizeBytes"
+        ],
         "type": "object",
         "properties": {
           "kind": {
@@ -11032,6 +11078,21 @@
         "additionalProperties": false
       },
       "ActivityDto": {
+        "required": [
+          "documents",
+          "hideEndedSeriesProblems",
+          "id",
+          "joinPolicy",
+          "membership",
+          "modules",
+          "name",
+          "rankingType",
+          "scoreVisibility",
+          "slug",
+          "state",
+          "timeZone",
+          "type"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -11118,6 +11179,12 @@
         "additionalProperties": false
       },
       "ActivityDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -11143,6 +11210,15 @@
         "additionalProperties": false
       },
       "ActivityGroupDto": {
+        "required": [
+          "activityId",
+          "createdAt",
+          "id",
+          "isSystem",
+          "memberCount",
+          "name",
+          "submissionCount"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -11180,6 +11256,9 @@
         "additionalProperties": false
       },
       "ActivityGroupInputDto": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -11197,6 +11276,13 @@
         "additionalProperties": false
       },
       "ActivityInputDto": {
+        "required": [
+          "name",
+          "rankingType",
+          "slug",
+          "timeZone",
+          "type"
+        ],
         "type": "object",
         "properties": {
           "slug": {
@@ -11290,6 +11376,9 @@
         "additionalProperties": false
       },
       "ActivityModulesDto": {
+        "required": [
+          "questions"
+        ],
         "type": "object",
         "properties": {
           "questions": {
@@ -11299,6 +11388,11 @@
         "additionalProperties": false
       },
       "ActivityResultsDto": {
+        "required": [
+          "contestants",
+          "results",
+          "series"
+        ],
         "type": "object",
         "properties": {
           "series": {
@@ -11330,6 +11424,9 @@
         "additionalProperties": false
       },
       "AddressRuleDto": {
+        "required": [
+          "network"
+        ],
         "type": "object",
         "properties": {
           "network": {
@@ -11344,6 +11441,9 @@
         "additionalProperties": false
       },
       "AdminPasswordDto": {
+        "required": [
+          "username"
+        ],
         "type": "object",
         "properties": {
           "username": {
@@ -11354,6 +11454,9 @@
         "additionalProperties": false
       },
       "AdminPasswordInputDto": {
+        "required": [
+          "password"
+        ],
         "type": "object",
         "properties": {
           "password": {
@@ -11364,6 +11467,10 @@
         "additionalProperties": false
       },
       "AnnouncementInputDto": {
+        "required": [
+          "body",
+          "topic"
+        ],
         "type": "object",
         "properties": {
           "topic": {
@@ -11382,6 +11489,9 @@
         "additionalProperties": false
       },
       "AnswerInputDto": {
+        "required": [
+          "body"
+        ],
         "type": "object",
         "properties": {
           "body": {
@@ -11396,6 +11506,9 @@
         "additionalProperties": false
       },
       "ArchivedInputDto": {
+        "required": [
+          "archived"
+        ],
         "type": "object",
         "properties": {
           "archived": {
@@ -11405,6 +11518,10 @@
         "additionalProperties": false
       },
       "AskQuestionInputDto": {
+        "required": [
+          "body",
+          "topic"
+        ],
         "type": "object",
         "properties": {
           "topic": {
@@ -11427,6 +11544,11 @@
         "additionalProperties": false
       },
       "AttachToJobDto": {
+        "required": [
+          "fileId",
+          "leaseToken",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "leaseToken": {
@@ -11445,6 +11567,10 @@
         "additionalProperties": false
       },
       "AttachToSelfDto": {
+        "required": [
+          "fileId",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "fileId": {
@@ -11459,6 +11585,13 @@
         "additionalProperties": false
       },
       "AttachmentDto": {
+        "required": [
+          "mimeType",
+          "name",
+          "sha256",
+          "sizeBytes",
+          "url"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -11485,6 +11618,10 @@
         "additionalProperties": false
       },
       "AttachmentRuleDto": {
+        "required": [
+          "name",
+          "visibility"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -11499,6 +11636,9 @@
         "additionalProperties": false
       },
       "BlockedInputDto": {
+        "required": [
+          "blocked"
+        ],
         "type": "object",
         "properties": {
           "blocked": {
@@ -11512,6 +11652,10 @@
         "additionalProperties": false
       },
       "BulkUserInputDto": {
+        "required": [
+          "count",
+          "prefix"
+        ],
         "type": "object",
         "properties": {
           "prefix": {
@@ -11548,6 +11692,10 @@
         "additionalProperties": false
       },
       "ChangePasswordInputDto": {
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
         "type": "object",
         "properties": {
           "currentPassword": {
@@ -11562,6 +11710,9 @@
         "additionalProperties": false
       },
       "ClaimInput": {
+        "required": [
+          "ticket"
+        ],
         "type": "object",
         "properties": {
           "ticket": {
@@ -11583,6 +11734,18 @@
         "additionalProperties": false
       },
       "ClaimedJobDto": {
+        "required": [
+          "attempt",
+          "files",
+          "jobId",
+          "leaseExpiresAt",
+          "leaseToken",
+          "packageFileId",
+          "packageSha256",
+          "problemType",
+          "problemVersionId",
+          "submissionId"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
@@ -11641,6 +11804,14 @@
         "additionalProperties": false
       },
       "ClaimedTrialDto": {
+        "required": [
+          "leaseExpiresAt",
+          "leaseToken",
+          "packageFileId",
+          "packageSha256",
+          "problemType",
+          "trialId"
+        ],
         "type": "object",
         "properties": {
           "trialId": {
@@ -11671,6 +11842,11 @@
         "additionalProperties": false
       },
       "ContestantDto": {
+        "required": [
+          "id",
+          "kind",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -11700,6 +11876,14 @@
         "additionalProperties": false
       },
       "ContestantResultDto": {
+        "required": [
+          "contestantId",
+          "id",
+          "problemId",
+          "problemSlug",
+          "seriesId",
+          "submittedAt"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -11760,6 +11944,11 @@
         "additionalProperties": false
       },
       "CreatedCredentialDto": {
+        "required": [
+          "password",
+          "userId",
+          "username"
+        ],
         "type": "object",
         "properties": {
           "userId": {
@@ -11778,6 +11967,11 @@
         "additionalProperties": false
       },
       "DeepLinkCandidate": {
+        "required": [
+          "id",
+          "name",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -11809,6 +12003,10 @@
         "additionalProperties": false
       },
       "DeepLinkResponseView": {
+        "required": [
+          "jwt",
+          "returnUrl"
+        ],
         "type": "object",
         "properties": {
           "returnUrl": {
@@ -11823,6 +12021,12 @@
         "additionalProperties": false
       },
       "DeepLinkView": {
+        "required": [
+          "acceptMultiple",
+          "activities",
+          "contextTitle",
+          "embedded"
+        ],
         "type": "object",
         "properties": {
           "contextTitle": {
@@ -11850,6 +12054,9 @@
         "additionalProperties": false
       },
       "DeleteAccountInputDto": {
+        "required": [
+          "password"
+        ],
         "type": "object",
         "properties": {
           "password": {
@@ -11860,6 +12067,13 @@
         "additionalProperties": false
       },
       "DeletionRequestDto": {
+        "required": [
+          "channel",
+          "executeAfter",
+          "id",
+          "requestedAt",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -11910,6 +12124,12 @@
         "additionalProperties": false
       },
       "DeletionRequestDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -11949,6 +12169,9 @@
         "additionalProperties": false
       },
       "DuplicateSeriesDto": {
+        "required": [
+          "startsAt"
+        ],
         "type": "object",
         "properties": {
           "targetActivityId": {
@@ -11982,6 +12205,13 @@
         "additionalProperties": false
       },
       "EvaluationAttemptDto": {
+        "required": [
+          "attempt",
+          "files",
+          "id",
+          "startedAt",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -12027,6 +12257,9 @@
         "additionalProperties": false
       },
       "ExcludedInputDto": {
+        "required": [
+          "excluded"
+        ],
         "type": "object",
         "properties": {
           "excluded": {
@@ -12040,6 +12273,10 @@
         "additionalProperties": false
       },
       "ExternalContentDto": {
+        "required": [
+          "enabled",
+          "hosts"
+        ],
         "type": "object",
         "properties": {
           "enabled": {
@@ -12056,6 +12293,9 @@
         "additionalProperties": false
       },
       "ExternalContentInputDto": {
+        "required": [
+          "hosts"
+        ],
         "type": "object",
         "properties": {
           "hosts": {
@@ -12069,6 +12309,9 @@
         "additionalProperties": false
       },
       "FetchFileInputDto": {
+        "required": [
+          "url"
+        ],
         "type": "object",
         "properties": {
           "url": {
@@ -12079,6 +12322,9 @@
         "additionalProperties": false
       },
       "ForgotPasswordRequest": {
+        "required": [
+          "email"
+        ],
         "type": "object",
         "properties": {
           "email": {
@@ -12089,6 +12335,14 @@
         "additionalProperties": false
       },
       "GradeSummary": {
+        "required": [
+          "deferred",
+          "failed",
+          "pending",
+          "synchronised",
+          "total",
+          "withheld"
+        ],
         "type": "object",
         "properties": {
           "total": {
@@ -12128,6 +12382,19 @@
         "additionalProperties": false
       },
       "GrantDto": {
+        "required": [
+          "createdAt",
+          "id",
+          "isSystem",
+          "managed",
+          "overrideSystem",
+          "permissions",
+          "source",
+          "state",
+          "userId",
+          "userLogin",
+          "userName"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -12206,6 +12473,12 @@
         "additionalProperties": false
       },
       "GrantDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -12241,6 +12514,10 @@
         "additionalProperties": false
       },
       "GrantInputDto": {
+        "required": [
+          "permissions",
+          "userId"
+        ],
         "type": "object",
         "properties": {
           "userId": {
@@ -12278,6 +12555,10 @@
         "additionalProperties": false
       },
       "HealthDto": {
+        "required": [
+          "status",
+          "storage"
+        ],
         "type": "object",
         "properties": {
           "status": {
@@ -12342,6 +12623,24 @@
         "additionalProperties": { }
       },
       "IdentityProviderDto": {
+        "required": [
+          "callbackPath",
+          "claimPath",
+          "clientId",
+          "createdAt",
+          "deletionChannelEnabled",
+          "displayName",
+          "enabled",
+          "hasClientSecret",
+          "hasDeletionSecret",
+          "id",
+          "issuer",
+          "linkedAccounts",
+          "mappingRules",
+          "scopes",
+          "slug",
+          "unmappedBehavior"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -12423,6 +12722,12 @@
         "additionalProperties": false
       },
       "IdentityProviderInputDto": {
+        "required": [
+          "clientId",
+          "displayName",
+          "issuer",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "slug": {
@@ -12508,6 +12813,10 @@
         "additionalProperties": false
       },
       "InfoResponse": {
+        "required": [
+          "email",
+          "isEmailConfirmed"
+        ],
         "type": "object",
         "properties": {
           "email": {
@@ -12521,6 +12830,13 @@
         "additionalProperties": false
       },
       "InstanceDocumentRefDto": {
+        "required": [
+          "fileId",
+          "isTemplate",
+          "kind",
+          "sha256",
+          "sizeBytes"
+        ],
         "type": "object",
         "properties": {
           "kind": {
@@ -12558,6 +12874,18 @@
         "additionalProperties": false
       },
       "InstanceInfoDto": {
+        "required": [
+          "accountDeletionEnabled",
+          "documents",
+          "externalJudgingEnabled",
+          "localRegistrationEnabled",
+          "providers",
+          "requireConfirmedEmail",
+          "requireEmail",
+          "seriesRestrictionsEnabled",
+          "showLocalSignIn",
+          "showLogo"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -12616,6 +12944,12 @@
         "additionalProperties": false
       },
       "InstanceLogoDto": {
+        "required": [
+          "mimeType",
+          "sha256",
+          "sizeBytes",
+          "url"
+        ],
         "type": "object",
         "properties": {
           "url": {
@@ -12652,6 +12986,14 @@
         "additionalProperties": false
       },
       "InstanceSettingsInputDto": {
+        "required": [
+          "accountDeletionEnabled",
+          "localRegistrationEnabled",
+          "requireConfirmedEmail",
+          "requireEmail",
+          "showLocalSignIn",
+          "showLogo"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -12698,6 +13040,12 @@
         "additionalProperties": false
       },
       "InvitationView": {
+        "required": [
+          "expiresAt",
+          "id",
+          "note",
+          "registrationUrl"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -12728,6 +13076,12 @@
         "additionalProperties": false
       },
       "KeyRingCertificateDto": {
+        "required": [
+          "encrypts",
+          "notAfter",
+          "subject",
+          "thumbprint"
+        ],
         "type": "object",
         "properties": {
           "subject": {
@@ -12749,6 +13103,16 @@
         "additionalProperties": false
       },
       "KeyRingKeyDto": {
+        "required": [
+          "activatesAt",
+          "createdAt",
+          "expiresAt",
+          "id",
+          "isActive",
+          "isRevoked",
+          "readable",
+          "storage"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -12784,6 +13148,13 @@
         "additionalProperties": false
       },
       "KeyRingReportDto": {
+        "required": [
+          "applicationName",
+          "certificates",
+          "keys",
+          "kind",
+          "problems"
+        ],
         "type": "object",
         "properties": {
           "kind": {
@@ -12819,6 +13190,10 @@
         "additionalProperties": false
       },
       "KeyRingRevokeDto": {
+        "required": [
+          "reason",
+          "revoked"
+        ],
         "type": "object",
         "properties": {
           "revoked": {
@@ -12833,6 +13208,11 @@
         "additionalProperties": false
       },
       "LaunchContextDto": {
+        "required": [
+          "activitySlug",
+          "embedded",
+          "linkId"
+        ],
         "type": "object",
         "properties": {
           "linkId": {
@@ -12866,6 +13246,11 @@
         "additionalProperties": false
       },
       "LeaseDto": {
+        "required": [
+          "jobId",
+          "leaseExpiresAt",
+          "leaseToken"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
@@ -12884,6 +13269,9 @@
         "additionalProperties": false
       },
       "LeaseRequestDto": {
+        "required": [
+          "leaseToken"
+        ],
         "type": "object",
         "properties": {
           "leaseToken": {
@@ -12899,6 +13287,10 @@
         "additionalProperties": false
       },
       "LocalisedLogoDto": {
+        "required": [
+          "language",
+          "logo"
+        ],
         "type": "object",
         "properties": {
           "language": {
@@ -12912,6 +13304,9 @@
         "additionalProperties": false
       },
       "LockedDto": {
+        "required": [
+          "seriesName"
+        ],
         "type": "object",
         "properties": {
           "seriesName": {
@@ -12922,6 +13317,10 @@
         "additionalProperties": false
       },
       "LoginRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
         "type": "object",
         "properties": {
           "email": {
@@ -12968,6 +13367,9 @@
         "additionalProperties": false
       },
       "MaintenanceDto": {
+        "required": [
+          "level"
+        ],
         "type": "object",
         "properties": {
           "level": {
@@ -12986,6 +13388,9 @@
         "additionalProperties": false
       },
       "MaintenanceInputDto": {
+        "required": [
+          "on"
+        ],
         "type": "object",
         "properties": {
           "on": {
@@ -12999,6 +13404,29 @@
         "additionalProperties": false
       },
       "ManagedActivityDto": {
+        "required": [
+          "attachmentVisibility",
+          "documents",
+          "hideEndedSeriesProblems",
+          "id",
+          "joinPolicy",
+          "matchingRunners",
+          "maxAttachments",
+          "maxUploadBytes",
+          "modules",
+          "name",
+          "participantCount",
+          "problemCount",
+          "rankingType",
+          "runnerTags",
+          "scoreVisibility",
+          "seriesCount",
+          "showGroupMembers",
+          "slug",
+          "timeZone",
+          "type",
+          "unlisted"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13118,6 +13546,12 @@
         "additionalProperties": false
       },
       "ManagedActivityDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -13143,6 +13577,11 @@
         "additionalProperties": false
       },
       "ManagedActivitySummaryDto": {
+        "required": [
+          "id",
+          "name",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13161,6 +13600,13 @@
         "additionalProperties": false
       },
       "ManagedAttemptDto": {
+        "required": [
+          "attempt",
+          "files",
+          "id",
+          "startedAt",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13198,6 +13644,21 @@
         "additionalProperties": false
       },
       "ManagedProblemDto": {
+        "required": [
+          "attachedCount",
+          "createdAt",
+          "currentVersion",
+          "external",
+          "id",
+          "name",
+          "ownerName",
+          "ownerUserId",
+          "sharedWith",
+          "slug",
+          "type",
+          "versionCount",
+          "visibility"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13262,6 +13723,12 @@
         "additionalProperties": false
       },
       "ManagedProblemDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -13287,6 +13754,13 @@
         "additionalProperties": false
       },
       "ManagedProblemVersionDto": {
+        "required": [
+          "createdAt",
+          "files",
+          "hasPackage",
+          "id",
+          "version"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13326,6 +13800,17 @@
         "additionalProperties": false
       },
       "ManagedQuestionDto": {
+        "required": [
+          "activityId",
+          "activitySlug",
+          "body",
+          "createdAt",
+          "id",
+          "isPublished",
+          "kind",
+          "readCount",
+          "topic"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13398,6 +13883,12 @@
         "additionalProperties": false
       },
       "ManagedQuestionDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -13423,6 +13914,23 @@
         "additionalProperties": false
       },
       "ManagedRunnerDto": {
+        "required": [
+          "address",
+          "attachments",
+          "completedJobs",
+          "external",
+          "fingerprint",
+          "id",
+          "isConnected",
+          "name",
+          "problemTypes",
+          "product",
+          "publicKey",
+          "registeredAt",
+          "state",
+          "tags",
+          "version"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13519,6 +14027,12 @@
         "additionalProperties": false
       },
       "ManagedRunnerDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -13544,6 +14058,22 @@
         "additionalProperties": false
       },
       "ManagedSeriesDto": {
+        "required": [
+          "activityId",
+          "addressRules",
+          "hideProblemsWhilePaused",
+          "id",
+          "importance",
+          "importanceScope",
+          "isOpen",
+          "matchingRunners",
+          "name",
+          "order",
+          "problems",
+          "restrictionsEnabled",
+          "revealProblemCount",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13643,6 +14173,18 @@
         "additionalProperties": false
       },
       "ManagedSeriesProblemDto": {
+        "required": [
+          "currentVersion",
+          "hasPackage",
+          "id",
+          "order",
+          "problemId",
+          "problemName",
+          "problemSlug",
+          "seriesId",
+          "slug",
+          "submissionCount"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13730,6 +14272,25 @@
         "additionalProperties": false
       },
       "ManagedSubmissionDetailDto": {
+        "required": [
+          "activityId",
+          "activitySlug",
+          "attemptList",
+          "attempts",
+          "excluded",
+          "files",
+          "id",
+          "problemName",
+          "problemSlug",
+          "problemType",
+          "seriesId",
+          "seriesName",
+          "seriesProblemId",
+          "state",
+          "submittedAt",
+          "userId",
+          "userName"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13850,6 +14411,22 @@
         "additionalProperties": false
       },
       "ManagedSubmissionDto": {
+        "required": [
+          "activityId",
+          "activitySlug",
+          "attempts",
+          "excluded",
+          "id",
+          "problemName",
+          "problemSlug",
+          "seriesId",
+          "seriesName",
+          "seriesProblemId",
+          "state",
+          "submittedAt",
+          "userId",
+          "userName"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -13928,6 +14505,12 @@
         "additionalProperties": false
       },
       "ManagedSubmissionDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -13953,6 +14536,15 @@
         "additionalProperties": false
       },
       "ManagedUserDto": {
+        "required": [
+          "createdAt",
+          "emailConfirmed",
+          "grantCount",
+          "id",
+          "isTemporary",
+          "tags",
+          "username"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14024,6 +14616,12 @@
         "additionalProperties": false
       },
       "ManagedUserDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -14049,6 +14647,11 @@
         "additionalProperties": false
       },
       "ManagedUserSummaryDto": {
+        "required": [
+          "id",
+          "name",
+          "username"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14071,6 +14674,10 @@
         "additionalProperties": false
       },
       "MappingRuleDto": {
+        "required": [
+          "claimValue",
+          "templateName"
+        ],
         "type": "object",
         "properties": {
           "claimValue": {
@@ -14085,6 +14692,9 @@
         "additionalProperties": false
       },
       "MergeInputDto": {
+        "required": [
+          "targetUserId"
+        ],
         "type": "object",
         "properties": {
           "targetUserId": {
@@ -14095,6 +14705,20 @@
         "additionalProperties": false
       },
       "MergePreviewDto": {
+        "required": [
+          "activities",
+          "activityNames",
+          "blockers",
+          "questions",
+          "sourceIsTemporary",
+          "sourceLogin",
+          "sourceName",
+          "sourceUserId",
+          "submissions",
+          "targetLogin",
+          "targetName",
+          "targetUserId"
+        ],
         "type": "object",
         "properties": {
           "sourceUserId": {
@@ -14154,6 +14778,11 @@
         "additionalProperties": false
       },
       "MyGroupDto": {
+        "required": [
+          "id",
+          "members",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14179,6 +14808,11 @@
         "additionalProperties": false
       },
       "NewProblemFileDto": {
+        "required": [
+          "fileId",
+          "name",
+          "scope"
+        ],
         "type": "object",
         "properties": {
           "fileId": {
@@ -14197,6 +14831,9 @@
         "additionalProperties": false
       },
       "NewProblemPackageDto": {
+        "required": [
+          "fileId"
+        ],
         "type": "object",
         "properties": {
           "fileId": {
@@ -14211,6 +14848,9 @@
         "additionalProperties": false
       },
       "NewStatementDto": {
+        "required": [
+          "fileId"
+        ],
         "type": "object",
         "properties": {
           "language": {
@@ -14225,6 +14865,10 @@
         "additionalProperties": false
       },
       "NewTrialDto": {
+        "required": [
+          "packageFileId",
+          "problemType"
+        ],
         "type": "object",
         "properties": {
           "problemType": {
@@ -14243,6 +14887,9 @@
         "additionalProperties": false
       },
       "OrderInputDto": {
+        "required": [
+          "orderedIds"
+        ],
         "type": "object",
         "properties": {
           "orderedIds": {
@@ -14256,6 +14903,9 @@
         "additionalProperties": false
       },
       "PauseInputDto": {
+        "required": [
+          "hideProblems"
+        ],
         "type": "object",
         "properties": {
           "hideProblems": {
@@ -14265,6 +14915,13 @@
         "additionalProperties": false
       },
       "PermissionDefinitionDto": {
+        "required": [
+          "group",
+          "key",
+          "participant",
+          "scope",
+          "systemic"
+        ],
         "type": "object",
         "properties": {
           "key": {
@@ -14289,6 +14946,12 @@
         "additionalProperties": false
       },
       "PermissionTemplateDto": {
+        "required": [
+          "id",
+          "isBuiltIn",
+          "name",
+          "permissions"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14317,6 +14980,10 @@
         "additionalProperties": false
       },
       "PermissionTemplateInputDto": {
+        "required": [
+          "name",
+          "permissions"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -14338,6 +15005,19 @@
         "additionalProperties": false
       },
       "PlacementView": {
+        "required": [
+          "activityId",
+          "activityName",
+          "activitySlug",
+          "contextId",
+          "contextTitle",
+          "createdAt",
+          "id",
+          "platformId",
+          "platformName",
+          "shared",
+          "sharingAcknowledged"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14395,6 +15075,21 @@
         "additionalProperties": false
       },
       "PlatformDto": {
+        "required": [
+          "authLoginUrl",
+          "authTokenUrl",
+          "clientId",
+          "createdAt",
+          "deploymentId",
+          "displayName",
+          "enabled",
+          "id",
+          "isIdentityAuthority",
+          "issuer",
+          "keySetUrl",
+          "providerId",
+          "usernameClaim"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14455,6 +15150,15 @@
         "additionalProperties": false
       },
       "PlatformInputDto": {
+        "required": [
+          "authLoginUrl",
+          "authTokenUrl",
+          "clientId",
+          "deploymentId",
+          "displayName",
+          "issuer",
+          "keySetUrl"
+        ],
         "type": "object",
         "properties": {
           "displayName": {
@@ -14503,6 +15207,11 @@
         "additionalProperties": false
       },
       "PreconfigurationChangeDto": {
+        "required": [
+          "current",
+          "proposed",
+          "target"
+        ],
         "type": "object",
         "properties": {
           "target": {
@@ -14521,6 +15230,12 @@
         "additionalProperties": false
       },
       "PreconfigurationPlanDto": {
+        "required": [
+          "applied",
+          "changes",
+          "directory",
+          "warnings"
+        ],
         "type": "object",
         "properties": {
           "directory": {
@@ -14548,6 +15263,19 @@
         "additionalProperties": false
       },
       "ProblemDetailDto": {
+        "required": [
+          "attachments",
+          "attempts",
+          "id",
+          "maxUploadBytes",
+          "name",
+          "seriesId",
+          "slug",
+          "statements",
+          "status",
+          "submitFields",
+          "type"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14698,6 +15426,13 @@
         "additionalProperties": false
       },
       "ProblemFileDto": {
+        "required": [
+          "mimeType",
+          "name",
+          "scope",
+          "sha256",
+          "sizeBytes"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -14728,6 +15463,11 @@
         "additionalProperties": false
       },
       "ProblemInputDto": {
+        "required": [
+          "name",
+          "slug",
+          "type"
+        ],
         "type": "object",
         "properties": {
           "slug": {
@@ -14749,6 +15489,10 @@
         "additionalProperties": false
       },
       "ProblemSampleDto": {
+        "required": [
+          "input",
+          "output"
+        ],
         "type": "object",
         "properties": {
           "input": {
@@ -14767,6 +15511,13 @@
         "additionalProperties": false
       },
       "ProblemSummaryDto": {
+        "required": [
+          "attempts",
+          "id",
+          "name",
+          "slug",
+          "status"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -14862,6 +15613,10 @@
         "additionalProperties": false
       },
       "ProviderDeletionInputDto": {
+        "required": [
+          "requestId",
+          "subject"
+        ],
         "type": "object",
         "properties": {
           "subject": {
@@ -14880,6 +15635,10 @@
         "additionalProperties": false
       },
       "PublicProviderDto": {
+        "required": [
+          "displayName",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "slug": {
@@ -14894,6 +15653,9 @@
         "additionalProperties": false
       },
       "PublishDocumentInputDto": {
+        "required": [
+          "statements"
+        ],
         "type": "object",
         "properties": {
           "statements": {
@@ -14915,6 +15677,9 @@
         "additionalProperties": false
       },
       "PublishInputDto": {
+        "required": [
+          "published"
+        ],
         "type": "object",
         "properties": {
           "published": {
@@ -14933,6 +15698,11 @@
         "additionalProperties": false
       },
       "QuestionAnswerDto": {
+        "required": [
+          "answeredAt",
+          "authorName",
+          "body"
+        ],
         "type": "object",
         "properties": {
           "body": {
@@ -14951,6 +15721,16 @@
         "additionalProperties": false
       },
       "QuestionDto": {
+        "required": [
+          "authorName",
+          "body",
+          "createdAt",
+          "id",
+          "isPublished",
+          "isRead",
+          "kind",
+          "topic"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15010,6 +15790,12 @@
         "additionalProperties": false
       },
       "QuestionDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -15035,6 +15821,9 @@
         "additionalProperties": false
       },
       "RefreshRequest": {
+        "required": [
+          "refreshToken"
+        ],
         "type": "object",
         "properties": {
           "refreshToken": {
@@ -15045,6 +15834,10 @@
         "additionalProperties": false
       },
       "RegisterRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
         "type": "object",
         "properties": {
           "email": {
@@ -15059,6 +15852,11 @@
         "additionalProperties": false
       },
       "ReportAcceptedDto": {
+        "required": [
+          "duplicate",
+          "resultId",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "resultId": {
@@ -15076,6 +15874,9 @@
         "additionalProperties": false
       },
       "ReportResultDto": {
+        "required": [
+          "leaseToken"
+        ],
         "type": "object",
         "properties": {
           "leaseToken": {
@@ -15124,6 +15925,10 @@
         "additionalProperties": false
       },
       "ReportedFileDto": {
+        "required": [
+          "fileId",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -15138,6 +15943,9 @@
         "additionalProperties": false
       },
       "ResendConfirmationEmailRequest": {
+        "required": [
+          "email"
+        ],
         "type": "object",
         "properties": {
           "email": {
@@ -15148,6 +15956,11 @@
         "additionalProperties": false
       },
       "ResetPasswordRequest": {
+        "required": [
+          "email",
+          "newPassword",
+          "resetCode"
+        ],
         "type": "object",
         "properties": {
           "email": {
@@ -15166,6 +15979,12 @@
         "additionalProperties": false
       },
       "ResultProblemDto": {
+        "required": [
+          "id",
+          "maxPoints",
+          "name",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15188,6 +16007,12 @@
         "additionalProperties": false
       },
       "ResultSeriesDto": {
+        "required": [
+          "frozen",
+          "id",
+          "name",
+          "problems"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15220,6 +16045,9 @@
         "additionalProperties": false
       },
       "ResumeInputDto": {
+        "required": [
+          "extendEnd"
+        ],
         "type": "object",
         "properties": {
           "extendEnd": {
@@ -15239,6 +16067,11 @@
         "additionalProperties": false
       },
       "RosterDisclosure": {
+        "required": [
+          "withEmail",
+          "withName",
+          "withUsername"
+        ],
         "type": "object",
         "properties": {
           "withUsername": {
@@ -15257,6 +16090,12 @@
         "additionalProperties": false
       },
       "RosterEnrolment": {
+        "required": [
+          "granted",
+          "linked",
+          "read",
+          "skipped"
+        ],
         "type": "object",
         "properties": {
           "read": {
@@ -15282,6 +16121,10 @@
         "additionalProperties": false
       },
       "RosterEntry": {
+        "required": [
+          "roles",
+          "subject"
+        ],
         "type": "object",
         "properties": {
           "subject": {
@@ -15327,6 +16170,10 @@
         "additionalProperties": false
       },
       "RosterSkip": {
+        "required": [
+          "reason",
+          "subject"
+        ],
         "type": "object",
         "properties": {
           "subject": {
@@ -15345,6 +16192,15 @@
         "additionalProperties": false
       },
       "RosterView": {
+        "required": [
+          "contextId",
+          "contextTitle",
+          "disclosed",
+          "known",
+          "members",
+          "readAt",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "contextId": {
@@ -15381,6 +16237,14 @@
         "additionalProperties": false
       },
       "RunnerAttachmentDto": {
+        "required": [
+          "id",
+          "mimeType",
+          "name",
+          "sha256",
+          "sizeBytes",
+          "uploadedAt"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15411,6 +16275,10 @@
         "additionalProperties": false
       },
       "RunnerChallengeDto": {
+        "required": [
+          "expiresAt",
+          "nonce"
+        ],
         "type": "object",
         "properties": {
           "nonce": {
@@ -15425,6 +16293,9 @@
         "additionalProperties": false
       },
       "RunnerChallengeRequestDto": {
+        "required": [
+          "fingerprint"
+        ],
         "type": "object",
         "properties": {
           "fingerprint": {
@@ -15435,6 +16306,11 @@
         "additionalProperties": false
       },
       "RunnerRegisterDto": {
+        "required": [
+          "name",
+          "problemTypes",
+          "publicKey"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -15477,6 +16353,11 @@
         "additionalProperties": false
       },
       "RunnerRegisteredDto": {
+        "required": [
+          "fingerprint",
+          "runnerId",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "runnerId": {
@@ -15495,6 +16376,9 @@
         "additionalProperties": false
       },
       "RunnerTagsInputDto": {
+        "required": [
+          "tags"
+        ],
         "type": "object",
         "properties": {
           "tags": {
@@ -15508,6 +16392,10 @@
         "additionalProperties": false
       },
       "RunnerTokenDto": {
+        "required": [
+          "expiresAt",
+          "token"
+        ],
         "type": "object",
         "properties": {
           "token": {
@@ -15522,6 +16410,11 @@
         "additionalProperties": false
       },
       "RunnerTokenRequestDto": {
+        "required": [
+          "fingerprint",
+          "nonce",
+          "signature"
+        ],
         "type": "object",
         "properties": {
           "fingerprint": {
@@ -15540,6 +16433,12 @@
         "additionalProperties": false
       },
       "SeriesDto": {
+        "required": [
+          "id",
+          "isOpen",
+          "name",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15596,6 +16495,10 @@
         "additionalProperties": false
       },
       "SeriesInputDto": {
+        "required": [
+          "name",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "slug": {
@@ -15665,6 +16568,10 @@
         "additionalProperties": false
       },
       "SeriesProblemInputDto": {
+        "required": [
+          "problemId",
+          "slug"
+        ],
         "type": "object",
         "properties": {
           "problemId": {
@@ -15716,6 +16623,12 @@
         "additionalProperties": false
       },
       "SessionDto": {
+        "required": [
+          "emailConfirmed",
+          "isLocal",
+          "userId",
+          "username"
+        ],
         "type": "object",
         "properties": {
           "userId": {
@@ -15748,6 +16661,9 @@
         "additionalProperties": false
       },
       "ShiftInputDto": {
+        "required": [
+          "minutes"
+        ],
         "type": "object",
         "properties": {
           "minutes": {
@@ -15758,6 +16674,12 @@
         "additionalProperties": false
       },
       "StatementRefDto": {
+        "required": [
+          "fileId",
+          "name",
+          "sha256",
+          "sizeBytes"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -15784,6 +16706,15 @@
         "additionalProperties": false
       },
       "StorageMigrationDto": {
+        "required": [
+          "bytesMoved",
+          "filesMoved",
+          "filesRemaining",
+          "id",
+          "requestedAt",
+          "state",
+          "targetStoreId"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15830,6 +16761,10 @@
         "additionalProperties": false
       },
       "StorageReportDto": {
+        "required": [
+          "stores",
+          "unconfigured"
+        ],
         "type": "object",
         "properties": {
           "stores": {
@@ -15853,6 +16788,14 @@
         "additionalProperties": false
       },
       "StoreStatusDto": {
+        "required": [
+          "files",
+          "id",
+          "isDefault",
+          "reachable",
+          "sizeBytes",
+          "smokeTestPassed"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15884,6 +16827,20 @@
         "additionalProperties": false
       },
       "SubmissionDetailDto": {
+        "required": [
+          "attempts",
+          "authorName",
+          "excluded",
+          "files",
+          "id",
+          "problemId",
+          "problemName",
+          "problemSlug",
+          "problemType",
+          "seriesId",
+          "state",
+          "submittedAt"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15960,6 +16917,13 @@
         "additionalProperties": false
       },
       "SubmissionFileDto": {
+        "required": [
+          "fileId",
+          "fileName",
+          "name",
+          "sha256",
+          "sizeBytes"
+        ],
         "type": "object",
         "properties": {
           "name": {
@@ -15990,6 +16954,16 @@
         "additionalProperties": false
       },
       "SubmissionSummaryDto": {
+        "required": [
+          "excluded",
+          "id",
+          "problemId",
+          "problemName",
+          "problemSlug",
+          "seriesId",
+          "state",
+          "submittedAt"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -16044,6 +17018,12 @@
         "additionalProperties": false
       },
       "SubmissionSummaryDtoPageDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -16069,6 +17049,11 @@
         "additionalProperties": false
       },
       "SubmitFieldDto": {
+        "required": [
+          "kind",
+          "label",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "kind": {
@@ -16094,6 +17079,11 @@
         "additionalProperties": false
       },
       "ToolKeyView": {
+        "required": [
+          "createdAt",
+          "kid",
+          "signing"
+        ],
         "type": "object",
         "properties": {
           "kid": {
@@ -16115,6 +17105,13 @@
         "additionalProperties": false
       },
       "ToolRegistrationDto": {
+        "required": [
+          "customParameters",
+          "keySetUrl",
+          "loginUrl",
+          "redirectUri",
+          "toolUrl"
+        ],
         "type": "object",
         "properties": {
           "toolUrl": {
@@ -16144,6 +17141,13 @@
         "additionalProperties": false
       },
       "TrialDto": {
+        "required": [
+          "createdAt",
+          "hasPackage",
+          "id",
+          "problemType",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -16185,6 +17189,11 @@
         "additionalProperties": false
       },
       "TrialLeaseDto": {
+        "required": [
+          "leaseExpiresAt",
+          "leaseToken",
+          "trialId"
+        ],
         "type": "object",
         "properties": {
           "trialId": {
@@ -16203,6 +17212,11 @@
         "additionalProperties": false
       },
       "TrialReportAcceptedDto": {
+        "required": [
+          "duplicate",
+          "state",
+          "trialId"
+        ],
         "type": "object",
         "properties": {
           "trialId": {
@@ -16220,6 +17234,9 @@
         "additionalProperties": false
       },
       "TrialReportInputDto": {
+        "required": [
+          "leaseToken"
+        ],
         "type": "object",
         "properties": {
           "leaseToken": {
@@ -16261,6 +17278,12 @@
         "additionalProperties": false
       },
       "TwoFactorResponse": {
+        "required": [
+          "isMachineRemembered",
+          "isTwoFactorEnabled",
+          "recoveryCodesLeft",
+          "sharedKey"
+        ],
         "type": "object",
         "properties": {
           "sharedKey": {
@@ -16288,6 +17311,14 @@
         "additionalProperties": false
       },
       "UploadedFileDto": {
+        "required": [
+          "createdAt",
+          "id",
+          "mimeType",
+          "name",
+          "sha256",
+          "sizeBytes"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -16318,6 +17349,9 @@
         "additionalProperties": false
       },
       "UserInputDto": {
+        "required": [
+          "username"
+        ],
         "type": "object",
         "properties": {
           "username": {
@@ -16340,6 +17374,12 @@
         "additionalProperties": false
       },
       "UserSessionDto": {
+        "required": [
+          "connections",
+          "id",
+          "isCurrent",
+          "startedAt"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -16410,6 +17450,9 @@
         "additionalProperties": false
       },
       "VisibilityInputDto": {
+        "required": [
+          "visibility"
+        ],
         "type": "object",
         "properties": {
           "visibility": {
@@ -16427,5 +17470,139 @@
         "additionalProperties": false
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Account"
+    },
+    {
+      "name": "AccountDeletion"
+    },
+    {
+      "name": "Activities"
+    },
+    {
+      "name": "ActivityWrites"
+    },
+    {
+      "name": "ActivityAdmin"
+    },
+    {
+      "name": "AdminConfig"
+    },
+    {
+      "name": "AdminKeyRing"
+    },
+    {
+      "name": "AdminPassword"
+    },
+    {
+      "name": "AdminStorage"
+    },
+    {
+      "name": "AlgoJudge.Server"
+    },
+    {
+      "name": "Assignments"
+    },
+    {
+      "name": "DeletionQueue"
+    },
+    {
+      "name": "FederatedSignIn"
+    },
+    {
+      "name": "Files"
+    },
+    {
+      "name": "Grants"
+    },
+    {
+      "name": "Health"
+    },
+    {
+      "name": "IdentityProviders"
+    },
+    {
+      "name": "Instance"
+    },
+    {
+      "name": "InstanceAdmin"
+    },
+    {
+      "name": "LtiDeepLink"
+    },
+    {
+      "name": "LtiKeyRotation"
+    },
+    {
+      "name": "LtiKeys"
+    },
+    {
+      "name": "LtiLaunch"
+    },
+    {
+      "name": "LtiPlacements"
+    },
+    {
+      "name": "LtiPlatforms"
+    },
+    {
+      "name": "LtiRegister"
+    },
+    {
+      "name": "LtiRegistrations"
+    },
+    {
+      "name": "LtiSession"
+    },
+    {
+      "name": "Maintenance"
+    },
+    {
+      "name": "ManagerActivities"
+    },
+    {
+      "name": "ManagerQuestions"
+    },
+    {
+      "name": "ManagerRunners"
+    },
+    {
+      "name": "ManagerSubmissions"
+    },
+    {
+      "name": "PermissionTemplates"
+    },
+    {
+      "name": "Permissions"
+    },
+    {
+      "name": "ProblemAdmin"
+    },
+    {
+      "name": "Problems"
+    },
+    {
+      "name": "ProviderDeletion"
+    },
+    {
+      "name": "Runner"
+    },
+    {
+      "name": "Series"
+    },
+    {
+      "name": "SeriesAdmin"
+    },
+    {
+      "name": "SignOut"
+    },
+    {
+      "name": "Trials"
+    },
+    {
+      "name": "Users"
+    }
+  ]
 }

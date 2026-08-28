@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
@@ -24,7 +24,7 @@
     -->
     <PackageReference Include="AWSSDK.S3" Version="4.0.102.1" />
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.11" />
     <!--
       The Data Protection key ring, in the database this installation already
       has. See `Authorization/KeyRing.cs` for why it is not left to the
@@ -37,34 +37,36 @@
       references around it. Pinned to 8.0.0 to match them, so the packages that
       share a schema also share a version.
     -->
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
     <!--
       The LTI module validates a platform's `id_token` and signs its own client
       assertions with these. **Neither is a new dependency**: both were already
-      in the closure at 7.0.3, pulled by the OpenIdConnect handler above, and are
-      promoted to direct references so the version on a signature-validation path
-      is stated rather than inherited from a transitive graph that a minor bump
+      in the closure, pulled by the OpenIdConnect handler above, and are promoted
+      to direct references so the version on a signature-validation path is
+      stated rather than inherited from a transitive graph that a minor bump
       elsewhere can move.
 
-      Pinned to 7.0.3 for the same reason they are not on 8.x: the ASP.NET
-      OpenIdConnect handler that federated sign-in runs on resolves this family,
-      and raising it here would raise it there — a change to the sign-in path,
-      made as a side effect of an LTI feature, verified by nothing.
+      **Pinned to what the handler resolves, never below it**, because raising
+      it here would raise it on the sign-in path too — a change made as a side
+      effect of an LTI feature and verified by nothing. On .NET 10 that number
+      is 8.19.2; a direct reference under it is an NU1605 downgrade, so this
+      moved with the framework rather than by choice. The wording said 7.0.3
+      until 2026-08-29 and had been wrong since the reference read 8.0.2.
 
       MIT, maintained by Microsoft in `AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet`,
       shipping stable releases. No alpha or beta package goes on this path, which
       is a constraint the project owner set rather than a preference.
     -->
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.2" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.0">
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.11">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.5" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!--
       YAML, for the pre-configuration an installation is stood up from. See
       `Preconfiguration/` and `docs/specs/PRECONFIGURATION.md` in the workspace.

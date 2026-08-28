@@ -1,4 +1,4 @@
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace AlgoJudge.Server.Api
@@ -49,18 +49,18 @@ namespace AlgoJudge.Server.Api
 
             if (declared is null) return;
 
-            var properties = new Dictionary<string, OpenApiSchema>(StringComparer.Ordinal);
+            var properties = new Dictionary<string, IOpenApiSchema>(StringComparer.Ordinal);
             var required = new HashSet<string>(StringComparer.Ordinal);
 
             if (declared.File is { Length: > 0 } file)
             {
-                properties[file] = new OpenApiSchema { Type = "string", Format = "binary" };
+                properties[file] = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" };
                 if (declared.FileRequired) required.Add(file);
             }
 
             foreach (var field in declared.Fields)
             {
-                properties[field] = new OpenApiSchema { Type = "string" };
+                properties[field] = new OpenApiSchema { Type = JsonSchemaType.String };
             }
 
             foreach (var field in declared.RequiredFields) required.Add(field);
@@ -74,7 +74,7 @@ namespace AlgoJudge.Server.Api
                     {
                         Schema = new OpenApiSchema
                         {
-                            Type = "object",
+                            Type = JsonSchemaType.Object,
                             Properties = properties,
                             Required = required,
                         },

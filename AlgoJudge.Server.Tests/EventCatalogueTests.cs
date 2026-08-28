@@ -128,7 +128,7 @@ public class EventCatalogueTests
 
     private static Catalogue Read()
     {
-        // Up from `bin/Release/net8.0` to the repository root, where the file
+        // Up from `bin/Release/net10.0` to the repository root, where the file
         // sits beside `openapi.json`.
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "events.json")))

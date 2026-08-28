@@ -216,7 +216,18 @@ namespace AlgoJudge.Server.Services
                     // Parsed here as well as stored as `cidr`: the database would
                     // refuse it too, but as a transaction failure carrying no
                     // field name. This says which entry is wrong.
-                    if (!System.Net.IPNetwork.TryParse(network, out var parsed))
+                    //
+                    // **The base address is compared because .NET 10 stopped
+                    // refusing host bits.** On .NET 8 `TryParse` rejected
+                    // `10.0.5.17/24`; on .NET 10 it accepts and silently
+                    // normalises it to `10.0.5.0/24` — turning a typo for one
+                    // machine into a whole laboratory, which is the typo
+                    // somebody makes. The rule is unchanged; only the thing
+                    // enforcing it moved out of the framework.
+                    if (!System.Net.IPNetwork.TryParse(network, out var parsed)
+                        || network.Split('/') is not [var written, _]
+                        || !System.Net.IPAddress.TryParse(written, out var address)
+                        || !address.Equals(parsed.BaseAddress))
                     {
                         throw new ValidationException(
                             $"\"{network}\" is not an address range", "series.address.invalid");
