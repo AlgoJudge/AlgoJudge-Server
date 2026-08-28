@@ -91,9 +91,24 @@ namespace AlgoJudge.Server.Storage
             return live;
         }
 
+        /// <summary>
+        /// The migration under way, oldest first.
+        /// <para>
+        /// <b>The order is not decoration.</b> `RequestAsync` guards against a
+        /// second live migration by reading and then inserting, which two
+        /// requests at once can walk through — so there can be two. Unordered,
+        /// this and the worker's identical query could return <i>different</i>
+        /// rows, and `storage cancel` would report cancelling a migration while
+        /// the one actually moving files carried on. `LatestAsync` already
+        /// orders, the other way, because "what happened last" is a different
+        /// question from "what is running".
+        /// </para>
+        /// </summary>
         private Task<StorageMigration?> LiveAsync(CancellationToken ct) =>
-            context.StorageMigrations.FirstOrDefaultAsync(
-                m => m.State == StorageMigrationState.Requested
-                    || m.State == StorageMigrationState.Running, ct);
+            context.StorageMigrations
+                .OrderBy(m => m.RequestedAt)
+                .FirstOrDefaultAsync(
+                    m => m.State == StorageMigrationState.Requested
+                        || m.State == StorageMigrationState.Running, ct);
     }
 }

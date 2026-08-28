@@ -156,7 +156,11 @@ namespace AlgoJudge.Server.Workers
             // hostage to the window would keep somebody's old volume full.
             var pending = await SweepPreviousCopiesAsync(context, ct);
 
+            // Oldest first, and it must match `StorageMigrations.LiveAsync`
+            // exactly: where two live migrations exist, the operator's `status`
+            // and `cancel` have to be talking about the row this is moving.
             var migration = await context.StorageMigrations
+                .OrderBy(m => m.RequestedAt)
                 .FirstOrDefaultAsync(
                     m => m.State == StorageMigrationState.Requested
                         || m.State == StorageMigrationState.Running, ct);
