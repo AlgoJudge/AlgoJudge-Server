@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// give the account back, and unblocking cannot defeat the expiry.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class AccountExpiryTests(ServerFixture server)
 {
     private async Task<(HttpClient Client, string Id, string Login)> PersonAsync()

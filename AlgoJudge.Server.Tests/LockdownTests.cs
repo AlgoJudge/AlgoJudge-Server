@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Tests;
 /// reader who <i>may</i> and cannot reach it from here.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LockdownTests(ServerFixture server)
 {
     private const string Room = "10.0.5.0/24";

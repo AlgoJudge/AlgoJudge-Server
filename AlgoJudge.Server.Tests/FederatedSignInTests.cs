@@ -34,7 +34,7 @@ namespace AlgoJudge.Server.Tests;
 /// it built, which is exactly the object the handler would have produced.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class FederatedSignInTests(ServerFixture server)
 {
     [Fact]

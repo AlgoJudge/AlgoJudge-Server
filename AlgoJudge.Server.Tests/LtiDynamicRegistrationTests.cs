@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Tests;
 /// switched off, and a flag it can never set for itself.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class LtiDynamicRegistrationTests(ServerFixture server)
 {
     [Fact]

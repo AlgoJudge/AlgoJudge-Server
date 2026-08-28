@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Tests;
 /// would be a test somebody eventually deletes.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class WorkerTests(ServerFixture server)
 {
     // ── the series scheduler ────────────────────────────────────────────────

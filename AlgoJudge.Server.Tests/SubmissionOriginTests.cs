@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Tests;
 /// per activity, and the session list answers to a system-scope permission.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class SubmissionOriginTests(ServerFixture server)
 {
     /// <summary>

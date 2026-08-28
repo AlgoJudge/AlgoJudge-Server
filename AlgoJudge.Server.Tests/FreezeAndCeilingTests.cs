@@ -23,7 +23,7 @@ namespace AlgoJudge.Server.Tests;
 /// whether the answer is recomputed.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class FreezeAndCeilingTests(ServerFixture server)
 {
     // ── the ceiling ─────────────────────────────────────────────────────────

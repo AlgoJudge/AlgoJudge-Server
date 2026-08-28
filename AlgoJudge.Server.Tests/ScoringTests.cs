@@ -26,7 +26,7 @@ namespace AlgoJudge.Server.Tests;
 /// and 35 are three different numbers.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class ScoringTests(ServerFixture server)
 {
     /// <summary>The Runner's own scale in these tests, and the rescaled answer.</summary>

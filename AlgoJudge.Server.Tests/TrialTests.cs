@@ -16,7 +16,7 @@ namespace AlgoJudge.Server.Tests;
 /// silently until the first request arrives.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class TrialTests(ServerFixture server)
 {
     /// <summary>

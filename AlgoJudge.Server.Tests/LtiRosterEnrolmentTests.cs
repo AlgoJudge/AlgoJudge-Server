@@ -27,7 +27,7 @@ namespace AlgoJudge.Server.Tests;
 /// follows is about refusing to.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class LtiRosterEnrolmentTests(ServerFixture server)
 {
     private const string Directory = "roster-directory";

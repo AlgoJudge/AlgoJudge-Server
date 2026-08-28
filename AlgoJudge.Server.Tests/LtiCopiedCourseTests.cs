@@ -26,7 +26,7 @@ namespace AlgoJudge.Server.Tests;
 /// person decides.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class LtiCopiedCourseTests(ServerFixture server)
 {
     private const string Directory = "copied-course-directory";

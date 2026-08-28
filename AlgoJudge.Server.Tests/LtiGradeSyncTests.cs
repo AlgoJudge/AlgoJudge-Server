@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Tests;
 /// stale timestamp is accepted and ignored exactly as a real one would.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiGradeSyncTests(ServerFixture server)
 {
     private const string Directory = "sync-directory";

@@ -36,7 +36,7 @@ namespace AlgoJudge.Server.Tests;
 /// they are the promise in the words it was made in.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class KeyRingTests(ServerFixture server)
 {
     /// <summary>
@@ -269,7 +269,7 @@ public class KeyRingTests(ServerFixture server)
 /// Which store the keys actually come out of — asked with a second database, the
 /// one thing a machine-wide directory cannot fake.
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class KeyRingStoreTests(ServerFixture server)
 {
     private const string Secret = "a session cookie, in miniature";

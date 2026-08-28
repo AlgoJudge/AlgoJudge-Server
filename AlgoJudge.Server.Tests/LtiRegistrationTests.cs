@@ -14,7 +14,7 @@ namespace AlgoJudge.Server.Tests;
 /// namespace it is trusted within</b> (§4.5).
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiRegistrationTests(ServerFixture server)
 {
     [Fact]

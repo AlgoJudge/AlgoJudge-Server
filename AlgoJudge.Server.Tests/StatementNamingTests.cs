@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Tests;
 /// held.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class StatementNamingTests(ServerFixture server)
 {
     private async Task<HttpClient> AdminAsync() =>

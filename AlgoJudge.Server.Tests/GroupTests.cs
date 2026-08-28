@@ -15,7 +15,7 @@ namespace AlgoJudge.Server.Tests;
 /// ranking read an hour ago still reconciles with the ranking now.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class GroupTests(ServerFixture server)
 {
     private static async Task<HttpClient> AdminAsync(ServerFixture server) =>

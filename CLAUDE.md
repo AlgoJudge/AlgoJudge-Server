@@ -410,6 +410,30 @@ After cloning, inspect the solution and project files, then document:
     `NpgsqlCidr` converter is the one this upgrade was written to delete**; that
     is a model change and wants its own step.
 
+- **The suite runs in 2 m 10 s, and it took 4 m 49 s until 2026-08-29.** Nothing
+  was deleted and nothing was skipped: 640 tests before and after.
+  - **A collection is xUnit's unit of serialisation, and fifty classes sat in
+    one.** `[Collection("server")]` shared one fixture, so 476 tests — 192 s of
+    work — ran strictly one at a time. They are now three collections with a
+    database each; inside a group the old rule is untouched.
+  - **`DisableParallelization` means more than it reads**, and it was the larger
+    half. It does not serialise a collection internally — being one collection
+    already does that — it takes the **whole runner**. Measured on a timeline:
+    the storage suites did not start until **113 s** into a 199 s run and added
+    **86 s to the end**. Removing it was a one-word change worth more than the
+    split.
+  - **One test genuinely cannot share a process**: `MemoryTests` reads
+    `GC.GetTotalAllocatedBytes`, which is process-wide, so three other Server
+    hosts allocate inside its measurement. It failed exactly once when the
+    storage collection was freed — 45 MiB against a ceiling of 32 — and now has
+    a collection of its own with the exclusivity it needs. **11 s bought where
+    it is needed, instead of 86 s bought everywhere.**
+  - **Measured, not guessed, at every step.** The groups are bins filled from a
+    per-class timing run; `fsync=off` on the test database was tried and
+    **reverted because it changed nothing** — 3 m 19 s either way, so the
+    bottleneck was never durability. Four consecutive green runs before this was
+    committed, because the storage collection's history is a flake.
+
 ## Layout
 
 The frontend is in

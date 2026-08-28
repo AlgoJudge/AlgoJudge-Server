@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Tests;
 /// What happens on the way in: one pass, a real ceiling, and nothing left behind
 /// when the answer is no.
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class UploadPathTests(ServerFixture server)
 {
     private static string Sha256Of(byte[] bytes) =>

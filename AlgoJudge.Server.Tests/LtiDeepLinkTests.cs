@@ -30,7 +30,7 @@ namespace AlgoJudge.Server.Tests;
 /// address the answer is posted at.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiDeepLinkTests(ServerFixture server)
 {
     private const string Directory = "deep-link-directory";

@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Tests;
 /// the window.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class LtiKeyRotationTests(ServerFixture server)
 {
     [Fact]

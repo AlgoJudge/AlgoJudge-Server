@@ -29,7 +29,7 @@ namespace AlgoJudge.Server.Tests;
 /// what makes a job survive a Runner that died.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class RunnerTests(ServerFixture server)
 {
     [Fact]

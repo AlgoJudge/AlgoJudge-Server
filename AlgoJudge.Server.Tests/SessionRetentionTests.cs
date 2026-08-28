@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Tests;
 /// "what do you hold about me" did not mention any of it.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class SessionRetentionTests(ServerFixture server)
 {
     private static UserSession Aged(string userId, DateTime expiresAt) => new()

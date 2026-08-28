@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Tests;
 /// test the scheduler had running at the time.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class KeyRingAdminTests(ServerFixture server)
 {
     private const string Ring = "/api/v1/admin/keyring";

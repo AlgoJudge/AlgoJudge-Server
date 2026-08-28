@@ -16,7 +16,7 @@ namespace AlgoJudge.Server.Tests;
 /// under whichever other test happened to be reading it.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class PreconfigurationTests(ServerFixture server) : IDisposable
 {
     private const string Config = "/api/v1/admin/config";

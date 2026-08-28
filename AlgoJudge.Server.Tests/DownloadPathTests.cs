@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// Measured against the running stack on 2026-08-12 before any of it changed.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class DownloadPathTests(ServerFixture server)
 {
     private static string Sha256Of(byte[] bytes) =>

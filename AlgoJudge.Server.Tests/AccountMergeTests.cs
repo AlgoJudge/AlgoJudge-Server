@@ -23,7 +23,7 @@ namespace AlgoJudge.Server.Tests;
 /// window closes, so the rows recording what it once did keep resolving.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class AccountMergeTests(ServerFixture server)
 {
     private static async Task<HttpClient> AdminAsync(ServerFixture server) =>

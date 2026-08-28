@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Tests;
 /// they are finishing.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiUnpublishedLaunchTests(ServerFixture server)
 {
     private const string Directory = "unpublished-directory";

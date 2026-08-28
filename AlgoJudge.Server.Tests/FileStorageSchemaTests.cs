@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Tests;
 /// database and nothing else, so it takes the shared one.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class FileStorageSchemaTests(ServerFixture server)
 {
     /// <summary>Starts the shared host, so the schema being read exists.</summary>

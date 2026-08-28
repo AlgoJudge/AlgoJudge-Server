@@ -18,7 +18,7 @@ namespace AlgoJudge.Server.Tests;
 /// alike. If any test here needed to name one, the design would be wrong.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class ExternalJudgingTests(ServerFixture server)
 {
     /// <summary>
