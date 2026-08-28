@@ -67,5 +67,14 @@ namespace AlgoJudge.Server.Database.Models
         /// the network.
         /// </summary>
         public string? Detail { get; set; }
+
+        /// <summary>
+        /// Optimistic concurrency. The advisory lock in <c>StorageMigrator</c>
+        /// keeps two instances from <b>moving</b> at once; it does not stand
+        /// between the worker and an operator cancelling. Without this a cancel
+        /// is overwritten by the next state the worker writes, and a migration
+        /// somebody was told had stopped carries on.
+        /// </summary>
+        public uint RowVersion { get; set; }
     }
 }

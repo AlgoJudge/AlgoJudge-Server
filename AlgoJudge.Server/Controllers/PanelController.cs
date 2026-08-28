@@ -512,7 +512,7 @@ namespace AlgoJudge.Server.Controllers
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            await context.SaveChangesAsync(ct);
+            await Concurrency.SaveAsync(context, ct);
 
             return new ExternalContentDto
             {
@@ -547,7 +547,13 @@ namespace AlgoJudge.Server.Controllers
             {
                 instance.SeriesRestrictionsEnabled = restrictions;
             }
-            await context.SaveChangesAsync(ct);
+
+            // **This endpoint replaces the whole object**, and since 2026-08-28
+            // the panel is not the only writer — `aj-admin config apply` writes
+            // the same row from a file. There is no guard to re-run here, so a
+            // lost race is answered as one: nothing was written, read it again.
+            // Silently putting every field back was the alternative.
+            await Concurrency.SaveAsync(context, ct);
 
             return await AnnounceAsync(ct);
         }

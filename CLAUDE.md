@@ -309,6 +309,38 @@ After cloning, inspect the solution and project files, then document:
     touches a request body. YAML rather than TOML because the product had
     already chosen it twice, for `config.yml` and for statement front matter.
 
+- **The concurrency tokens are called `RowVersion`, and there are eight**
+  (2026-08-28). Four were renamed from `Version`, which collided with two
+  genuine version *numbers* in the same model — `ProblemVersion.Version` and
+  `Runner.Version` — and four are new. All eight map to PostgreSQL's `xmin`
+  system column. Five things are easy to get wrong:
+  - **`Runners` deliberately has none, and must not gain one.** `LastSeenAt` is
+    written on every claim, renewal and report, so a row-level token there makes
+    a Runner collide with itself on ordinary traffic — the first attempt at this
+    reddened nineteen tests. Approving against a revocation is closed by a
+    **compare-and-set** in `ManagerReadService.ApproveRunnerAsync` instead:
+    the condition rides the `UPDATE`, so there is no window and no cost.
+  - **A token only earns its place on a read-decide-write.** EF writes just the
+    columns it tracked as modified, so two writers on *different* columns never
+    erased one another. What needed guarding was the state machines:
+    `AccountMerge`, `AccountDeletionRequest`, `StorageMigration`, and `Instance`
+    — which gained a second writer on 2026-08-28 when pre-configuration landed.
+  - **A conflict answers 409 with the path's own code**, never a 500.
+    `Utils/Concurrency.SaveAsync` re-reads and runs the guard again, so the loser
+    gets `deletion.notPending` or `merge.window.closed` — what it would have got
+    had it read a moment later. An unhandled one is a 500, which is what
+    `RunnerService.ExtendAsync` was written to stop.
+  - **Both sweepers were already atomic, and that is why they needed no
+    reordering.** `AnonymiseAsync` writes nothing of its own — it moves tracked
+    entities — so the emptying and its marker land in one `SaveChanges`. An undo
+    or a halt that committed first therefore stops the account being emptied
+    rather than merely losing a marker.
+  - **The migration runs no SQL.** `xmin` is a system column that every table
+    already has, so Npgsql drops the `AddColumn` operations and writes only the
+    history row. Verified with `dotnet ef migrations script` before it was
+    applied anywhere; the rename contributes nothing at all, because only the
+    property name changed.
+
 ## Layout
 
 The frontend is in

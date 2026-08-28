@@ -92,7 +92,11 @@ namespace AlgoJudge.Server.Preconfiguration
 
             var changes = new List<PreconfigurationChange>();
             Settings(source.Instance, instance, changes, apply);
-            if (apply && changes.Count > 0) await context.SaveChangesAsync(ct);
+
+            // The panel writes this row too. An apply that lost that race
+            // writes nothing and says so, rather than putting the file's answer
+            // over a manager's — and running it again is free.
+            if (apply && changes.Count > 0) await Concurrency.SaveAsync(context, ct);
 
             await FilesAsync(source, instance, changes, apply, ct);
 

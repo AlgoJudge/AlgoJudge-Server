@@ -113,6 +113,39 @@ namespace AlgoJudge.Server.Workers
         /// the next tick comes.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Saves, and answers <c>false</c> when an operator moved the migration
+        /// while this run was working on it.
+        /// <para>
+        /// <b>The advisory lock does not cover this.</b> It keeps two instances
+        /// from moving files at once; it says nothing about
+        /// <c>aj-admin storage cancel</c>, which writes the same row from a
+        /// request. Without the token that cancel was simply overwritten by the
+        /// next state this worker wrote, and a migration somebody had been told
+        /// was called off carried on moving files.
+        /// </para>
+        /// <para>
+        /// The row is reloaded so the caller sees what the operator asked for
+        /// rather than its own stale intent, and the run stops. Nothing is
+        /// retried: whatever the operator wrote is the newer decision.
+        /// </para>
+        /// </summary>
+        private async Task<bool> SaveAsync(ApplicationDbContext context, CancellationToken ct)
+        {
+            try
+            {
+                await context.SaveChangesAsync(ct);
+                return true;
+            }
+            catch (DbUpdateConcurrencyException conflict)
+            {
+                foreach (var entry in conflict.Entries) await entry.ReloadAsync(ct);
+                logger.LogInformation(
+                    "The storage migration was changed while this run held it; stopping here");
+                return false;
+            }
+        }
+
         internal async Task<bool> RunOnceAsync(CancellationToken ct)
         {
             using var scope = scopes.CreateScope();
@@ -136,7 +169,7 @@ namespace AlgoJudge.Server.Workers
                 if (migration.Detail != waiting)
                 {
                     migration.Detail = waiting;
-                    await context.SaveChangesAsync(ct);
+                    await SaveAsync(context, ct);
                 }
                 return true;
             }
@@ -244,7 +277,7 @@ namespace AlgoJudge.Server.Workers
                     migration.State = StorageMigrationState.Refused;
                     migration.FinishedAt = clock.GetUtcNow().UtcDateTime;
                     migration.Detail = "the target store did not pass its smoke test";
-                    await context.SaveChangesAsync(ct);
+                    await SaveAsync(context, ct);
                     logger.LogError(
                         "Refusing to migrate to {Store}: {Detail}", target.Id, health.Detail);
                     return;
@@ -256,7 +289,7 @@ namespace AlgoJudge.Server.Workers
                 migration.StartedAt = now;
             }
 
-            await context.SaveChangesAsync(ct);
+            if (!await SaveAsync(context, ct)) return;
 
             var budget = TimeSpan.FromMinutes(configuration.GetValue(BudgetMinutesSetting, 30));
             var grace = TimeSpan.FromMinutes(configuration.GetValue(GraceMinutesSetting, 60));
@@ -292,7 +325,7 @@ namespace AlgoJudge.Server.Workers
                     migration.State = StorageMigrationState.Requested;
                     migration.StartedAt = null;
                     migration.Detail = "the time budget ended this run; it continues in the next window";
-                    await context.SaveChangesAsync(ct);
+                    await SaveAsync(context, ct);
                     return;
                 }
 
@@ -310,7 +343,7 @@ namespace AlgoJudge.Server.Workers
                     // is exactly what the skipped ones are not.
                     migration.Detail =
                         $"{failed.Count} file(s) could not be moved; the next run tries again";
-                    await context.SaveChangesAsync(ct);
+                    await SaveAsync(context, ct);
                     return;
                 }
 
@@ -319,7 +352,7 @@ namespace AlgoJudge.Server.Workers
                     migration.State = StorageMigrationState.Finished;
                     migration.FinishedAt = clock.GetUtcNow().UtcDateTime;
                     migration.Detail = null;
-                    await context.SaveChangesAsync(ct);
+                    if (!await SaveAsync(context, ct)) return;
                     logger.LogInformation(
                         "Migration to {Store} finished: {Files} files, {Bytes} bytes",
                         target.Id, migration.FilesMoved, migration.BytesMoved);
@@ -334,7 +367,9 @@ namespace AlgoJudge.Server.Workers
 
                 migration.FilesMoved++;
                 migration.BytesMoved += file.SizeBytes;
-                await context.SaveChangesAsync(ct);
+                // Every file, which makes this the place a cancel is noticed
+                // soonest — one file later rather than at the end of the run.
+                if (!await SaveAsync(context, ct)) return;
             }
         }
 

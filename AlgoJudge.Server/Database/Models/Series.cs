@@ -184,7 +184,7 @@ namespace AlgoJudge.Server.Database.Models
         /// Optimistic concurrency, so two Server instances cannot both open the
         /// same series and two managers cannot lose one another's shift.
         /// </summary>
-        public uint Version { get; set; }
+        public uint RowVersion { get; set; }
 
         public ICollection<SeriesProblem> SeriesProblems { get; set; } = new List<SeriesProblem>();
     }

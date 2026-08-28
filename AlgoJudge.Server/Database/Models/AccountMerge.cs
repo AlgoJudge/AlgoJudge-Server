@@ -52,6 +52,15 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public required string Moved { get; set; }
 
+        /// <summary>
+        /// Optimistic concurrency. <b>The undo and the sweeper both read this
+        /// row, decide on what they read, and write it back</b> — one checks
+        /// that nothing has been anonymised, the other that nothing has been
+        /// undone. Without a token both checks pass at once and the merge ends
+        /// up undone *and* anonymised, which is not a state an undo can offer.
+        /// </summary>
+        public uint RowVersion { get; set; }
+
         public User? Source { get; set; }
         public User? Target { get; set; }
     }

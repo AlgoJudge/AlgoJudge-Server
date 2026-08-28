@@ -98,6 +98,6 @@ namespace AlgoJudge.Server.Database.Models
         public string? Measurement { get; set; }
 
         /// <summary>Optimistic concurrency, as elsewhere: PostgreSQL's `xmin`.</summary>
-        public uint Version { get; set; }
+        public uint RowVersion { get; set; }
     }
 }
