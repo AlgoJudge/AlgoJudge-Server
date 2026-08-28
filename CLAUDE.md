@@ -372,6 +372,43 @@ After cloning, inspect the solution and project files, then document:
     Nothing read it at run time, but the next `migrations add` would have opened
     with a drop of a system column. **Regenerate the snapshot after removing a
     mapped property**, or the next migration carries the ghost.
+    `MigrationsDescribeTheModelTests` has asserted this since 2026-08-29.
+
+- **.NET 10 since 2026-08-29**, `net10.0` with `aspnet:10.0` and `sdk:10.0`.
+  .NET 8 leaves support on 2026-11-10; 10 is the LTS.
+  - **Two framework behaviours changed under the product, and tests caught both
+    — nobody read a release note.**
+    - **`IPNetwork.TryParse` accepts host bits now**, and silently normalises:
+      .NET 8 refused `10.0.5.17/24`, .NET 10 makes it `10.0.5.0/24`. A typo
+      meaning one machine becomes a laboratory, so `SeriesService` compares the
+      written address against `BaseAddress` itself. The rule is unchanged; what
+      enforced it left the framework.
+    - **Revoking the key ring stopped signing anybody out of the running
+      process.** .NET 10 refreshes the ring in the background, so the instance
+      the operator typed into keeps serving the cached one. `KeyRing.Add` sets
+      `DisableAsyncKeyRingUpdate`; the cost is that a refresh is synchronous
+      again, and one happens on revoke, on rotate and once a day.
+  - **Two package moves were forced, not chosen.** Swashbuckle 6.5.0 → 10.2.3,
+    the first release with a `net10.0` group, which also meant porting
+    `Api/MultipartFormDocumentation.cs` to OpenAPI.NET v2. And
+    `Microsoft.IdentityModel.*` 8.0.2 → 8.19.2, because ASP.NET Core 10's
+    OpenIdConnect depends on 8.19.2 and anything lower is an NU1605 downgrade.
+  - **`openapi.json` grew 749 leaves without the contract changing**: 157 paths
+    and 189 schemas before and after, nothing removed. Swashbuckle 6 dropped the
+    C# `required` modifier and 10 honours it, so the document is more faithful
+    rather than different.
+  - **Warnings went 5 → 15, and none was fixed here** — the owner asked for them
+    measured rather than cleaned. CI and a local build report the **same fifteen
+    lines**; a local MSBuild summary says sixteen only because it counts the
+    restore advisory once per project. Every new one is a deprecation:
+    `ASPDEPR005`
+    ×6 for `KnownNetworks` and `IPNetwork`, `CS0618` ×2 for `NpgsqlCidr`,
+    `SYSLIB0057` for the `X509Certificate2` constructor, and **`NU1903` for
+    SSH.NET 2023.0.0** — which nothing pulled in that day: the .NET 10 SDK
+    audits transitive packages where .NET 8's audited direct ones only, so
+    `Testcontainers.PostgreSql` 3.10.0 had been carrying it unreported. **The
+    `NpgsqlCidr` converter is the one this upgrade was written to delete**; that
+    is a model change and wants its own step.
 
 ## Layout
 

@@ -71,6 +71,18 @@ namespace AlgoJudge.Server.Authorization
                 ? named.Trim().ToLowerInvariant()
                 : Database;
 
+            // **Revoking has to sign people out of *this* process, not just the
+            // next one.** .NET 10 refreshes the key ring in the background, so a
+            // running instance keeps serving the cached ring after
+            // `RevokeAllKeys` and only refuses on its next refresh — which
+            // undoes what `aj-admin keyring revoke` says it does, on the one
+            // instance the operator is standing on. Measured: without this the
+            // revoked cookie still authenticates; with it the very next request
+            // is refused. The cost is that a ring refresh is synchronous again,
+            // and a refresh happens on revoke, on rotate, and once a day.
+            AppContext.SetSwitch(
+                "Microsoft.AspNetCore.DataProtection.KeyManagement.DisableAsyncKeyRingUpdate", true);
+
             var certificates = Certificates(configuration);
             var protection = services.AddDataProtection().SetApplicationName(ApplicationName);
 

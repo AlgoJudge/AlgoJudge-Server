@@ -82,16 +82,16 @@ id like every other stored document, rather than fields on the row.
 - ~~**All identifiers become string UUIDs.** The entities still use `int` keys;
   that migration is outstanding.~~ **Done.** Every entity carries a `Guid` from
   `Utils/Uuid.cs`, and specifically a **version 7** one: time-ordered, so inserts
-  append to the index instead of fragmenting it. The layout is written out by
-  hand because `Guid.CreateVersion7()` arrived in .NET 9 and this targets .NET 8
-  — delete it and call the framework method after an upgrade, the values are
-  compatible. `User` keeps Identity's own string key.
+  append to the index instead of fragmenting it. The layout was written out by
+  hand until the move to .NET 10 on 2026-08-29; `Uuid.New()` now calls
+  `Guid.CreateVersion7()` and the wrapper stays, so the choice of v7 keeps one
+  place to live. `User` keeps Identity's own string key.
 - `Activity.Type` is the type discriminator, formatted `name@version`. Adding a
   problem or activity type must not require a change here.
 
 ## Requirements
 
-- .NET 8 SDK
+- .NET 10 SDK
 - PostgreSQL, or Docker for the supplied Compose file
 
 ## Build
@@ -669,7 +669,7 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**638 tests, 4 m 32 s** on the machine this was last run on, two skipped where
+**640 tests, 5 minutes** on the machine this was last run on, two skipped where
 no object store is configured.
 
 CI adds two jobs beside that one: the container image is built, and the
