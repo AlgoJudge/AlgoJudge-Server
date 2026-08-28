@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// answer — and that is the kind of promise nothing but a test keeps.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class StorageHealthTests(ServerFixture server)
 {
     private static string Sha256Of(byte[] bytes) =>

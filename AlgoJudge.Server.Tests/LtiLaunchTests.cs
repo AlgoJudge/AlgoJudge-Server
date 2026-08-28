@@ -23,7 +23,7 @@ namespace AlgoJudge.Server.Tests;
 /// are about refusals more than about the happy path.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiLaunchTests(ServerFixture server)
 {
     /// <summary>

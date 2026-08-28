@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// round is copied in place.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class SeriesDuplicationTests(ServerFixture server)
 {
     [Fact]

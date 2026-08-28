@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Tests;
 /// another name.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiSessionTests(ServerFixture server)
 {
     private const string Directory = "session-directory";

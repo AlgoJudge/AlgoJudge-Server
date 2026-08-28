@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Tests;
 /// problem, a participant submits, the Server queues a job, a stub Runner claims
 /// it and reports — idempotently — and the submission ends up carrying a verdict.
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class EndToEndTests(ServerFixture server)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

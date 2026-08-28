@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Tests;
 /// anywhere, and neither can be forgotten.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class RunnerRoutingTests(ServerFixture server)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

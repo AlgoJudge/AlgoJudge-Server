@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Tests;
 /// the Server does.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class ExclusionTests(ServerFixture server)
 {
     private static async Task<HttpClient> AdminAsync(ServerFixture server) =>

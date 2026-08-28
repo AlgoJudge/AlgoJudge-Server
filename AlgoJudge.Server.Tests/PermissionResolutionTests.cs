@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Tests;
 /// took away.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class PermissionResolutionTests(ServerFixture server)
 {
     /// <summary>

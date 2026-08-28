@@ -15,7 +15,7 @@ namespace AlgoJudge.Server.Tests;
 /// window, `scoreVisibility` and the freeze — tested by what does not arrive.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class DisclosureTests(ServerFixture server)
 {
     [Fact]

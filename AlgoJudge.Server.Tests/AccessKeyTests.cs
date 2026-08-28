@@ -23,7 +23,7 @@ namespace AlgoJudge.Server.Tests;
 /// that could not be spent, which is a refusal.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class AccessKeyTests(ServerFixture server)
 {
     private async Task<HttpClient> AdminAsync() =>

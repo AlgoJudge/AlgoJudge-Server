@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// working sign-in.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class IdentityProviderTests(ServerFixture server)
 {
     /// <summary>Distinctive enough that finding it in a response is unambiguous.</summary>

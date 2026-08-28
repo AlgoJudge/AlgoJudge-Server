@@ -15,7 +15,7 @@ namespace AlgoJudge.Server.Tests;
 /// the part a screen cannot enforce on its own.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class PanelTests(ServerFixture server)
 {
     /// <summary>

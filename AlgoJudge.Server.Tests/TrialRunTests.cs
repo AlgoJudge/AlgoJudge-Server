@@ -17,7 +17,7 @@ namespace AlgoJudge.Server.Tests;
 /// machines with them.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class TrialRunTests(ServerFixture server)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

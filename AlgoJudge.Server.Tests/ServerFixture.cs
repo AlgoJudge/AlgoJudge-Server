@@ -285,9 +285,38 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
 }
 
 /// <summary>
-/// One collection, so the tests share a database and run one at a time. They
-/// walk over the same seeded activity, and a parallel run would have them
-/// claiming each other's jobs.
+/// Three collections, so three databases, so three suites at once.
+/// <para>
+/// <b>Inside a group nothing changed</b>: the tests share a database and run one
+/// at a time, because they walk over the same seeded activity and a parallel run
+/// would have them claiming each other's jobs. What changed on 2026-08-29 is
+/// that there are three such databases instead of one, and xUnit runs
+/// collections in parallel — which is the whole of the speed-up, because a
+/// collection is xUnit's unit of serialisation and fifty classes sat in one.
+/// </para>
+/// <para>
+/// <b>Membership means nothing.</b> These are bins, not themes: filled
+/// largest-first from a measured run so each carries the same number of seconds
+/// — 63.8, 63.8 and 63.8 of test time at the split. Put a new class in whichever
+/// is smallest; re-balancing is re-running the measurement, not reasoning about
+/// it. **Under load they come out at about 109, 88 and 91 s**, because tests
+/// running beside each other are slower than tests running alone; a re-balance
+/// should use those numbers rather than the serial ones.
+/// </para>
+/// <para>
+/// <b>Three and not more.</b> The suite's floor is the slowest single group plus
+/// the eleven exclusive seconds <see cref="MemoryCollection"/> takes. Splitting
+/// further trades a container for a smaller bin, and the bins are already below
+/// what one Server host and one database cost to start.
+/// </para>
 /// </summary>
-[CollectionDefinition("server")]
-public class ServerCollection : ICollectionFixture<ServerFixture>;
+[CollectionDefinition("server-1")]
+public class ServerCollectionOne : ICollectionFixture<ServerFixture>;
+
+/// <inheritdoc cref="ServerCollectionOne"/>
+[CollectionDefinition("server-2")]
+public class ServerCollectionTwo : ICollectionFixture<ServerFixture>;
+
+/// <inheritdoc cref="ServerCollectionOne"/>
+[CollectionDefinition("server-3")]
+public class ServerCollectionThree : ICollectionFixture<ServerFixture>;

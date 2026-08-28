@@ -26,7 +26,7 @@ namespace AlgoJudge.Server.Tests;
 /// produce.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class ConcurrencyTests(ServerFixture server)
 {
     /// <summary>

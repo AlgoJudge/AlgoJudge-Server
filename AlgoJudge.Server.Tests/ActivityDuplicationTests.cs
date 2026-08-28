@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Tests;
 /// move so that the copy happens when the person copying said it does.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class ActivityDuplicationTests(ServerFixture server)
 {
     [Fact]

@@ -25,7 +25,7 @@ namespace AlgoJudge.Server.Tests;
 /// username and be handed the account. Everything here is the bound on that.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class LtiIdentityTests(ServerFixture server)
 {
     private const string Directory = "test-directory";

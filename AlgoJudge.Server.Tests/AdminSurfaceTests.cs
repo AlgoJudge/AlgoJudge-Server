@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Tests;
 /// surface exists to rescue cannot be taken by somebody else in the meantime.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class AdminSurfaceTests(ServerFixture server)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

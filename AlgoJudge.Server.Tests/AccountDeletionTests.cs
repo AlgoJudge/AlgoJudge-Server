@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Tests;
 /// part lives in one place.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-3")]
 public class AccountDeletionTests(ServerFixture server)
 {
     /// <summary>

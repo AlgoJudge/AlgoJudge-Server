@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Tests;
 /// the container alive.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class MaintenanceTests(ServerFixture server)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Tests;
 /// business, which is the entire point of the field.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-2")]
 public class OpaqueEnvelopeTests(ServerFixture server)
 {
     // ── the envelope ────────────────────────────────────────────────────────

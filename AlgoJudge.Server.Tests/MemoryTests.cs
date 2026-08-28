@@ -30,7 +30,7 @@ namespace AlgoJudge.Server.Tests;
 /// part of it.
 /// </para>
 /// </summary>
-[Collection("storage")]
+[Collection("memory")]
 public sealed class MemoryTests(ITestOutputHelper output) : IAsyncLifetime
 {
     /// <summary>The package ceiling: the largest thing this product accepts.</summary>

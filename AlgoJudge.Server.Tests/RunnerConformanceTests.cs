@@ -31,7 +31,7 @@ namespace AlgoJudge.Server.Tests;
 /// the 2025-03-27 proposal left open and nothing exercised end to end.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class RunnerConformanceTests(ServerFixture server)
 {
     /// <summary>A key pair, and the two things the protocol does with it.</summary>

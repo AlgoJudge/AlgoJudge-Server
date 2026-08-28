@@ -231,7 +231,7 @@ public class RequestOriginTests
 /// per-activity whitelist is made of, asked one release early.
 /// </para>
 /// </summary>
-[Collection("server")]
+[Collection("server-1")]
 public class SessionAddressTests(ServerFixture server)
 {
     [Theory]
