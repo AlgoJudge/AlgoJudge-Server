@@ -116,6 +116,38 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         return (fileId, bytes);
     }
 
+    /// <summary>
+    /// Two live migrations, which `RequestAsync` will not make and a race can.
+    /// Written straight to the table for exactly that reason: the point is what
+    /// happens once the state exists, not how it comes about.
+    /// </summary>
+    private async Task<(Guid Older, Guid Newer)> TwoLiveAsync()
+    {
+        await using var context = NewContext();
+        var now = DateTime.UtcNow;
+
+        var older = new Database.Models.StorageMigration
+        {
+            TargetStoreId = "objects",
+            State = Database.Models.StorageMigrationState.Requested,
+            RequestedAt = now.AddMinutes(-5),
+        };
+        var newer = new Database.Models.StorageMigration
+        {
+            TargetStoreId = "objects",
+            State = Database.Models.StorageMigrationState.Requested,
+            RequestedAt = now,
+        };
+
+        // Added newest first, so a query that returns them in insertion order
+        // rather than by date gets the wrong one.
+        context.StorageMigrations.Add(newer);
+        context.StorageMigrations.Add(older);
+        await context.SaveChangesAsync();
+
+        return (older.Id, newer.Id);
+    }
+
     private async Task RequestAsync()
     {
         using var scope = services.CreateScope();
@@ -656,5 +688,62 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         });
 
         await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// <b>Where two are live, the worker takes the older.</b>
+    /// <para>
+    /// `RequestAsync` guards against a second live migration by reading and
+    /// then inserting, and two requests at once can walk through that — so the
+    /// state is reachable. Ordering makes which row is worked on a fact rather
+    /// than whatever the heap returned.
+    /// </para>
+    /// <para>
+    /// The newer one is <b>not stranded</b>: it is picked up on a later tick,
+    /// once the older has left the live states.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Where_two_are_live_the_worker_takes_the_older_first()
+    {
+        await StoredInSourceAsync();
+        var (older, newer) = await TwoLiveAsync();
+
+        await TickAsync();
+
+        await using var context = NewContext();
+        Assert.NotEqual(
+            StorageMigrationState.Requested,
+            (await context.StorageMigrations.AsNoTracking().FirstAsync(m => m.Id == older)).State);
+        Assert.Equal(
+            StorageMigrationState.Requested,
+            (await context.StorageMigrations.AsNoTracking().FirstAsync(m => m.Id == newer)).State);
+    }
+
+    /// <summary>
+    /// <b>And the operator cancels that same one.</b>
+    /// <para>
+    /// This is the half that was actually dangerous. Unordered, this query and
+    /// the worker's identical one could return different rows — so an operator
+    /// would call a migration off, be told it had stopped, and watch the files
+    /// carry on moving.
+    /// </para>
+    /// <para>
+    /// Asked before any tick, so both rows are still waiting and the answer is
+    /// the ordering rather than whatever the worker happened to finish.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Where_two_are_live_a_cancel_names_the_same_one_the_worker_would()
+    {
+        var (older, _) = await TwoLiveAsync();
+
+        using var scope = services.CreateScope();
+        var cancelled = await scope.ServiceProvider
+            .GetRequiredService<IStorageMigrations>()
+            .CancelAsync(CancellationToken.None);
+
+        Assert.NotNull(cancelled);
+        Assert.Equal(older, cancelled!.Id);
     }
 }
