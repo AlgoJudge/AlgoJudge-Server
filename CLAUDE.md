@@ -397,8 +397,11 @@ After cloning, inspect the solution and project files, then document:
     and 189 schemas before and after, nothing removed. Swashbuckle 6 dropped the
     C# `required` modifier and 10 honours it, so the document is more faithful
     rather than different.
-  - **Warnings went 5 → 16, and none was fixed here** — the owner asked for them
-    measured rather than cleaned. Every new one is a deprecation: `ASPDEPR005`
+  - **Warnings went 5 → 15, and none was fixed here** — the owner asked for them
+    measured rather than cleaned. CI and a local build report the **same fifteen
+    lines**; a local MSBuild summary says sixteen only because it counts the
+    restore advisory once per project. Every new one is a deprecation:
+    `ASPDEPR005`
     ×6 for `KnownNetworks` and `IPNetwork`, `CS0618` ×2 for `NpgsqlCidr`,
     `SYSLIB0057` for the `X509Certificate2` constructor, and **`NU1903` for
     SSH.NET 2023.0.0** — which nothing pulled in that day: the .NET 10 SDK
