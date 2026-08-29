@@ -685,7 +685,8 @@ that line.
 
 `main` is the integration and default branch; changes arrive through pull
 requests. ~~There is no CI and no test project yet, so `dotnet build` is the
-whole gate.~~ **Both exist**, and the gate is three CI jobs:
+whole gate.~~ **Both exist**, and the gate is three CI jobs — the first of which
+builds with `-warnaserror` since 2026-08-29, so **a warning fails it**:
 
 ```bash
 dotnet build AlgoJudge.sln -c Release
@@ -695,7 +696,7 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**640 tests, 2 m 19 s** on the machine this was last run on, two skipped where
+**641 tests, 2 m 15 s** on the machine this was last run on, two skipped where
 no object store is configured. It was 4 m 49 s until 2026-08-29, when the fifty
 classes that sat in one xUnit collection — and therefore ran one at a time —
 were split across three, each with a database of its own.

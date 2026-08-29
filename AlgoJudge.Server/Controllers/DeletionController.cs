@@ -27,7 +27,9 @@ namespace AlgoJudge.Server.Controllers
         [HttpPost]
         [ProducesResponseType<DeletionRequestDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
-        public Task<DeletionRequestDto> Request(
+        // `new` for the reason `TrialsController.Request` carries: the name is the
+        // `operationId`, and renaming it would move the contract.
+        public new Task<DeletionRequestDto> Request(
             [FromBody] HolderDeletionInputDto input, CancellationToken ct)
         {
             Guid? providerId = input.ProviderId is { } raw && Guid.TryParse(raw, out var parsed)

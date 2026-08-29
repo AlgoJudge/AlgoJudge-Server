@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using Microsoft.AspNetCore.HttpOverrides;
 
 namespace AlgoJudge.Server.Authorization
@@ -71,7 +72,7 @@ namespace AlgoJudge.Server.Authorization
             // *appends* the peer to whatever arrived, so a header a participant
             // wrote themselves ends up earlier in the chain and the address
             // nginx observed ends up last. Taking one hop takes the last one.
-            options.KnownNetworks.Clear();
+            options.KnownIPNetworks.Clear();
             options.KnownProxies.Clear();
 
             var proxies = Listed(configuration, ProxiesSetting);
@@ -110,28 +111,56 @@ namespace AlgoJudge.Server.Authorization
                             $"{ProxiesSetting} contains '{proxy}', which is not an IP address"));
             }
 
-            foreach (var network in networks) options.KnownNetworks.Add(Network(network));
+            foreach (var network in networks) options.KnownIPNetworks.Add(Network(network));
         }
 
         /// <summary>
         /// One CIDR block. Both families, because a room reachable over IPv6 and
         /// described only in IPv4 reads as somewhere else entirely.
         /// <para>
-        /// <b>Qualified, because there are two types of that name.</b>
-        /// <c>System.Net.IPNetwork</c> arrived in .NET 8 and is the one anybody
-        /// would reach for; <c>KnownNetworks</c> on this target takes the older
-        /// <c>Microsoft.AspNetCore.HttpOverrides</c> one, and an unqualified name
-        /// does not compile.
+        /// <b><c>System.Net.IPNetwork</c> since 2026-08-29</b>, with
+        /// <c>KnownIPNetworks</c> beside it. The
+        /// <c>Microsoft.AspNetCore.HttpOverrides</c> type of the same name is
+        /// deprecated, and the qualification this used to need is gone with it.
+        /// </para>
+        /// <para>
+        /// <b>It refuses host bits, and that is a tightening taken on purpose.</b>
+        /// The old type accepted <c>172.20.0.5/16</c> and quietly meant
+        /// <c>172.20.0.0/16</c>; this one throws. The same typo is refused for a
+        /// round's address rules and for the same reason — except that here the
+        /// stakes are higher, because a network described wrongly is a network
+        /// whose word is taken for every visitor's address. A deployment that
+        /// wrote one is told which entry and what to write instead, at startup,
+        /// rather than trusting a range nobody meant.
         /// </para>
         /// </summary>
-        private static Microsoft.AspNetCore.HttpOverrides.IPNetwork Network(string declared)
+        private static System.Net.IPNetwork Network(string declared)
         {
             var slash = declared.LastIndexOf('/');
             if (slash > 0
                 && IPAddress.TryParse(declared[..slash], out var prefix)
-                && int.TryParse(declared[(slash + 1)..], out var length))
+                && int.TryParse(declared[(slash + 1)..], out var length)
+                && length >= 0
+                && length <= (prefix.AddressFamily == AddressFamily.InterNetworkV6 ? 128 : 32))
             {
-                return new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, length);
+                var network = new System.Net.IPNetwork(prefix, length);
+
+                // **The comparison is the refusal.** The constructor does not
+                // reject bits below the prefix — measured on .NET 10, it takes
+                // `172.20.0.5/16` and hands back `172.20.0.0/16` without a word,
+                // exactly as `TryParse` does. So the check is written here, the
+                // same way and for the same reason as a round's address rules.
+                if (!prefix.Equals(network.BaseAddress))
+                {
+                    throw new InvalidOperationException(
+                        $"{NetworksSetting} contains '{declared}', which sets bits below its "
+                        + $"prefix. Write '{network}' if that is the network you mean, or a "
+                        + "longer prefix if you meant fewer machines — this Server will not "
+                        + "guess which, because this list decides whose word is taken for "
+                        + "every visitor's address.");
+                }
+
+                return network;
             }
 
             throw new InvalidOperationException(

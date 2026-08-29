@@ -173,7 +173,7 @@ public class LtiRegistrationTests(ServerFixture server)
         // refusal above is about the issuer and not about the endpoint refusing
         // every update it is given.
         var renamed = await admin.PutAsJsonAsync($"/api/v1/lti/platforms/{id}",
-            moved with { issuer = platform.GetProperty("issuer").GetString(), displayName = "Renamed" });
+            moved with { issuer = platform.GetProperty("issuer").GetString()!, displayName = "Renamed" });
 
         Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
         var after = await renamed.Content.ReadFromJsonAsync<JsonElement>();

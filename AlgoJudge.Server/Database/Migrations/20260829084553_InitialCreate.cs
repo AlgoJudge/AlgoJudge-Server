@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Net;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using NpgsqlTypes;
 
 #nullable disable
 
@@ -764,7 +763,7 @@ namespace AlgoJudge.Server.Database.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     SeriesId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Network = table.Column<NpgsqlCidr>(type: "cidr", nullable: false),
+                    Network = table.Column<IPNetwork>(type: "cidr", nullable: false),
                     Note = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamptz", nullable: false)
                 },

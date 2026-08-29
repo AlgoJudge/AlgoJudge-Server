@@ -167,21 +167,18 @@ namespace AlgoJudge.Server.Database
             builder.Entity<SeriesAddressRule>(e =>
             {
                 e.ToTable("SeriesAddressRules");
-                // **`cidr`, reached through a converter, and the direction is
-                // deliberate.** Npgsql 8 maps this column to `NpgsqlCidr`;
-                // Npgsql 10 maps it to `System.Net.IPNetwork` and marks
-                // `NpgsqlCidr` obsolete. The model already holds the later type,
-                // so §13's upgrade deletes this converter rather than changing
-                // the entity, the contract and every reader of it.
+                // **`cidr`, mapped directly.** Npgsql 8 needed a converter here,
+                // to its own `NpgsqlCidr`; Npgsql 10 maps
+                // `System.Net.IPNetwork` natively and marks that type obsolete.
+                // The model was written holding the later type precisely so the
+                // upgrade would delete a converter rather than change the
+                // entity, the contract and every reader of it — and on
+                // 2026-08-29 it did.
                 //
                 // The column stays `cidr`, so PostgreSQL refuses a malformed
                 // range and one with host bits set even if something one day
                 // writes past the service that validates first.
-                e.Property(r => r.Network)
-                    .HasColumnType("cidr")
-                    .HasConversion(
-                        network => new NpgsqlTypes.NpgsqlCidr(network.BaseAddress, (byte)network.PrefixLength),
-                        stored => new System.Net.IPNetwork(stored.Address, stored.Netmask));
+                e.Property(r => r.Network).HasColumnType("cidr");
                 e.Property(r => r.Note).HasMaxLength(200);
                 e.HasOne(r => r.Series)
                     .WithMany(s => s.AddressRules)
