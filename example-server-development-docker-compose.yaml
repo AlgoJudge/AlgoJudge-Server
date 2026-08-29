@@ -45,7 +45,7 @@ services:
   # Not published to the host, so nothing outside the Compose network reaches
   # it, and no console: the credentials below exist for this stack alone.
   rustfs:
-    image: rustfs/rustfs:1.0.0-rc.1
+    image: rustfs/rustfs:1.0.0-rc.4
     environment:
       # **The same two values the Server signs with**, substituted from one
       # place. They were written out twice until 2026-08-13, and a pair that has
