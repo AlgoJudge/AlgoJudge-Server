@@ -131,6 +131,28 @@ public class RequestOriginTests
     }
 
     /// <summary>
+    /// An address written where a network belongs is sent to the setting that
+    /// takes addresses.
+    /// <para>
+    /// <b>A bare IP is perfectly valid configuration — in the other field.</b>
+    /// `Forwarded__KnownProxies` is for addresses and takes several
+    /// comma-separated; this list is for CIDR blocks. Answering only "not CIDR"
+    /// would leave somebody to find that out, so the message names the setting
+    /// and offers the `/32` spelling for people who meant one machine.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void An_address_in_the_networks_list_is_pointed_at_the_other_setting()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => TrustedProxies.Apply(new ForwardedHeadersOptions(), Configured(
+                ("Forwarded:KnownNetworks", "10.0.0.2"))));
+
+        Assert.Contains("Forwarded:KnownProxies", refused.Message);
+        Assert.Contains("10.0.0.2/32", refused.Message);
+    }
+
+    /// <summary>
     /// A range with bits below its prefix is refused, and the message says what
     /// to write instead.
     /// <para>

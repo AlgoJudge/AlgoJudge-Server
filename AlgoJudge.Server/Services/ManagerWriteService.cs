@@ -343,7 +343,7 @@ namespace AlgoJudge.Server.Services
             round.RankingRevealAt = ActivityService.ParseInstant(input.RankingRevealAt);
             round.RankingVisibleFrom = ActivityService.ParseInstant(input.RankingVisibleFrom);
             round.RankingVisibleTo = ActivityService.ParseInstant(input.RankingVisibleTo);
-            SeriesService.ApplyRestrictions(round, input);
+            SeriesService.ApplyRestrictions(context, round, input);
 
             Reconcile(round);
             await context.SaveChangesAsync(ct);

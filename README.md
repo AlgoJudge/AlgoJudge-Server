@@ -197,6 +197,15 @@ AJ_Forwarded__KnownProxies=10.0.0.2,10.0.0.3   # the address(es) your proxy reac
 AJ_Forwarded__KnownNetworks=10.0.0.0/24        # or its network, in CIDR; both families accepted
 AJ_Forwarded__KnownProxies=none                # or this, when nothing sits in front
 
+# **Addresses go in the first, networks in the second**, and the Server will not
+# read one as the other. `KnownNetworks=10.0.0.2` is refused and told to use
+# `KnownProxies`, or `10.0.0.2/32` if that one machine is the whole of it.
+#
+# **A network with bits below its prefix is refused too.** `10.0.0.5/24` reads
+# two ways — the machine, or the 254 around it — and this list decides whose
+# word is taken for every visitor's address, so it is not guessed at. The
+# refusal names the network you would have got.
+
 # How long a session keeps the address and user agent it was made with.
 AJ_Retention__SessionOriginDays=30             # optional; the aj_session cookie's own life
 AJ_Retention__SubmissionOriginDays=365         # optional; a submission's address is evidence in a contest
@@ -696,7 +705,7 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**641 tests, 2 m 15 s** on the machine this was last run on, two skipped where
+**644 tests, 2 m 16 s** on the machine this was last run on, two skipped where
 no object store is configured. It was 4 m 49 s until 2026-08-29, when the fifty
 classes that sat in one xUnit collection — and therefore ran one at a time —
 were split across three, each with a database of its own.

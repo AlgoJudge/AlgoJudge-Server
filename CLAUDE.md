@@ -525,6 +525,32 @@ After cloning, inspect the solution and project files, then document:
     **A pinned tool is a thing a framework upgrade has to carry**, and this one
     was missed because nothing needed the tool until something did.
 
+  - **A test written to check "several networks" found a 500 instead.** Writing a
+    round's address rules through `PUT /series/{id}` answered
+    `DbUpdateConcurrencyException` — for **any** number of rules, one included.
+    - **Every entity here assigns its own key** (`Id = Uuid.New()`), so a child
+      added through a **tracked** parent's navigation is an entity EF discovers
+      with its key already set, and it reads that as `Modified`. It then writes
+      `UPDATE "SeriesAddressRules" … WHERE "Id" = …` against a row that is not
+      there, affects nothing, and the unhandled exception is a 500.
+    - **Creating a round worked**, because there the parent is itself `Added` and
+      the child cascades — which is why the shape survived. The one earlier test
+      of that endpoint with rules expected a refusal and got one.
+    - `ApplyRestrictions` now takes the context and says
+      `Entry(rule).State = EntityState.Added` outright. **The hazard is general**:
+      `parent.Children.Add(new Child())` on a tracked parent is broken anywhere
+      in this model. The other eleven sites were checked — all add to a parent
+      that is itself new, or to a `DbSet`, or to a plain JSON shape.
+    - The test helper `LockdownTests.RestrictAsync` had been carrying a comment
+      about this since it was written — it writes rules as rows of their own
+      "rather than through the navigation". **The workaround was in the test and
+      the bug stayed in the product.**
+  - **Several address ranges on one round were never exercised.** The helper
+    every lockdown test used writes at most one rule, so `SeriesLockdown.Admits`
+    had never iterated. Two tests now cover it: three ranges including an IPv6
+    one, each admitting and an address outside all three not; and the API write,
+    which is what found the 500 above.
+
 ## Layout
 
 The frontend is in

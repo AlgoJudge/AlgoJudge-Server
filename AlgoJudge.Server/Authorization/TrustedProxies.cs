@@ -163,6 +163,20 @@ namespace AlgoJudge.Server.Authorization
                 return network;
             }
 
+            // **An address in the networks list is a mistake with an answer**, and
+            // the answer is a different setting rather than a different spelling.
+            // Saying only "not CIDR" leaves somebody to discover that the other
+            // one exists, which is the kind of thing nobody discovers at speed.
+            if (IPAddress.TryParse(declared, out var single))
+            {
+                throw new InvalidOperationException(
+                    $"{NetworksSetting} contains '{declared}', which is an address rather than "
+                    + $"a network. Put it in {ProxiesSetting} — that setting is for addresses, "
+                    + $"and takes several comma-separated — or write it here in CIDR form as "
+                    + $"'{single}/{(single.AddressFamily == AddressFamily.InterNetworkV6 ? 128 : 32)}' "
+                    + "if you mean that one machine and nothing else.");
+            }
+
             throw new InvalidOperationException(
                 $"{NetworksSetting} contains '{declared}', which is not a network in CIDR form "
                 + "such as 172.20.0.0/16 or 2001:db8::/32");

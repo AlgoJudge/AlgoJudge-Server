@@ -127,6 +127,37 @@ public class LockdownTests(ServerFixture server)
     }
 
     /// <summary>Whether this answer carries a lockdown.</summary>
+    /// <summary>
+    /// The same, but with several ranges — which <see cref="RestrictAsync"/>
+    /// cannot do, and that is how a round with two rooms went untested.
+    /// </summary>
+    private async Task RestrictToAllAsync(string roundId, params string[] networks)
+    {
+        var id = Guid.Parse(roundId);
+        await using var context = server.NewContext();
+
+        context.SeriesAddressRules.RemoveRange(
+            await context.SeriesAddressRules.Where(r => r.SeriesId == id).ToListAsync());
+
+        foreach (var network in networks)
+        {
+            context.SeriesAddressRules.Add(new SeriesAddressRule
+            {
+                SeriesId = id,
+                Network = IPNetwork.Parse(network),
+            });
+        }
+
+        await context.Series.Where(s => s.Id == id).ExecuteUpdateAsync(u => u
+            .SetProperty(s => s.Importance, SeriesImportance.OfficialContest)
+            .SetProperty(s => s.ImportanceScope, SeriesImportanceScope.Installation)
+            .SetProperty(s => s.RestrictionsEnabled, true)
+            .SetProperty(s => s.IsOpen, true)
+            .SetProperty(s => s.PausedAt, (DateTime?)null));
+
+        await context.SaveChangesAsync();
+    }
+
     private static bool IsLocked(JsonElement activity, out JsonElement locked) =>
         activity.TryGetProperty("locked", out locked) && locked.ValueKind != JsonValueKind.Null;
 
@@ -534,6 +565,100 @@ public class LockdownTests(ServerFixture server)
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
         Assert.Contains("series.restrictions.needDates", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// <b>Every listed range admits, and nothing else does.</b>
+    /// <para>
+    /// A round may name several — two laboratories, or the same room over both
+    /// address families — and until 2026-08-29 **nothing exercised more than
+    /// one**. The helper every other test here uses writes a single rule, so the
+    /// loop in <c>SeriesLockdown.Admits</c> had never iterated: a round with two
+    /// rooms was a shape the model allowed and no run had performed.
+    /// </para>
+    /// <para>
+    /// The IPv6 range is in the list on purpose. A visitor arriving over IPv6
+    /// matches no IPv4 network, and a room described only in one family reads as
+    /// somewhere else entirely — which is the reason the column takes both.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Every_listed_range_admits_and_nowhere_else_does()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        await RestrictToAllAsync(roundId, "10.0.5.0/24", "10.0.7.0/24", "2001:db8::/32");
+
+        foreach (var inside in new[] { "10.0.5.17", "10.0.7.3", "2001:db8::1" })
+        {
+            var participant = At(await Build.ParticipantAsync(server, slug), inside);
+            Assert.Contains(
+                "r1",
+                await SeriesSlugsAsync(participant, slug));
+        }
+
+        // One address outside all three, so a green result cannot come from a
+        // round that admits everybody.
+        var elsewhere = At(await Build.ParticipantAsync(server, slug), Outside);
+        Assert.DoesNotContain("r1", await SeriesSlugsAsync(elsewhere, slug));
+    }
+
+    /// <summary>
+    /// Several ranges go in through the API, and the list is <b>replaced</b>
+    /// rather than added to.
+    /// <para>
+    /// <b>This test found a 500.</b> Writing a round's address rules through
+    /// <c>PUT /series/{id}</c> answered <c>DbUpdateConcurrencyException</c> for
+    /// any number of rules, including one — because every entity here assigns
+    /// its own key, and a child added through a <b>tracked</b> parent's
+    /// navigation is read as <c>Modified</c> rather than <c>Added</c>. Creating
+    /// a round worked, so the shape survived: the only earlier test of this
+    /// endpoint with rules expected a refusal and got one.
+    /// </para>
+    /// <para>
+    /// The failure message carries the response body, because "Expected OK,
+    /// Actual InternalServerError" is not something anybody can act on.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Several_ranges_are_written_and_the_list_is_replaced()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var admin = await AdminAsync(server);
+
+        async Task<HttpResponseMessage> WriteAsync(params string[] networks) =>
+            await admin.PutAsJsonAsync($"/api/v1/series/{roundId}", new
+            {
+                slug = "r1",
+                name = "Round 1",
+                startDate = DateTime.UtcNow.AddHours(-1).ToString("O"),
+                endDate = DateTime.UtcNow.AddDays(1).ToString("O"),
+                addressRules = networks
+                    .Select(n => new { network = n, note = (string?)null })
+                    .ToArray(),
+            });
+
+        async Task<string[]> StoredAsync()
+        {
+            await using var context = server.NewContext();
+            var id = Guid.Parse(roundId);
+            return [.. (await context.SeriesAddressRules
+                    .Where(r => r.SeriesId == id)
+                    .ToListAsync())
+                .Select(r => r.Network.ToString())
+                .Order(StringComparer.Ordinal)];
+        }
+
+        var first = await WriteAsync("10.0.5.0/24", "10.0.7.0/24", "2001:db8::/32");
+        Assert.True(
+            first.StatusCode == HttpStatusCode.OK,
+            $"{(int)first.StatusCode}: {await first.Content.ReadAsStringAsync()}");
+        Assert.Equal(["10.0.5.0/24", "10.0.7.0/24", "2001:db8::/32"], await StoredAsync());
+
+        // Replaced, not appended: the second write leaves one rule, not four.
+        Assert.Equal(HttpStatusCode.OK, (await WriteAsync("10.0.9.0/24")).StatusCode);
+        Assert.Equal(["10.0.9.0/24"], await StoredAsync());
+
+        Assert.NotNull(slug);
     }
 
     /// <summary>
