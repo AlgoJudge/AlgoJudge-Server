@@ -444,7 +444,7 @@ After cloning, inspect the solution and project files, then document:
   - **`Microsoft.IdentityModel.*` 8.19.2 → 8.22.0 reverses yesterday's rule.**
     The `.csproj` said "never below what the handler resolves" and meant it as a
     ceiling too; the owner made it a floor only. ASP.NET Core 10.0.11 asks for
-    8.19.2, so this is deliberately two minors above it — and the direct
+    8.19.2, so this is deliberately three minors above it — and the direct
     reference lifts the **whole family**, seven assemblies, including the copy
     the sign-in handler runs on. **Verified by the LTI suites, which sign and
     validate a real `id_token`; not by `FederatedSignInTests`, which starts
