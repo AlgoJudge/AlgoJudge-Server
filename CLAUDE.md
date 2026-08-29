@@ -434,6 +434,44 @@ After cloning, inspect the solution and project files, then document:
     bottleneck was never durability. Four consecutive green runs before this was
     committed, because the storage collection's history is a flake.
 
+- **Every dependency swept to its latest stable on 2026-08-29**, except where a
+  measurement said otherwise. The restore is clean again: **NU1903 is gone**,
+  because `Testcontainers.PostgreSql` 4.14.0 carries a fixed SSH.NET — the
+  advisory and the upgrade were the same piece of work.
+  - **Already current, and checked rather than skipped**: `Microsoft.AspNetCore.*`
+    and EF Tools at 10.0.11, Npgsql 10.0.3, Swashbuckle 10.2.3, YamlDotNet
+    18.1.0. Everything above them on NuGet is an `11.0.0-preview`.
+  - **`Microsoft.IdentityModel.*` 8.19.2 → 8.22.0 reverses yesterday's rule.**
+    The `.csproj` said "never below what the handler resolves" and meant it as a
+    ceiling too; the owner made it a floor only. ASP.NET Core 10.0.11 asks for
+    8.19.2, so this is deliberately three minors above it, and what covers the
+    sign-in path is `FederatedSignInTests` plus the LTI suites.
+  - **`coverlet.collector` was removed, not upgraded.** Nothing ever collected
+    coverage — no collector argument in CI or in any script.
+  - **Testcontainers 4 moved two things.** `UntilPortIsAvailable` split into an
+    internal and an external half (this waits on the container's own port, so
+    the internal one), and the parameterless builders are obsolete — the image
+    now goes in the constructor, which puts the tag next to the builder that
+    uses it.
+  - **The new test runner reordered classes and found a real bug.** Nine tests
+    in `TrialTests` and `TrialRunTests` failed with *relation does not exist*:
+    they open a `DbContext` before anything starts the host, and **the host is
+    what migrates**. It had been survivable by accident, because some other
+    class in the collection made a request first. `ServerFixture` now migrates
+    once during `InitializeAsync`, which removed the ordering assumption from
+    every suite and let two duplicated warm-up helpers be deleted.
+  - **`chrislusf/seaweedfs` is pinned to 4.43, and 4.44 is newer.** On 4.44 the
+    S3 gateway answers "We encountered an internal error" and three tests fail;
+    4.43 passes all sixteen, and the 4.41 it replaced failed the control test.
+    **Newest is not the same as working**, and the reference-implementation
+    suite is what says which — it is gated behind `ALGOJUDGE_S3=seaweedfs` and
+    skips by default, in CI included, so this needs running by hand.
+  - `rustfs` went `1.0.0-rc.1` → `rc.4`; there is still **no stable 1.0.0**.
+    `postgres:18` is unchanged: there is no 19, and the major pin is deliberate.
+  - **Warnings 15 → 14.** The nine the bump introduced were fixed because the
+    bump introduced them; the fourteen that predate it are still measured and
+    not fixed, per the standing decision.
+
 ## Layout
 
 The frontend is in

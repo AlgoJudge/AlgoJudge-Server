@@ -96,7 +96,9 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
             var port = implementation == "seaweedfs" ? 8333 : 9000;
             container = (implementation == "seaweedfs" ? Seaweed() : Rustfs())
                 .WithPortBinding(port, assignRandomHostPort: true)
-                .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(port))
+                // Testcontainers 4 split `UntilPortIsAvailable` in two. This is the
+                // container's own port, not the mapped one, so it is the internal half.
+                .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(port))
                 .Build();
 
             await container.StartAsync();
@@ -144,8 +146,7 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         dataDirectory = "/data";
 
-        return new ContainerBuilder()
-            .WithImage("rustfs/rustfs:1.0.0-rc.1")
+        return new ContainerBuilder("rustfs/rustfs:1.0.0-rc.4")
             .WithEnvironment("RUSTFS_ACCESS_KEY", AccessKey)
             .WithEnvironment("RUSTFS_SECRET_KEY", SecretKey)
             // RustFS implements SSE-S3 and refuses to enable it without a master
@@ -168,8 +169,13 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         dataDirectory = "/data";
 
-        return new ContainerBuilder()
-            .WithImage("chrislusf/seaweedfs:4.41")
+        // **4.43 and not 4.44, which is the newest.** Measured on 2026-08-29
+        // while sweeping dependencies: on 4.44 the S3 gateway answers "We
+        // encountered an internal error" and three tests fail, one of them
+        // before any assertion. 4.43 passes all sixteen — and 4.41, which this
+        // replaced, failed the control test below. Newest is not the same as
+        // working, and the suite is what says which.
+        return new ContainerBuilder("chrislusf/seaweedfs:4.43")
             .WithResourceMapping(
                 System.Text.Encoding.UTF8.GetBytes(SeaweedIdentities), "/etc/seaweedfs/s3.json")
             .WithCommand("server", "-s3", "-s3.config=/etc/seaweedfs/s3.json", "-dir=/data");

@@ -27,18 +27,9 @@ namespace AlgoJudge.Server.Tests;
 [Collection("server-2")]
 public class FileStorageSchemaTests(ServerFixture server)
 {
-    /// <summary>Starts the shared host, so the schema being read exists.</summary>
-    private async Task ReadyAsync()
-    {
-        using var warm = server.CreateClient();
-        (await warm.GetAsync("/api/v1/health")).EnsureSuccessStatusCode();
-    }
-
     [Fact]
     public async Task An_insert_has_to_say_where_it_put_the_bytes()
     {
-        await ReadyAsync();
-
         // A default here would let a writer that has never heard of stores
         // insert a row claiming `pg`, with the bytes somewhere else entirely.
         var hasDefault = await ScalarAsync<bool>(
@@ -52,8 +43,6 @@ public class FileStorageSchemaTests(ServerFixture server)
     [Fact]
     public async Task The_bytes_are_stored_out_of_line_and_uncompressed()
     {
-        await ReadyAsync();
-
         // 'e' is EXTERNAL: out of line, **not compressed**. Uncompressed is the
         // half that matters — a ranged read is `substring(Content from X for Y)`,
         // and PostgreSQL can only seek into a TOASTed value it did not compress.
@@ -71,8 +60,6 @@ public class FileStorageSchemaTests(ServerFixture server)
     [Fact]
     public async Task Bytes_can_be_written_before_the_row_that_names_them()
     {
-        await ReadyAsync();
-
         // The upload path writes the bytes and only then commits the `File` row,
         // so a crash leaves bytes nobody points at rather than a row pointing at
         // nothing (FILE_STORAGE.md §2, invariant 3). A foreign key here — which

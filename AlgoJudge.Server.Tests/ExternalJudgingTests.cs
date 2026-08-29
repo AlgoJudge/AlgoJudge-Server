@@ -405,7 +405,7 @@ public class ExternalJudgingTests(ServerFixture server)
         await Sign.Succeeded(saved);
 
         var back = await admin.GetFromJsonAsync<JsonElement>("/api/v1/instance/external-content");
-        var hosts = back.GetProperty("hosts").EnumerateArray().Select(h => h.GetString()).ToArray();
+        var hosts = back.GetProperty("hosts").EnumerateArray().Select(h => h.GetString()!).ToArray();
         Assert.Equal(["example.invalid", "second.invalid"], hosts);
 
         // And the list is what fetching consults, not a copy of it.

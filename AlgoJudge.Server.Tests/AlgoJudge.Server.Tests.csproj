@@ -10,12 +10,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <!--
+      `coverlet.collector` was here until 2026-08-29 and nothing ever called it:
+      no collector argument, in CI or in a script. An unused dependency is one
+      to patch for no reason. If coverage is wanted it comes back in one line,
+      current, beside the step that reads it.
+
+      **xunit stays on the v2 line.** `xunit.v3` is a different package, not a
+      newer version of this one, and moving to it is a migration rather than a
+      bump; 2.9.3 is the latest stable `xunit`.
+    -->
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="3.10.0" />
-    <PackageReference Include="xunit" Version="2.5.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup>

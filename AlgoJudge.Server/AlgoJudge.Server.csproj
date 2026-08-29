@@ -22,8 +22,8 @@
       the framework later — and this is the pure-managed option, so a container
       needs no native libsodium beside it.
     -->
-    <PackageReference Include="AWSSDK.S3" Version="4.0.102.1" />
-    <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.102.4" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.11" />
     <!--
       The Data Protection key ring, in the database this installation already
@@ -47,24 +47,30 @@
       stated rather than inherited from a transitive graph that a minor bump
       elsewhere can move.
 
-      **Pinned to what the handler resolves, never below it**, because raising
-      it here would raise it on the sign-in path too — a change made as a side
-      effect of an LTI feature and verified by nothing. On .NET 10 that number
-      is 8.19.2; a direct reference under it is an NU1605 downgrade, so this
-      moved with the framework rather than by choice. The wording said 7.0.3
-      until 2026-08-29 and had been wrong since the reference read 8.0.2.
+      **Never below what the handler resolves, and since 2026-08-29 above it by
+      decision.** ASP.NET Core 10.0.11's OpenIdConnect asks for 8.19.2, and
+      anything under that is an NU1605 downgrade — that is the floor. The
+      ceiling used to be the same number, on the argument that raising it here
+      raises it on the sign-in path as a side effect of an LTI feature. The
+      owner overruled that when the dependencies were swept to their latest
+      stable releases: **8.22.0 is deliberately three minors above the floor.**
+
+      What makes it answerable rather than hoped about is that the sign-in path
+      is covered — `FederatedSignInTests` drives the claim mapping and
+      provisioning, and the LTI suites validate a platform's `id_token` and
+      sign client assertions with exactly these two packages.
 
       MIT, maintained by Microsoft in `AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet`,
       shipping stable releases. No alpha or beta package goes on this path, which
       is a constraint the project owner set rather than a preference.
     -->
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.2" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.22.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.22.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.11">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.5" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!--
