@@ -8,14 +8,13 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using NpgsqlTypes;
 
 #nullable disable
 
 namespace AlgoJudge.Server.Database.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260828201835_InitialCreate")]
+    [Migration("20260829084553_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -23,7 +22,7 @@ namespace AlgoJudge.Server.Database.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -213,7 +212,7 @@ namespace AlgoJudge.Server.Database.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<List<string>>("RunnerTags")
+                    b.PrimitiveCollection<List<string>>("RunnerTags")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
@@ -737,7 +736,7 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<bool>("AccountDeletionEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<List<string>>("ExternalFetchHosts")
+                    b.PrimitiveCollection<List<string>>("ExternalFetchHosts")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -1091,7 +1090,7 @@ namespace AlgoJudge.Server.Database.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<List<string>>("ProblemTypes")
+                    b.PrimitiveCollection<List<string>>("ProblemTypes")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -1115,7 +1114,7 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<int>("State")
                         .HasColumnType("integer");
 
-                    b.Property<List<string>>("Tags")
+                    b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -1195,7 +1194,7 @@ namespace AlgoJudge.Server.Database.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
-                    b.Property<List<string>>("RunnerTags")
+                    b.PrimitiveCollection<List<string>>("RunnerTags")
                         .HasColumnType("text[]");
 
                     b.Property<string>("Slug")
@@ -1242,7 +1241,7 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz");
 
-                    b.Property<NpgsqlCidr>("Network")
+                    b.Property<IPNetwork>("Network")
                         .HasColumnType("cidr");
 
                     b.Property<string>("Note")

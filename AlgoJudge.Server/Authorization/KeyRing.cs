@@ -202,7 +202,12 @@ namespace AlgoJudge.Server.Authorization
                 {
                     // **`EphemeralKeySet`** so loading a PFX never writes key
                     // material into a user profile the container does not keep.
-                    loaded.Add(new X509Certificate2(
+                    //
+                    // `X509CertificateLoader` since 2026-08-29: the constructor
+                    // that took a path is obsolete because it guessed at the
+                    // file's format, and this says PKCS#12 outright. The flag,
+                    // and what it buys, are unchanged.
+                    loaded.Add(X509CertificateLoader.LoadPkcs12FromFile(
                         path, declared["Password"] ?? "", X509KeyStorageFlags.EphemeralKeySet));
                 }
                 catch (CryptographicException error)

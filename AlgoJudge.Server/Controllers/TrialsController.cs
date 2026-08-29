@@ -38,7 +38,9 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<TrialDto>(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public Task<TrialDto> Request([FromBody] NewTrialDto input, CancellationToken ct) =>
+        // `new`, not a rename: the action's name is its `operationId`, so renaming
+        // it would move the contract to silence a warning about a name.
+        public new Task<TrialDto> Request([FromBody] NewTrialDto input, CancellationToken ct) =>
             trials.RequestAsync(input.ActivityIdOrSlug, input.ProblemType, input.PackageFileId, ct);
 
         /// <summary>

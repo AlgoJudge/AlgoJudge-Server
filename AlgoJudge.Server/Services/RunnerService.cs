@@ -656,13 +656,13 @@ namespace AlgoJudge.Server.Services
                 ? TimeSpan.FromSeconds(Math.Clamp(requested, 60, MaxLease.TotalSeconds))
                 : DefaultLease;
 
-            var job = await ExtendAsync(runner, jobId, leaseToken, lease, ct);
+            var (job, expires) = await ExtendAsync(runner, jobId, leaseToken, lease, ct);
 
             return new LeaseDto
             {
                 JobId = Wire.Id(job.Id),
                 LeaseToken = leaseToken,
-                LeaseExpiresAt = Wire.At(job.LeaseExpiresAt.Value),
+                LeaseExpiresAt = Wire.At(expires),
             };
         }
 
@@ -726,7 +726,14 @@ namespace AlgoJudge.Server.Services
         /// job was granted at claim — falling back to the Server's default for a
         /// job claimed before that was recorded.
         /// </param>
-        private async Task<EvaluationJob> ExtendAsync(
+        /// <returns>
+        /// The job <b>and the deadline this call wrote</b>. The column is
+        /// nullable and the value never is, but only this method can say so —
+        /// <see cref="Later"/> returns a plain <c>DateTime</c>, and that
+        /// knowledge does not survive the return type. Handing it back is what
+        /// lets the caller answer without a <c>.Value</c> nobody can check.
+        /// </returns>
+        private async Task<(EvaluationJob Job, DateTime LeaseExpiresAt)> ExtendAsync(
             DbRunner runner, Guid jobId, string leaseToken, TimeSpan? lease, CancellationToken ct)
         {
             // Two attempts, not a loop without an end: the second read is against
@@ -742,13 +749,14 @@ namespace AlgoJudge.Server.Services
                         ? TimeSpan.FromSeconds(granted)
                         : DefaultLease);
 
-                job.LeaseExpiresAt = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(by));
+                var expires = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(by));
+                job.LeaseExpiresAt = expires;
                 runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
 
                 try
                 {
                     await context.SaveChangesAsync(ct);
-                    return job;
+                    return (job, expires);
                 }
                 catch (DbUpdateConcurrencyException conflict) when (attempt == 0)
                 {

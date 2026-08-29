@@ -159,7 +159,7 @@ public class StatementNamingTests(ServerFixture server)
                 statements = new[]
                 {
                     new { fileId = polish, language = (string?)null },
-                    new { fileId = english, language = "en" },
+                    new { fileId = english, language = (string?)"en" },
                 },
             }));
 

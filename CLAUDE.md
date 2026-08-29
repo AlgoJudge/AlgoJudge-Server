@@ -489,6 +489,68 @@ After cloning, inspect the solution and project files, then document:
     bump introduced them; the fourteen that predate it are still measured and
     not fixed, per the standing decision.
 
+- **Zero build warnings, and CI fails on one** (2026-08-29). The count was 5 in
+  August, 15 after the .NET 10 upgrade and 14 after the dependency sweep —
+  nobody was reading the list, which is what an ungated list becomes. It is zero
+  now and `-warnaserror` in the CI build step is what keeps it there.
+  - **`-warnaserror` on the command line, not `TreatWarningsAsErrors` in the
+    `.csproj`**: a build in the middle of an edit should still run, and the image
+    build should not fail on a rule that one job is the one enforcing. The SDK is
+    `10.0.x` and floats, so a new one can redden an unrelated commit; **the fix
+    then is to clear the warning, not to remove the flag.**
+  - **`Request` on two controllers keeps its name and gains `new`.** The action's
+    name is its `operationId`, so renaming it would have moved the contract to
+    silence a warning about a name.
+  - **`ExtendAsync` returns the deadline it wrote.** The column is nullable and
+    the value never is, but only that method could say so — `Later` returns a
+    plain `DateTime` and the knowledge did not survive the return type, which is
+    what the `.Value` was papering over.
+  - **Trusted proxies moved to `System.Net.IPNetwork` and `KnownIPNetworks`, and
+    got stricter on purpose.** The deprecated type accepted `172.20.0.5/16` and
+    quietly meant `172.20.0.0/16`. **The replacement does the same** — measured:
+    on .NET 10 the constructor normalises without a word, exactly as `TryParse`
+    does — so the refusal is written by hand, comparing what was declared with
+    `BaseAddress`. A deployment with a sloppy CIDR now stops at startup and is
+    told what to write instead. The stakes are the reason: this list decides
+    whose word is taken for every visitor's address.
+  - **The `NpgsqlCidr` converter is gone**, which is what the model was shaped
+    for. Removing it changed no schema — `MigrationsDescribeTheModelTests` stayed
+    green, because a value converter is not a relational difference — but the
+    *generated migration* still named the obsolete type, so `InitialCreate` was
+    regenerated. **Two databases and `pg_dump` say the schema is identical, to
+    zero diff lines**, and the hand-written `FileContents` block was re-attached.
+  - **`.config/dotnet-tools.json` pinned `dotnet-ef` at 8.0.29** — a local
+    manifest that already existed and that the .NET 10 upgrade did not touch, so
+    the repository's own EF tool could not drive EF 10. It says 10.0.11 now.
+    **A pinned tool is a thing a framework upgrade has to carry**, and this one
+    was missed because nothing needed the tool until something did.
+
+  - **A test written to check "several networks" found a 500 instead.** Writing a
+    round's address rules through `PUT /series/{id}` answered
+    `DbUpdateConcurrencyException` — for **any** number of rules, one included.
+    - **Every entity here assigns its own key** (`Id = Uuid.New()`), so a child
+      added through a **tracked** parent's navigation is an entity EF discovers
+      with its key already set, and it reads that as `Modified`. It then writes
+      `UPDATE "SeriesAddressRules" … WHERE "Id" = …` against a row that is not
+      there, affects nothing, and the unhandled exception is a 500.
+    - **Creating a round worked**, because there the parent is itself `Added` and
+      the child cascades — which is why the shape survived. The one earlier test
+      of that endpoint with rules expected a refusal and got one.
+    - `ApplyRestrictions` now takes the context and says
+      `Entry(rule).State = EntityState.Added` outright. **The hazard is general**:
+      `parent.Children.Add(new Child())` on a tracked parent is broken anywhere
+      in this model. The other eleven sites were checked — all add to a parent
+      that is itself new, or to a `DbSet`, or to a plain JSON shape.
+    - The test helper `LockdownTests.RestrictAsync` had been carrying a comment
+      about this since it was written — it writes rules as rows of their own
+      "rather than through the navigation". **The workaround was in the test and
+      the bug stayed in the product.**
+  - **Several address ranges on one round were never exercised.** The helper
+    every lockdown test used writes at most one rule, so `SeriesLockdown.Admits`
+    had never iterated. Two tests now cover it: three ranges including an IPv6
+    one, each admitting and an address outside all three not; and the API write,
+    which is what found the 500 above.
+
 ## Layout
 
 The frontend is in

@@ -84,7 +84,7 @@ public class RequestOriginTests
         TrustedProxies.Apply(options, Configured(
             ("Forwarded:KnownNetworks", "172.20.0.0/16,2001:db8::/32")));
 
-        Assert.Equal(2, options.KnownNetworks.Count);
+        Assert.Equal(2, options.KnownIPNetworks.Count);
         Assert.Empty(options.KnownProxies);
     }
 
@@ -107,7 +107,7 @@ public class RequestOriginTests
         // two behave alike; only one of them says what was meant.
         Assert.Equal(ForwardedHeaders.None, options.ForwardedHeaders);
         Assert.Empty(options.KnownProxies);
-        Assert.Empty(options.KnownNetworks);
+        Assert.Empty(options.KnownIPNetworks);
     }
 
     /// <summary>
@@ -128,6 +128,54 @@ public class RequestOriginTests
             () => TrustedProxies.Apply(new ForwardedHeadersOptions(), Configured(
                 ("Forwarded:KnownNetworks", "172.20.0.0"))));
         Assert.Contains("CIDR", network.Message);
+    }
+
+    /// <summary>
+    /// An address written where a network belongs is sent to the setting that
+    /// takes addresses.
+    /// <para>
+    /// <b>A bare IP is perfectly valid configuration — in the other field.</b>
+    /// `Forwarded__KnownProxies` is for addresses and takes several
+    /// comma-separated; this list is for CIDR blocks. Answering only "not CIDR"
+    /// would leave somebody to find that out, so the message names the setting
+    /// and offers the `/32` spelling for people who meant one machine.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void An_address_in_the_networks_list_is_pointed_at_the_other_setting()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => TrustedProxies.Apply(new ForwardedHeadersOptions(), Configured(
+                ("Forwarded:KnownNetworks", "10.0.0.2"))));
+
+        Assert.Contains("Forwarded:KnownProxies", refused.Message);
+        Assert.Contains("10.0.0.2/32", refused.Message);
+    }
+
+    /// <summary>
+    /// A range with bits below its prefix is refused, and the message says what
+    /// to write instead.
+    /// <para>
+    /// <b>New on 2026-08-29, and a tightening.</b> The deprecated
+    /// <c>HttpOverrides.IPNetwork</c> accepted <c>172.20.0.5/16</c> and quietly
+    /// meant <c>172.20.0.0/16</c>; <c>System.Net.IPNetwork</c> refuses it. The
+    /// refusal is kept rather than masked, because this list decides whose word
+    /// is taken for every visitor's address — a range nobody meant is the whole
+    /// internet inside the room. The same typo is refused for a round's address
+    /// rules, where it costs a laboratory rather than an installation.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_network_with_bits_below_its_prefix_is_refused_and_named()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => TrustedProxies.Apply(new ForwardedHeadersOptions(), Configured(
+                ("Forwarded:KnownNetworks", "172.20.0.5/16"))));
+
+        Assert.Contains("172.20.0.5/16", refused.Message);
+        // Not merely "that is wrong": the message carries the network it would
+        // have silently become, so the operator can choose it or a longer prefix.
+        Assert.Contains("172.20.0.0/16", refused.Message);
     }
 
     /// <summary>

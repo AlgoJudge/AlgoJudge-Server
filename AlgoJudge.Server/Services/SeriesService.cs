@@ -173,7 +173,18 @@ namespace AlgoJudge.Server.Services
         /// owner asked for the rule and it is cheap to keep.
         /// </para>
         /// </summary>
-        internal static void ApplyRestrictions(Series round, SeriesInputDto input)
+        /// <param name="context">
+        /// Needed for one line, and the line is not optional. Every entity here
+        /// assigns its own key in its initialiser, so a rule added through a
+        /// <b>tracked</b> round's navigation is an entity EF finds with its key
+        /// already set — and it reads that as <c>Modified</c>, not <c>Added</c>.
+        /// It then writes <c>UPDATE "SeriesAddressRules" … WHERE "Id" = …</c>
+        /// against a row that is not there, which affects no rows and surfaces
+        /// as a <c>DbUpdateConcurrencyException</c> and a <b>500</b>. Creating a
+        /// round worked only because its parent was itself <c>Added</c>.
+        /// </param>
+        internal static void ApplyRestrictions(
+            ApplicationDbContext context, Series round, SeriesInputDto input)
         {
             if (input.Importance is { } rank)
             {
@@ -232,12 +243,16 @@ namespace AlgoJudge.Server.Services
                         throw new ValidationException(
                             $"\"{network}\" is not an address range", "series.address.invalid");
                     }
-                    round.AddressRules.Add(new SeriesAddressRule
+                    var added = new SeriesAddressRule
                     {
                         SeriesId = round.Id,
                         Network = parsed,
                         Note = rule.Note?.Trim() is { Length: > 0 } note ? note : null,
-                    });
+                    };
+                    round.AddressRules.Add(added);
+
+                    // Said outright, for the reason on the `context` parameter.
+                    context.Entry(added).State = EntityState.Added;
                 }
             }
 
@@ -335,7 +350,7 @@ namespace AlgoJudge.Server.Services
                 // late rather than pretending it just happened.
                 IsOpen = false,
             };
-            ApplyRestrictions(series, input);
+            ApplyRestrictions(context, series, input);
 
             context.Series.Add(series);
             await context.SaveChangesAsync(ct);

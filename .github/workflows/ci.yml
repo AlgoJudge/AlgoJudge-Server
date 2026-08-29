@@ -30,11 +30,19 @@ jobs:
       - name: Restore
         run: dotnet restore AlgoJudge.sln
 
-      # Warnings are reported but do not fail the build. NU1903 was the standing
-      # exception here — AutoMapper 13.0.1 carried a high-severity advisory —
-      # and it is gone with the package, so the restore above is clean.
+      # **A warning fails this build, since 2026-08-29.** The count had walked
+      # from 5 to 15 across two upgrades before anybody counted, which is what
+      # an unread list does; it is zero now, and this is what keeps it there.
+      #
+      # `-warnaserror` here rather than `TreatWarningsAsErrors` in the `.csproj`,
+      # deliberately: a build in the middle of an edit should still run, and the
+      # image build should not fail on a rule this job is the one enforcing.
+      #
+      # The SDK is `10.0.x` and floats, so a new one may add a rule and redden a
+      # commit that changed nothing. That is the accepted cost of not pinning;
+      # the fix then is to clear the warning, not to remove the flag.
       - name: Build
-        run: dotnet build AlgoJudge.sln -c Release --no-restore
+        run: dotnet build AlgoJudge.sln -c Release --no-restore -warnaserror
 
       # Testcontainers starts a real PostgreSQL 18 per run. Not an in-memory
       # provider: the job queue rests on FOR UPDATE SKIP LOCKED, on filtered
