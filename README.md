@@ -51,27 +51,47 @@ id like every other stored document, rather than fields on the row.
 
 ### What is genuinely not here
 
-- **Identity phase 2.** No OIDC providers yet: every account is local, and
-  `SessionDto.IsLocal` is still a hard-coded `true`. Specified and accepted —
-  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` — not built.
+> **Two entries left this list on 2026-08-29, having been wrong for some time.**
+> It said identity phase 2 was *"not built"* and that LTI was *"a later
+> direction"*. Measured against the committed `openapi.json` that day, the Server
+> serves **15** identity and provider paths — registering providers from the
+> database, the challenge and its return, first-sign-in provisioning, a
+> claim-to-permission mapping per provider, and a provider-initiated deletion
+> channel — and **22** LTI paths, with grade synchronisation, roster and deep
+> linking behind them. `SessionDto.IsLocal` is derived from whether the account
+> has a password, not hard-coded.
+
 - **Mail.** There is no sender, so password reset and confirmation resend do not
   exist. They are **refused rather than absent**: `MapIdentityApi` maps them
   unconditionally and middleware answers them, because an endpoint that exists
   and cannot work invites a screen to promise something nothing will deliver.
 - **2FA.** The endpoints `MapIdentityApi` brings are unused rather than
   half-wired, by decision.
-- **LTI and grade export.** A later direction, deliberately outside the
-  evaluation path.
+- **`/identity/manage/info` is refused as well**, and for a different reason than
+  mail: the framework builds that response with a throw when the account has no
+  address, and this product allows accounts without one — the seeded
+  administrator is one. There is nothing to configure, so the route is closed.
+  `GET /api/v1/account` answers for every account this product allows.
+- **One person arriving through two doors is two accounts.** A federated
+  identity is keyed on the provider and the subject, so a university's SSO and
+  its Moodle are two subjects, and an unknown subject provisions a new account.
+  Deciding which *existing* account a new subject belongs to is specified and
+  not built — and correlating automatically on an unverified address is account
+  takeover rather than a convenience, which is why it is a decision rather than
+  a patch.
 
 ## Decisions in force
 
 - **Identity stays here for the MVP** — and, for administrator, local and
   temporary accounts, permanently. ASP.NET Identity and password storage remain.
-  What arrives in phase 2 is not a move but an *addition*: several OIDC providers
-  registered at once, from the database, with a claim-to-permission mapping the
-  installation configures. Specified 2026-08-09,
-  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md`; **not yet
-  implemented**.
+  Phase 2 was never a move but an *addition*, and it is **built**: several OIDC
+  providers registered at once, from the database, with a claim-to-permission
+  mapping the installation configures. Specified 2026-08-09,
+  `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` — **read its
+  two amendment tables first**, because the body of an amended section still
+  states the pre-amendment form. This line said "not yet implemented" until
+  2026-08-29, by which time both identity deployments had been running against
+  it.
 - ~~**`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
   `Result`, which is created at claim time and doubles as the job record.~~
   **Reversed — it is an entity.** `EvaluationJob` carries the attempt number, the
@@ -705,7 +725,7 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**644 tests, 2 m 16 s** on the machine this was last run on, two skipped where
+**646 tests, 2 m 15 s** on the machine this was last run on, two skipped where
 no object store is configured. It was 4 m 49 s until 2026-08-29, when the fifty
 classes that sat in one xUnit collection — and therefore ran one at a time —
 were split across three, each with a database of its own.

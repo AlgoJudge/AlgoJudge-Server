@@ -470,6 +470,44 @@ public class EndToEndTests(ServerFixture server)
         Assert.Equal("mail.unavailable", problem.GetProperty("code").GetString());
     }
 
+    /// <summary>
+    /// <c>/identity/manage/info</c> is refused, and this product's own answer
+    /// serves the very account that made it necessary.
+    /// <para>
+    /// <b>It used to answer 500.</b> `MapIdentityApi` builds that response with
+    /// <c>GetEmailAsync(user) ?? throw new NotSupportedException</c>, so it fails
+    /// for any account without an address — which this product allows on purpose,
+    /// and **which the seeded administrator is**. There is no option to turn that
+    /// off: one overload, no options type, the throw inline in the handler.
+    /// </para>
+    /// <para>
+    /// The last assertion is the point of the test rather than a flourish: the
+    /// session is valid and <c>/account</c> answers it, so what was refused is
+    /// the framework's endpoint and not the account.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    public async Task The_frameworks_info_endpoint_is_refused_and_ours_answers(string method)
+    {
+        var admin = await SignInAsync(Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var response = method == "GET"
+            ? await admin.GetAsync("/api/v1/identity/manage/info")
+            : await admin.PostAsJsonAsync("/api/v1/identity/manage/info", new { });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("identity.info.unavailable", problem.GetProperty("code").GetString());
+
+        // The same session, on the endpoint that is meant to answer it.
+        var ours = await admin.GetAsync("/api/v1/account");
+        Assert.Equal(HttpStatusCode.OK, ours.StatusCode);
+        var account = await ours.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(Seeder.DevAdminLogin, account.GetProperty("username").GetString());
+    }
+
     [Fact]
     public async Task A_participant_cannot_read_the_manager_view()
     {
