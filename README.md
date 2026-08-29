@@ -94,6 +94,32 @@ id like every other stored document, rather than fields on the row.
 - .NET 10 SDK
 - PostgreSQL, or Docker for the supplied Compose file
 
+### Tested against
+
+**What the suites and CI actually run**, rather than what is believed to work.
+Anything outside this table is *unverified*, which is not the same as
+unsupported — see below for how to check one.
+
+| | version | how it is exercised |
+|---|---|---|
+| .NET | **10.0** — SDK `10.0.400` here, `10.0.x` on CI | `net10.0`; the images are `aspnet:10.0` and `sdk:10.0` |
+| PostgreSQL | **18** | every test suite and the Compose stack. The major is pinned on purpose: 18 moved where the data directory lives |
+| RustFS | **1.0.0-rc.4** | the S3 suite's default endpoint, and the Compose stack. There is still no stable `1.0.0` |
+| SeaweedFS | **4.43** | the S3 suite with `ALGOJUDGE_S3=seaweedfs`, **run by hand** — it skips by default, on CI included |
+
+**Two of those carry a caveat worth reading before you raise them.**
+
+- **SeaweedFS 4.44 exists and is not taken.** The reason recorded first — that
+  it was broken — turned out to be a readiness race in the suite, since fixed.
+  What holds the pin now is that the control test guarding the encryption check
+  is **intermittent on every version tried**, so the comparison that chose 4.43
+  is confounded rather than conclusive. `S3BlobStoreTests` says the rest.
+- **The S3 suite is the way to check any other implementation**, and it needs no
+  code change: point it at an endpoint with `ALGOJUDGE_S3_ENDPOINT` (see
+  "Checking a store against the reference implementation"). An implementation
+  that passes it satisfies the contract the suite encodes; one nobody has run it
+  against is simply unknown.
+
 ## Build
 
 ```bash
