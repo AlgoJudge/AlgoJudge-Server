@@ -93,10 +93,9 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
             var implementation =
                 Environment.GetEnvironmentVariable(ImplementationVariable)?.Trim().ToLowerInvariant();
 
-            var port = implementation == "seaweedfs" ? 8333 : 9000;
+            ushort port = implementation == "seaweedfs" ? (ushort)8333 : (ushort)9000;
             container = (implementation == "seaweedfs" ? Seaweed() : Rustfs())
                 .WithPortBinding(port, assignRandomHostPort: true)
-                .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(port))
                 .Build();
 
             await container.StartAsync();
@@ -125,9 +124,51 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
         // Makes the bucket and proves the endpoint answers, in one act. A
         // failure here is worth seeing before thirteen contract assertions fail
         // for the same reason.
-        var health = await store.CheckHealthAsync(CancellationToken.None);
+        var health = await ServingAsync();
         Assert.True(health.Reachable, $"the S3 endpoint did not answer: {health.Detail}");
         Assert.True(health.SmokeTestPassed, $"the S3 endpoint failed its smoke test: {health.Detail}");
+    }
+
+    /// <summary>
+    /// Asks the store until it is serving, and says why if it never does.
+    /// <para>
+    /// <b>Because no wait strategy is enough, and that was measured rather than
+    /// assumed.</b> These stores open their port in about 100 ms and answer
+    /// seconds later — 2.1 s for SeaweedFS 4.43, 3.1 s for 4.44 — and waiting on
+    /// an HTTP answer does not close the gap either, because a 403 comes from
+    /// the auth layer before the filer behind it can serve a bucket. Pinned to
+    /// 4.43, the suite was not correct, only fast enough; one second of startup
+    /// was the whole difference between green and three failures.
+    /// </para>
+    /// <para>
+    /// <b>It retries the probe, not the assertions.</b> What comes back is the
+    /// last answer, asserted once by the caller, so a store that is genuinely
+    /// wrong still fails on its own message — and a store that never arrives
+    /// says how many times it was asked and for how long, rather than timing out
+    /// as a bare cancellation.
+    /// </para>
+    /// </summary>
+    private async Task<StoreHealth> ServingAsync()
+    {
+        var patience = TimeSpan.FromSeconds(60);
+        var started = DateTime.UtcNow;
+        var attempts = 0;
+        StoreHealth health;
+
+        do
+        {
+            attempts++;
+            health = await store.CheckHealthAsync(CancellationToken.None);
+            if (health.Ok) return health;
+            await Task.Delay(TimeSpan.FromMilliseconds(250));
+        }
+        while (DateTime.UtcNow - started < patience);
+
+        return health with
+        {
+            Detail = $"gave up after {attempts} attempts over {patience.TotalSeconds:0} s — "
+                + $"the last answer was: {health.Detail}",
+        };
     }
 
     public async Task DisposeAsync()
@@ -144,8 +185,12 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         dataDirectory = "/data";
 
-        return new ContainerBuilder()
-            .WithImage("rustfs/rustfs:1.0.0-rc.1")
+        return new ContainerBuilder("rustfs/rustfs:1.0.0-rc.4")
+            // **Readiness is the implementation's business, not the caller's.**
+            // Waiting for the port was waiting for the wrong thing: both stores
+            // open it in about 100 ms and answer seconds later.
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r
+                .ForPort(9000).ForPath("/").ForStatusCodeMatching(_ => true)))
             .WithEnvironment("RUSTFS_ACCESS_KEY", AccessKey)
             .WithEnvironment("RUSTFS_SECRET_KEY", SecretKey)
             // RustFS implements SSE-S3 and refuses to enable it without a master
@@ -168,8 +213,36 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         dataDirectory = "/data";
 
-        return new ContainerBuilder()
-            .WithImage("chrislusf/seaweedfs:4.41")
+        // **4.43, and 4.44 is newer.** Two separate things were found behind
+        // that, and only one of them is fixed.
+        //
+        // The first was ours: "an internal error" from 4.44 was a **readiness
+        // race**, not a broken image. Both versions log identically at startup
+        // and differ only in how long they take — 2.1 s against 3.1 s to a first
+        // answer, against a port that opens in about 100 ms. `ServingAsync`
+        // closed that, and it stays closed whichever version runs.
+        //
+        // The second is **not** ours to have caused and is **not fixed**:
+        // `Bytes_nobody_encrypted_are_findable_in_the_data_directory` is
+        // intermittent, and on both versions. It was read as a difference
+        // between images — 4.44 failing three runs of three where 4.43 passed —
+        // until 4.43 also failed three of three and then passed. **Too few runs
+        // of a flaky test look exactly like a version difference.**
+        //
+        // `EventuallyFindableOnDiskAsync` narrows the window and does not close
+        // it, so the bytes sometimes never reach `/data` in a form `grep` sees
+        // rather than merely reaching it late. A hand-written probe of the same
+        // size and incompressibility could not reproduce the findable case on
+        // *either* version, which puts whatever matters inside
+        // `S3BlobStore.WriteAsync` rather than in the object.
+        //
+        // **So 4.43 is where the pin stays, and the comparison behind it is
+        // confounded.** Taking 4.44 wants the flake understood first; it is its
+        // own afternoon, and both the test and the assertion it guards skip
+        // unless `ALGOJUDGE_S3` and `ALGOJUDGE_S3_SSE` are set.
+        return new ContainerBuilder("chrislusf/seaweedfs:4.43")
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r
+                .ForPort(8333).ForPath("/").ForStatusCodeMatching(_ => true)))
             .WithResourceMapping(
                 System.Text.Encoding.UTF8.GetBytes(SeaweedIdentities), "/etc/seaweedfs/s3.json")
             .WithCommand("server", "-s3", "-s3.config=/etc/seaweedfs/s3.json", "-dir=/data");
@@ -259,7 +332,7 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
         await WriteThroughStoreAsync(plain);
 
         Assert.True(
-            await FindableOnDiskAsync(plain),
+            await EventuallyFindableOnDiskAsync(plain),
             "a grep of the store's data directory could not find bytes that were never encrypted, "
             + "so it cannot show that encrypted ones are absent either");
     }
@@ -280,7 +353,7 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
         var plain = $"algojudge-plaintext-{Guid.NewGuid():N}";
         await WriteThroughStoreAsync(plain);
         Assert.True(
-            await FindableOnDiskAsync(plain),
+            await EventuallyFindableOnDiskAsync(plain),
             "the method cannot see unencrypted bytes here, so it proves nothing about encrypted ones");
 
         using var client = ClientFor();
@@ -346,6 +419,39 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         var found = await container!.ExecAsync(["grep", "-r", "-a", "-l", needle, dataDirectory]);
         return found.ExitCode == 0;
+    }
+
+    /// <summary>
+    /// The same grep, until it finds the bytes or runs out of patience.
+    /// <para>
+    /// <b>A write that has been read back is not yet a write that is on disk.</b>
+    /// The store answers from its own path while the volume file behind it is
+    /// still being flushed, so grepping the moment the object round-trips is a
+    /// race — and it was one this suite lost intermittently, on every version
+    /// tried. It looked like a difference between images until the same version
+    /// both failed three times and passed.
+    /// </para>
+    /// <para>
+    /// Only the <b>positive</b> assertion may wait like this. The negative one —
+    /// that an encrypted object's plaintext is absent — must not, or it would
+    /// pass by asking too early, which is the exact vacuity the control above it
+    /// exists to rule out. It runs after this has already proved the flush
+    /// happens.
+    /// </para>
+    /// </summary>
+    private async Task<bool> EventuallyFindableOnDiskAsync(string needle)
+    {
+        var patience = TimeSpan.FromSeconds(30);
+        var started = DateTime.UtcNow;
+
+        do
+        {
+            if (await FindableOnDiskAsync(needle)) return true;
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
+        while (DateTime.UtcNow - started < patience);
+
+        return false;
     }
 
     private string Bucket => bucket;

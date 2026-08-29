@@ -352,7 +352,7 @@ public class RunnerTests(ServerFixture server)
                 .ToListAsync();
             // Exactly one current revision per name, and the superseded one is
             // marked rather than deleted — deleting would orphan its file.
-            Assert.Single(current.Where(r => r.FileId == Guid.Parse(second)));
+            Assert.Single(current, r => r.FileId == Guid.Parse(second));
 
             var superseded = await context.FileReferences
                 .CountAsync(r => r.FileId == Guid.Parse(first) && r.SupersededAt != null);

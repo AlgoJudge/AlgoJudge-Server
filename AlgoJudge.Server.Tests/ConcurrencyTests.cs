@@ -29,21 +29,6 @@ namespace AlgoJudge.Server.Tests;
 [Collection("server-2")]
 public class ConcurrencyTests(ServerFixture server)
 {
-    /// <summary>
-    /// Starts the shared host once, so the database this class talks to
-    /// directly has actually been migrated.
-    /// <para>
-    /// Every other suite gets this for free by making a request first. These
-    /// tests open a <c>DbContext</c> before anything else does, and on an empty
-    /// database that is a missing table rather than a race.
-    /// </para>
-    /// </summary>
-    private async Task ReadyAsync()
-    {
-        using var warm = server.CreateClient();
-        (await warm.GetAsync("/api/v1/health")).EnsureSuccessStatusCode();
-    }
-
     /// <summary>The two seeded development accounts, whichever ids they have.</summary>
     private async Task<(string Source, string Target)> TwoAccountsAsync()
     {
@@ -64,7 +49,6 @@ public class ConcurrencyTests(ServerFixture server)
     [Fact]
     public async Task An_undo_and_the_anonymiser_cannot_both_win()
     {
-        await ReadyAsync();
         var (source, target) = await TwoAccountsAsync();
         var id = Guid.NewGuid();
 
@@ -110,8 +94,6 @@ public class ConcurrencyTests(ServerFixture server)
     [Fact]
     public async Task A_halt_and_a_completion_cannot_both_win()
     {
-        await ReadyAsync();
-
         var id = Guid.NewGuid();
 
         await using (var seed = server.NewContext())
@@ -153,8 +135,6 @@ public class ConcurrencyTests(ServerFixture server)
     [Fact]
     public async Task A_cancel_is_not_lost_to_the_migrator()
     {
-        await ReadyAsync();
-
         var id = Guid.NewGuid();
 
         await using (var seed = server.NewContext())
@@ -198,8 +178,6 @@ public class ConcurrencyTests(ServerFixture server)
     [Fact]
     public async Task Two_settings_writers_do_not_erase_one_another()
     {
-        await ReadyAsync();
-
         await using (var ensure = server.NewContext())
         {
             if (!await ensure.Instance.AnyAsync())
@@ -245,8 +223,6 @@ public class ConcurrencyTests(ServerFixture server)
     [Fact]
     public async Task An_approval_cannot_overtake_a_revocation()
     {
-        await ReadyAsync();
-
         var id = Guid.NewGuid();
 
         await using (var seed = server.NewContext())

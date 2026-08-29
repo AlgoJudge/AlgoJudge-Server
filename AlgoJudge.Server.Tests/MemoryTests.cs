@@ -48,8 +48,7 @@ public sealed class MemoryTests(ITestOutputHelper output) : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder()
-            .WithImage("postgres:18")
+        container = new PostgreSqlBuilder("postgres:18")
             .WithDatabase("algojudge")
             .WithUsername("algojudge")
             .WithPassword("test")

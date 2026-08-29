@@ -94,6 +94,32 @@ id like every other stored document, rather than fields on the row.
 - .NET 10 SDK
 - PostgreSQL, or Docker for the supplied Compose file
 
+### Tested against
+
+**What the suites and CI actually run**, rather than what is believed to work.
+Anything outside this table is *unverified*, which is not the same as
+unsupported — see below for how to check one.
+
+| | version | how it is exercised |
+|---|---|---|
+| .NET | **10.0** — SDK `10.0.400` here, `10.0.x` on CI | `net10.0`; the images are `aspnet:10.0` and `sdk:10.0` |
+| PostgreSQL | **18** | every test suite and the Compose stack. The major is pinned on purpose: 18 moved where the data directory lives |
+| RustFS | **1.0.0-rc.4** | the S3 suite's default endpoint, and the Compose stack. There is still no stable `1.0.0` |
+| SeaweedFS | **4.43** | the S3 suite with `ALGOJUDGE_S3=seaweedfs`, **run by hand** — it skips by default, on CI included |
+
+**Two of those carry a caveat worth reading before you raise them.**
+
+- **SeaweedFS 4.44 exists and is not taken.** The reason recorded first — that
+  it was broken — turned out to be a readiness race in the suite, since fixed.
+  What holds the pin now is that the control test guarding the encryption check
+  is **intermittent on every version tried**, so the comparison that chose 4.43
+  is confounded rather than conclusive. `S3BlobStoreTests` says the rest.
+- **The S3 suite is the way to check any other implementation**, and it needs no
+  code change: point it at an endpoint with `ALGOJUDGE_S3_ENDPOINT` (see
+  "Checking a store against the reference implementation"). An implementation
+  that passes it satisfies the contract the suite encodes; one nobody has run it
+  against is simply unknown.
+
 ## Build
 
 ```bash
@@ -669,7 +695,7 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**640 tests, 2 m 10 s** on the machine this was last run on, two skipped where
+**640 tests, 2 m 19 s** on the machine this was last run on, two skipped where
 no object store is configured. It was 4 m 49 s until 2026-08-29, when the fifty
 classes that sat in one xUnit collection — and therefore ran one at a time —
 were split across three, each with a database of its own.

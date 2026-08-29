@@ -58,8 +58,7 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
             return;
         }
 
-        container = new PostgreSqlBuilder()
-            .WithImage("postgres:18")
+        container = new PostgreSqlBuilder("postgres:18")
             .WithDatabase("algojudge")
             .WithUsername("algojudge")
             .WithPassword("test")
@@ -67,6 +66,33 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
 
         await container.StartAsync();
         connectionString = container.GetConnectionString();
+
+        await MigratedAsync();
+    }
+
+    /// <summary>
+    /// Starts the host once, so the database is migrated before any test looks
+    /// at it.
+    /// <para>
+    /// <b>The schema comes from the migrations, not from the model</b> —
+    /// <c>Program.cs</c> calls <c>Database.Migrate()</c>, and that is
+    /// deliberate, because a model and a migration that disagree should be
+    /// caught rather than papered over. The consequence is that a suite opening
+    /// a <c>DbContext</c> before anybody has made a request sees an **empty
+    /// database**, and reads "relation does not exist".
+    /// </para>
+    /// <para>
+    /// That used to be survivable by accident: some other class in the
+    /// collection made a request first. On 2026-08-29 a new test runner ordered
+    /// the classes differently and nine tests in two suites failed at once.
+    /// Doing it here costs one request and removes the ordering assumption from
+    /// every suite, present and future.
+    /// </para>
+    /// </summary>
+    private async Task MigratedAsync()
+    {
+        using var client = CreateClient();
+        (await client.GetAsync("/api/v1/health")).EnsureSuccessStatusCode();
     }
 
     /// <summary>
