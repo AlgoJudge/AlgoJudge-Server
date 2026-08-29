@@ -463,12 +463,19 @@ After cloning, inspect the solution and project files, then document:
     class in the collection made a request first. `ServerFixture` now migrates
     once during `InitializeAsync`, which removed the ordering assumption from
     every suite and let two duplicated warm-up helpers be deleted.
-  - **`chrislusf/seaweedfs` is pinned to 4.43, and 4.44 is newer.** On 4.44 the
-    S3 gateway answers "We encountered an internal error" and three tests fail;
-    4.43 passes all sixteen, and the 4.41 it replaced failed the control test.
-    **Newest is not the same as working**, and the reference-implementation
-    suite is what says which — it is gated behind `ALGOJUDGE_S3=seaweedfs` and
-    skips by default, in CI included, so this needs running by hand.
+  - **`chrislusf/seaweedfs` is pinned to 4.43 although 4.44 exists, and 4.44 is
+    not broken.** That was the first conclusion and it was wrong. The two
+    versions log **identically** at startup, and a warmed 4.44 serves every
+    contract test. What differs is readiness: this suite waits on a TCP port
+    that opens in about **100 ms**, while the gateway answers at **2.1 s on 4.43
+    and 3.1 s on 4.44** — so 4.43 wins the race inside the AWS SDK's retries and
+    4.44 does not. **The pin is a symptom; the fix is a health check that
+    retries**, and that is its own piece of work: a wait strategy is not enough,
+    measured — an HTTP-403 probe and a log marker both still leave failures,
+    because 403 comes from the auth layer before the filer behind it can serve.
+    The readiness probe is now HTTP rather than a port, which is better but not
+    sufficient. **None of this shows up by default**: the suite is gated behind
+    `ALGOJUDGE_S3=seaweedfs` and skips in CI too, so it needs running by hand.
   - `rustfs` went `1.0.0-rc.1` → `rc.4`; there is still **no stable 1.0.0**.
     `postgres:18` is unchanged: there is no 19, and the major pin is deliberate.
   - **Warnings 15 → 14.** The nine the bump introduced were fixed because the

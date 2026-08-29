@@ -93,12 +93,9 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
             var implementation =
                 Environment.GetEnvironmentVariable(ImplementationVariable)?.Trim().ToLowerInvariant();
 
-            var port = implementation == "seaweedfs" ? 8333 : 9000;
+            ushort port = implementation == "seaweedfs" ? (ushort)8333 : (ushort)9000;
             container = (implementation == "seaweedfs" ? Seaweed() : Rustfs())
                 .WithPortBinding(port, assignRandomHostPort: true)
-                // Testcontainers 4 split `UntilPortIsAvailable` in two. This is the
-                // container's own port, not the mapped one, so it is the internal half.
-                .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(port))
                 .Build();
 
             await container.StartAsync();
@@ -147,6 +144,11 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
         dataDirectory = "/data";
 
         return new ContainerBuilder("rustfs/rustfs:1.0.0-rc.4")
+            // **Readiness is the implementation's business, not the caller's.**
+            // Waiting for the port was waiting for the wrong thing: both stores
+            // open it in about 100 ms and answer seconds later.
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r
+                .ForPort(9000).ForPath("/").ForStatusCodeMatching(_ => true)))
             .WithEnvironment("RUSTFS_ACCESS_KEY", AccessKey)
             .WithEnvironment("RUSTFS_SECRET_KEY", SecretKey)
             // RustFS implements SSE-S3 and refuses to enable it without a master
@@ -169,13 +171,23 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     {
         dataDirectory = "/data";
 
-        // **4.43 and not 4.44, which is the newest.** Measured on 2026-08-29
-        // while sweeping dependencies: on 4.44 the S3 gateway answers "We
-        // encountered an internal error" and three tests fail, one of them
-        // before any assertion. 4.43 passes all sixteen — and 4.41, which this
-        // replaced, failed the control test below. Newest is not the same as
-        // working, and the suite is what says which.
+        // **4.43, and 4.44 is newer — but not for the reason first recorded.**
+        // 4.44 was blamed for "an internal error"; it is not broken. The two
+        // versions log *identically* at startup, and a warmed 4.44 serves every
+        // contract test. What differs is only how long they take to be ready —
+        // measured 2.1 s against 3.1 s to a first answer — and this suite waits
+        // on a port that opens in about 100 ms, so it starts talking to a store
+        // that is not serving yet. 4.43 wins that race inside the AWS SDK's
+        // retries and 4.44 does not.
+        //
+        // **So this pin is a symptom, not a fix.** The fix is a health check
+        // that retries, and it is its own piece of work; a wait strategy is not
+        // enough, which was measured too — HTTP-403 and a log marker both still
+        // leave failures, because 403 comes from the auth layer before the filer
+        // behind it can serve.
         return new ContainerBuilder("chrislusf/seaweedfs:4.43")
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r
+                .ForPort(8333).ForPath("/").ForStatusCodeMatching(_ => true)))
             .WithResourceMapping(
                 System.Text.Encoding.UTF8.GetBytes(SeaweedIdentities), "/etc/seaweedfs/s3.json")
             .WithCommand("server", "-s3", "-s3.config=/etc/seaweedfs/s3.json", "-dir=/data");
