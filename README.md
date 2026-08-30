@@ -816,6 +816,11 @@ were split across three, each with a database of its own.
 > **646** from a run until 2026-08-30; a static count needs no Docker, so it is
 > the one that can be kept honest, and the timing is left dated instead of
 > guessed at.
+>
+> **A run the same day agreed**: `dotnet test AlgoJudge.sln` reported 664
+> passed, 2 skipped, 666 total in 2 m 51 s. So the static method is not merely
+> cheaper — on this suite it is exact, and the two timings above are the same
+> suite on two different machines rather than a regression.
 
 CI adds two jobs beside that one: the container image is built, and the
 development stack is brought up and asserted against — that the API answers under
