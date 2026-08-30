@@ -12,7 +12,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// One person on the course's roster, and what this installation can say
     /// about them.
     /// </summary>
-    public record RosterEntry
+    public record RosterEntryDto
     {
         /// <summary>The platform's own subject for them. Always present.</summary>
         public required string Subject { get; init; }
@@ -60,7 +60,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// <summary>
     /// A course's roster as read from the platform, with what could be matched.
     /// </summary>
-    public record RosterView
+    public record RosterViewDto
     {
         public required string ContextId { get; init; }
         public required string ContextTitle { get; init; }
@@ -70,7 +70,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// <summary>How many already have an AlgoJudge account behind them.</summary>
         public required int Known { get; init; }
 
-        public required IReadOnlyList<RosterEntry> Members { get; init; }
+        public required IReadOnlyList<RosterEntryDto> Members { get; init; }
 
         /// <summary>
         /// What the platform actually disclosed, counted rather than assumed.
@@ -83,10 +83,10 @@ namespace AlgoJudge.Server.Lti.Services
         /// answer comes from the platform in front of us instead of from a guess.
         /// </para>
         /// </summary>
-        public required RosterDisclosure Disclosed { get; init; }
+        public required RosterDisclosureDto Disclosed { get; init; }
     }
 
-    public record RosterDisclosure
+    public record RosterDisclosureDto
     {
         public required int WithUsername { get; init; }
         public required int WithEmail { get; init; }
@@ -94,7 +94,7 @@ namespace AlgoJudge.Server.Lti.Services
     }
 
     /// <summary>What a roster enrolment did, and what it declined to do.</summary>
-    public record RosterEnrolment
+    public record RosterEnrolmentDto
     {
         public required int Read { get; init; }
 
@@ -109,10 +109,10 @@ namespace AlgoJudge.Server.Lti.Services
         /// reason. <b>Reported rather than guessed at</b>: every one of these is
         /// somebody a teacher may be expecting to see.
         /// </summary>
-        public required IReadOnlyList<RosterSkip> Skipped { get; init; }
+        public required IReadOnlyList<RosterSkipDto> Skipped { get; init; }
     }
 
-    public record RosterSkip
+    public record RosterSkipDto
     {
         public required string Subject { get; init; }
         public string? Name { get; init; }
@@ -129,7 +129,7 @@ namespace AlgoJudge.Server.Lti.Services
 
     public interface IRosterService
     {
-        Task<RosterView> ReadAsync(Guid resourceLinkId, CancellationToken ct);
+        Task<RosterViewDto> ReadAsync(Guid resourceLinkId, CancellationToken ct);
 
         /// <summary>
         /// Puts the course's roster into the activity, linking whoever can be
@@ -141,7 +141,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// read once.
         /// </para>
         /// </summary>
-        Task<RosterEnrolment> EnrolAsync(Guid resourceLinkId, CancellationToken ct);
+        Task<RosterEnrolmentDto> EnrolAsync(Guid resourceLinkId, CancellationToken ct);
     }
 
     /// <summary>
@@ -164,7 +164,7 @@ namespace AlgoJudge.Server.Lti.Services
         TimeProvider clock
     ) : IRosterService
     {
-        public async Task<RosterView> ReadAsync(Guid resourceLinkId, CancellationToken ct)
+        public async Task<RosterViewDto> ReadAsync(Guid resourceLinkId, CancellationToken ct)
         {
             var link = await db.ResourceLinks.AsNoTracking()
                 .FirstOrDefaultAsync(l => l.Id == resourceLinkId, ct)
@@ -206,7 +206,7 @@ namespace AlgoJudge.Server.Lti.Services
             var members = roster.Members.Select(member =>
             {
                 bySubject.TryGetValue(member.UserId, out var identity);
-                return new RosterEntry
+                return new RosterEntryDto
                 {
                     Subject = member.UserId,
                     Roles = member.Roles,
@@ -220,7 +220,7 @@ namespace AlgoJudge.Server.Lti.Services
                 };
             }).ToList();
 
-            return new RosterView
+            return new RosterViewDto
             {
                 ContextId = roster.ContextId is { Length: > 0 } id ? id : link.ContextId,
                 ContextTitle = link.ContextTitle ?? "",
@@ -228,7 +228,7 @@ namespace AlgoJudge.Server.Lti.Services
                 Total = members.Count,
                 Known = members.Count(m => m.UserId is not null),
                 Members = members,
-                Disclosed = new RosterDisclosure
+                Disclosed = new RosterDisclosureDto
                 {
                     WithUsername = members.Count(m => !string.IsNullOrWhiteSpace(m.AssertedUsername)),
                     WithEmail = members.Count(m => !string.IsNullOrWhiteSpace(m.Email)),
@@ -237,7 +237,7 @@ namespace AlgoJudge.Server.Lti.Services
             };
         }
 
-        public async Task<RosterEnrolment> EnrolAsync(Guid resourceLinkId, CancellationToken ct)
+        public async Task<RosterEnrolmentDto> EnrolAsync(Guid resourceLinkId, CancellationToken ct)
         {
             var link = await db.ResourceLinks.AsNoTracking()
                 .FirstOrDefaultAsync(l => l.Id == resourceLinkId, ct)
@@ -273,7 +273,7 @@ namespace AlgoJudge.Server.Lti.Services
 
             var roster = await nrps.ReadAsync(platform, url, link.PlatformResourceLinkId, ct);
 
-            var skipped = new List<RosterSkip>();
+            var skipped = new List<RosterSkipDto>();
             var linked = 0;
             var granted = 0;
 
@@ -341,7 +341,7 @@ namespace AlgoJudge.Server.Lti.Services
                 granted++;
             }
 
-            return new RosterEnrolment
+            return new RosterEnrolmentDto
             {
                 Read = roster.Members.Count,
                 Linked = linked,
@@ -350,7 +350,7 @@ namespace AlgoJudge.Server.Lti.Services
             };
         }
 
-        private static RosterSkip Skip(RosterMember member, string reason) => new()
+        private static RosterSkipDto Skip(RosterMember member, string reason) => new()
         {
             Subject = member.UserId,
             Name = member.Name,

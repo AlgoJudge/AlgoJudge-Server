@@ -21,9 +21,9 @@ namespace AlgoJudge.Server.Lti.Controllers
     {
         /// <summary>What may be placed, and how the platform will take it.</summary>
         [HttpGet("{code}")]
-        [ProducesResponseType<DeepLinkView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<DeepLinkChoosingDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
-        public Task<DeepLinkView> Open(string code, CancellationToken ct) =>
+        public Task<DeepLinkChoosingDto> Open(string code, CancellationToken ct) =>
             deepLinks.OpenAsync(code, ct);
 
         /// <summary>
@@ -32,15 +32,15 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// own browser and its own cookie.
         /// </summary>
         [HttpPost("{code}/response")]
-        [ProducesResponseType<DeepLinkResponseView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<DeepLinkAnswerDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
-        public Task<DeepLinkResponseView> Respond(
-            string code, [FromBody] DeepLinkChoice choice, CancellationToken ct) =>
+        public Task<DeepLinkAnswerDto> Respond(
+            string code, [FromBody] DeepLinkChoiceDto choice, CancellationToken ct) =>
             deepLinks.RespondAsync(code, choice.ActivityIds ?? [], ct);
     }
 
-    public record DeepLinkChoice
+    public record DeepLinkChoiceDto
     {
         /// <summary>What was picked, in the order it will be placed.</summary>
         public IReadOnlyList<string>? ActivityIds { get; init; }

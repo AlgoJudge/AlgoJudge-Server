@@ -31,10 +31,10 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// </para>
         /// </summary>
         [HttpGet("{id:guid}/roster")]
-        [ProducesResponseType<RosterView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<RosterViewDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
-        public Task<RosterView> Roster(Guid id, CancellationToken ct) =>
+        public Task<RosterViewDto> Roster(Guid id, CancellationToken ct) =>
             rosters.ReadAsync(id, ct);
 
         /// <summary>
@@ -47,10 +47,10 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// </para>
         /// </summary>
         [HttpPost("{id:guid}/roster/enrol")]
-        [ProducesResponseType<RosterEnrolment>(StatusCodes.Status200OK)]
+        [ProducesResponseType<RosterEnrolmentDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
-        public Task<RosterEnrolment> Enrol(Guid id, CancellationToken ct) =>
+        public Task<RosterEnrolmentDto> Enrol(Guid id, CancellationToken ct) =>
             rosters.EnrolAsync(id, ct);
 
         /// <summary>
@@ -62,8 +62,8 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// </para>
         /// </summary>
         [HttpGet]
-        [ProducesResponseType<IReadOnlyList<PlacementView>>(StatusCodes.Status200OK)]
-        public Task<IReadOnlyList<PlacementView>> List(
+        [ProducesResponseType<IReadOnlyList<PlacementDto>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<PlacementDto>> List(
             [FromQuery] Guid? activityId, CancellationToken ct) =>
             placements.ListAsync(activityId, ct);
 
@@ -72,9 +72,9 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// is what unblocks a launch refused with <c>sharingNotAcknowledged</c>.
         /// </summary>
         [HttpPost("{id:guid}/sharing")]
-        [ProducesResponseType<PlacementView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<PlacementDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
-        public Task<PlacementView> AcknowledgeSharing(Guid id, CancellationToken ct) =>
+        public Task<PlacementDto> AcknowledgeSharing(Guid id, CancellationToken ct) =>
             placements.AcknowledgeSharingAsync(id, ct);
 
         /// <summary>
@@ -88,9 +88,9 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// platform accepted and silently dropped, so the button exists.
         /// </param>
         [HttpGet("{id:guid}/grades")]
-        [ProducesResponseType<GradeSummary>(StatusCodes.Status200OK)]
+        [ProducesResponseType<GradeSummaryDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
-        public Task<GradeSummary> Grades(
+        public Task<GradeSummaryDto> Grades(
             Guid id, [FromQuery] bool verify, CancellationToken ct) =>
             verifier.SummariseAsync(id, verify, ct);
 
@@ -113,10 +113,10 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// sharing instead would put two cohorts into one activity.
         /// </summary>
         [HttpPost("{id:guid}/copy-activity")]
-        [ProducesResponseType<PlacementView>(StatusCodes.Status200OK)]
+        [ProducesResponseType<PlacementDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
-        public Task<PlacementView> CopyActivity(
+        public Task<PlacementDto> CopyActivity(
             Guid id, [FromBody] CopyActivityDto input, CancellationToken ct) =>
             placements.CopyActivityAsync(id, input.Slug ?? "", input.StartsAt, ct);
     }

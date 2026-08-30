@@ -318,10 +318,10 @@ file sealed class StubbedToolKey : IToolKeyService
     // This stub exists to sign one assertion with a key nobody stored. Rotation
     // is about the stored ones, so these throw rather than pretending: a stub
     // that answers quietly is how a test ends up covering the stub.
-    public Task<IReadOnlyList<ToolKeyView>> ListAsync(CancellationToken ct) =>
+    public Task<IReadOnlyList<ToolKeyDto>> ListAsync(CancellationToken ct) =>
         throw new NotSupportedException("the grade tests do not rotate keys");
 
-    public Task<ToolKeyView> RotateAsync(CancellationToken ct) =>
+    public Task<ToolKeyDto> RotateAsync(CancellationToken ct) =>
         throw new NotSupportedException("the grade tests do not rotate keys");
 
     public Task WithdrawAsync(string kid, CancellationToken ct) =>

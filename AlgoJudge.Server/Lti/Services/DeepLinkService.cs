@@ -12,7 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace AlgoJudge.Server.Lti.Services
 {
     /// <summary>What the person choosing is shown.</summary>
-    public record DeepLinkView
+    public record DeepLinkChoosingDto
     {
         /// <summary>The course the placement is going into, as the platform names it.</summary>
         public required string ContextTitle { get; init; }
@@ -22,10 +22,10 @@ namespace AlgoJudge.Server.Lti.Services
         public string? Locale { get; init; }
 
         /// <summary>What this person may place, which is what they manage.</summary>
-        public required IReadOnlyList<DeepLinkCandidate> Activities { get; init; }
+        public required IReadOnlyList<DeepLinkCandidateDto> Activities { get; init; }
     }
 
-    public record DeepLinkCandidate
+    public record DeepLinkCandidateDto
     {
         public required string Id { get; init; }
         public required string Slug { get; init; }
@@ -41,7 +41,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// cookie, at an address that checks its session key.
     /// </para>
     /// </summary>
-    public record DeepLinkResponseView
+    public record DeepLinkAnswerDto
     {
         public required string ReturnUrl { get; init; }
         public required string Jwt { get; init; }
@@ -49,9 +49,9 @@ namespace AlgoJudge.Server.Lti.Services
 
     public interface IDeepLinkService
     {
-        Task<DeepLinkView> OpenAsync(string code, CancellationToken ct);
+        Task<DeepLinkChoosingDto> OpenAsync(string code, CancellationToken ct);
 
-        Task<DeepLinkResponseView> RespondAsync(
+        Task<DeepLinkAnswerDto> RespondAsync(
             string code, IReadOnlyList<string> activityIds, CancellationToken ct);
     }
 
@@ -78,26 +78,26 @@ namespace AlgoJudge.Server.Lti.Services
         /// </summary>
         private const int Candidates = 200;
 
-        public async Task<DeepLinkView> OpenAsync(string code, CancellationToken ct)
+        public async Task<DeepLinkChoosingDto> OpenAsync(string code, CancellationToken ct)
         {
             var session = await MineAsync(code, ct);
 
             var managed = await activities.ListManagedAsync(
                 new PageQuery { Page = 1, PageSize = Candidates }, null, includeArchived: false, ct);
 
-            return new DeepLinkView
+            return new DeepLinkChoosingDto
             {
                 ContextTitle = session.ContextTitle ?? "",
                 AcceptMultiple = session.AcceptMultiple,
                 Embedded = session.Embedded,
                 Locale = session.Locale,
                 Activities = managed.Items
-                    .Select(a => new DeepLinkCandidate { Id = a.Id, Slug = a.Slug, Name = a.Name })
+                    .Select(a => new DeepLinkCandidateDto { Id = a.Id, Slug = a.Slug, Name = a.Name })
                     .ToList(),
             };
         }
 
-        public async Task<DeepLinkResponseView> RespondAsync(
+        public async Task<DeepLinkAnswerDto> RespondAsync(
             string code, IReadOnlyList<string> activityIds, CancellationToken ct)
         {
             var session = await MineAsync(code, ct);
@@ -141,7 +141,7 @@ namespace AlgoJudge.Server.Lti.Services
             var platform = session.Platform!;
             var jwt = Sign(platform, session, chosen, await keys.CredentialsAsync(ct), now);
 
-            return new DeepLinkResponseView { ReturnUrl = session.ReturnUrl, Jwt = jwt };
+            return new DeepLinkAnswerDto { ReturnUrl = session.ReturnUrl, Jwt = jwt };
         }
 
         /// <summary>

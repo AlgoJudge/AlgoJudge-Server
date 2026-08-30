@@ -1,5 +1,8 @@
 # AlgoJudge Server
 
+AlgoJudge is open-source, self-hosted software for programming contests and
+courses, with automatic evaluation of submitted solutions.
+
 Persistent state, REST API, WebSocket, authorization, activities, problems,
 submissions and results for [AlgoJudge](https://github.com/AlgoJudge).
 
@@ -22,25 +25,41 @@ always used `Problem`; only the documentation lagged.
 > The state below was read off the code and the test run on 2026-08-10, and
 > the counts were re-read on 2026-08-13 after file storage became a choice.
 
-`Verified fact` — `main`, inspected 2026-08-10.
+`Verified fact` — `main`, inspected 2026-08-10; every count in it re-read
+2026-08-30, and five of the rows had drifted.
 
 | Area | State |
 |---|---|
-| API | **155 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27 and 153 until 2026-08-28; it is a count, so it drifts unless somebody runs it |
+| API | **160 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27, 153 until 2026-08-28 and 155 until 2026-08-30; it is a count, so it drifts unless somebody runs it — and the command it comes from is written down below the table, which it was not until 2026-08-30 |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
-| Authorization | a real permission model: **48 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
+| Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass. This line said 48 until 2026-08-30 |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
-| Background work | **six hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the file collector, the storage migrator |
-| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage` and `/admin/keyring` behind loopback and a token |
-| Schema | **one migration per context**, squashed on 2026-08-28 before 0.1.0 — thirty-one and seven became `InitialCreate` and `LtiInitialCreate`. This line said 13 until 2026-08-24 and 29 until the squash, and had been wrong for most of the twenties |
+| Background work | **eight hosted services** in `Program.cs`: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the merge sweeper, the address sweeper, the file collector, the storage migrator. The LTI module registers a ninth, the grade synchroniser. This line said **six** until 2026-08-30 and had been wrong since 2026-08-23, when the address sweeper landed, and more so from 2026-08-24 with the merge sweeper |
+| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage`, `/admin/keyring` and `/admin/config` behind loopback and a token. `/admin/config` is not new — it arrived with pre-configuration on 2026-08-28 — but this row did not name it until 2026-08-30 |
+| Schema | **two migrations in the main context and one in the LTI one.** Thirty-one and seven were squashed to `InitialCreate` and `LtiInitialCreate` on 2026-08-28, before 0.1.0; `InstanceThemeFiles` was added on 2026-08-30. This line said 13 until 2026-08-24, 29 until the squash and **one per context** until 2026-08-30, and had been wrong for most of the twenties |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
-**Twenty-seven `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:
-`Activity`, `Series`, `SeriesProblem`, `Problem`, `ProblemVersion`,
-`Submission`, `EvaluationJob`, `Trial`, `Result`, `Runner`, `Question`, `File`,
-`Grant`, `PermissionTemplate`, `Instance`, `MaintenanceState`, `UserSession`,
-`StorageMigration`.
+**Thirty-two `DbSet`s** on top of `IdentityDbContext<User>` — this said
+twenty-seven until 2026-08-30. The main ones: `Activity`, `Series`,
+`SeriesProblem`, `Problem`, `ProblemVersion`, `Submission`, `EvaluationJob`,
+`Trial`, `Result`, `Runner`, `Question`, `File`, `Grant`, `PermissionTemplate`,
+`Instance`, `MaintenanceState`, `UserSession`, `StorageMigration`.
+
+**Three of those numbers are commands**, written down here on 2026-08-30 so that
+the next person can re-read them rather than trust the date beside them:
+
+```sh
+grep -rhoE '^ +\[Http[A-Za-z]+' AlgoJudge.Server/Controllers | wc -l         # 160
+grep -cE '^ +Define\(' AlgoJudge.Server/Authorization/Permissions.cs         # 52
+grep -c 'public DbSet<' AlgoJudge.Server/Database/ApplicationDbContext.cs    # 32
+```
+
+The permission catalogue is written down in three repositories — here, the
+Client's fake, and `docs/specs/PERMISSIONS.md` — and
+`scripts/check-permissions.py` in the workspace is what compares all three. The
+Server is the source of truth; the grep above reads it directly, so the two
+agree by construction rather than by luck.
 
 Every identifier is a **UUIDv7**, except `User`, which keeps Identity's string
 key. The reason for version 7 is under *Decisions in force*.
@@ -232,6 +251,7 @@ AJ_Retention__SubmissionOriginDays=365         # optional; a submission's addres
 
 # Where the problem picker's credentials are minted, for a self-hosted archive.
 AJ_UvaExplorer__Origin=https://uvaexplorer.example   # optional; defaults to the hosted one
+```
 
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
 deadline at all** — measured 2026-08-23, an unassigned `AmazonS3Config` carries a
@@ -275,6 +295,9 @@ That directive *appends* the peer to whatever arrived, so a header a participant
 wrote themselves ends up earlier in the chain and the address nginx observed ends
 up last — which is the one taken.
 
+Back to where the bytes go, and the two stores that are not an object store:
+
+```bash
 # Or a volume.
 AJ_Storage__Stores__local__Kind=filesystem
 AJ_Storage__Stores__local__Path=/var/lib/algojudge/blobs
@@ -553,6 +576,15 @@ Runner requires anyway.
 
 ## Running with Docker Compose
 
+**This file is for development, and there is now a separate one for
+installing.** `AlgoJudge-Ops` — created 2026-08-30, and the self-hosted Compose
+stack 0.1.0 targets — assembles the Server, the Client and a Runner behind
+nginx, and carries the update, backup and restore scripts an installation needs.
+It builds nothing: every image is pulled from GHCR by tag. **An administrator
+standing an installation up wants that repository, not this file**, and this
+one is unaffected by it — a developer running the Server still runs what is
+below.
+
 Brings up PostgreSQL, an S3 endpoint and the Server:
 
 ```bash
@@ -565,6 +597,11 @@ inside the Compose network: it holds development files, it has no console, and
 its credentials exist for this stack alone. The Server creates its bucket here
 because the alternative was a second image whose only job is one `mb`; that flag
 is set in this file and nowhere else.
+
+**The service is called `algojudge` here and `server` in `AlgoJudge-Ops`**,
+which is why both spellings appear in the `docker compose exec` recipes above
+and below. Read the one that matches the stack in front of you; nothing else
+about the commands differs.
 
 ## Signing in for the first time
 
@@ -609,6 +646,21 @@ Development needs none of this: the compose file falls back to a token named
 password `admin-development-only` on the account. Both are in a public repository
 and neither is a secret; the Server warns on every start where that token is in
 force outside Development.
+
+**The Development seed adds somebody to compete against it**, and nothing here
+said so until 2026-08-30 — while `preconfig.example/pages/home.md`, the page
+that installation shows, already pointed at this file for the answer:
+
+| | login | password | what it is |
+|---|---|---|---|
+| administrator | `admin` | `admin-development-only` | seeded everywhere; only the password is Development's |
+| participant | `student` | `student-development-only` | Development only |
+
+They meet in `DEV-2026`, a seeded `contest@1` activity the participant holds a
+participant grant on and the administrator a **systemic** manager grant — which
+is what makes "staff are not counted among the competitors" visible in the
+seeded data rather than only described. `Database/Seeder.cs` is the whole of it,
+and none of the three exists outside Development.
 
 `docs/specs/MAINTENANCE.md` in the workspace has the exact `docker exec` recipes
 — the shipped image has no `curl` and no `wget`, so they are written with bash's
@@ -750,16 +802,35 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**646 tests, 2 m 15 s** on the machine this was last run on, two skipped where
-no object store is configured. It was 4 m 49 s until 2026-08-29, when the fifty
+**666 test cases**, two of them skipped where no object store is configured. The
+last timing is **2 m 15 s**; it was 4 m 49 s until 2026-08-29, when the fifty
 classes that sat in one xUnit collection — and therefore ran one at a time —
 were split across three, each with a database of its own.
+
+> **The count and the timing are now two different measurements, and only one
+> of them is cheap** (2026-08-30). The count above is read off the source rather
+> than off a run — 543 `[Fact]`, 95 `[InlineData]` rows under 28 `[Theory]`, the
+> two conditional facts in `S3BlobStoreTests`, and `BlobStoreContract`'s
+> thirteen once more for each of its three concrete subclasses, because xUnit
+> discovers an inherited test per derived class. That is 666. This line said
+> **646** from a run until 2026-08-30; a static count needs no Docker, so it is
+> the one that can be kept honest, and the timing is left dated instead of
+> guessed at.
+>
+> **A run the same day agreed**: `dotnet test AlgoJudge.sln` reported 664
+> passed, 2 skipped, 666 total in 2 m 51 s. So the static method is not merely
+> cheaper — on this suite it is exact, and the two timings above are the same
+> suite on two different machines rather than a regression.
 
 CI adds two jobs beside that one: the container image is built, and the
 development stack is brought up and asserted against — that the API answers under
 `/api/v1` and *not* at the root, that the migrations created the schema, that the
-instance table really is a singleton, that the committed `openapi.json` still
-matches what is served, that registration is closed by default, and that
+instance table really is a singleton, that the database refuses a file reference
+with no owner, that the committed `openapi.json` still matches what is served,
+that registration is closed by default, that `/health` does not disclose where
+the files are, that the key ring is in the database and a restart signs nobody
+out, that the key-ring commands do what they say, that an installation
+configures itself from disk and a second apply changes nothing, and that
 `aj-admin` works inside the shipped image.
 
 **Regenerate `openapi.json` from the running stack, not from the test host.**
@@ -783,8 +854,23 @@ this repository — no type-specific controller, table or conditional.
 
 ## Related repositories
 
+This list held only the first two until 2026-08-30, by which time four more
+repositories talked to this one.
+
 - [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client) — the web frontend
 - [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner) — isolated execution and evaluation
+- `AlgoJudge-Runner-UVa` (private) — a **second Runner implementation**, which
+  judges nothing: it forwards `uva@1` submissions to `onlinejudge.org` and
+  reports the archive's verdict. It registers, claims and reports over the same
+  contract as the first, which is the point of the contract
+- `AlgoJudge-Ops` (private) — the self-hosted production Compose stack, and the
+  update, backup and restore scripts around it. No application code, no build:
+  every image is pulled from GHCR by tag
+- `AlgoJudge-Identity-Keycloak` and `AlgoJudge-Identity-Authentik` (both
+  private) — **two supported deployments for `auth.algojudge.app`, and neither
+  is a fallback for the other.** An installation runs one. To this Server both
+  are a plain OIDC provider and nothing else; what to type for each is under
+  *Registering an identity provider* above
 
 ### The frontend that used to live here
 

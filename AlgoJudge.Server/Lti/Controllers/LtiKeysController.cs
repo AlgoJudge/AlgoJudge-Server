@@ -50,7 +50,7 @@ namespace AlgoJudge.Server.Lti.Controllers
     /// A separate class from the key set above because these are the opposite
     /// thing: that one is anonymous by necessity, these are behind
     /// <c>provider:manage</c>. Nothing here answers with a private key, and
-    /// <see cref="ToolKeyView"/> has nowhere to put one.
+    /// <see cref="ToolKeyDto"/> has nowhere to put one.
     /// </para>
     /// </summary>
     [ApiController]
@@ -59,12 +59,12 @@ namespace AlgoJudge.Server.Lti.Controllers
     public class LtiKeyRotationController(IToolKeyService keys) : ControllerBase
     {
         [HttpGet]
-        [ProducesResponseType<IReadOnlyList<ToolKeyView>>(StatusCodes.Status200OK)]
-        public Task<IReadOnlyList<ToolKeyView>> List(CancellationToken ct) => keys.ListAsync(ct);
+        [ProducesResponseType<IReadOnlyList<ToolKeyDto>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<ToolKeyDto>> List(CancellationToken ct) => keys.ListAsync(ct);
 
         [HttpPost("rotate")]
-        [ProducesResponseType<ToolKeyView>(StatusCodes.Status200OK)]
-        public Task<ToolKeyView> Rotate(CancellationToken ct) => keys.RotateAsync(ct);
+        [ProducesResponseType<ToolKeyDto>(StatusCodes.Status200OK)]
+        public Task<ToolKeyDto> Rotate(CancellationToken ct) => keys.RotateAsync(ct);
 
         /// <summary>
         /// Closes the overlap for one retired key. Refused for the key that is

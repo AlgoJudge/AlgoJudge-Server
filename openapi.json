@@ -5129,17 +5129,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeepLinkView"
+                  "$ref": "#/components/schemas/DeepLinkChoosingDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeepLinkView"
+                  "$ref": "#/components/schemas/DeepLinkChoosingDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeepLinkView"
+                  "$ref": "#/components/schemas/DeepLinkChoosingDto"
                 }
               }
             }
@@ -5186,17 +5186,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeepLinkChoice"
+                "$ref": "#/components/schemas/DeepLinkChoiceDto"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeepLinkChoice"
+                "$ref": "#/components/schemas/DeepLinkChoiceDto"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/DeepLinkChoice"
+                "$ref": "#/components/schemas/DeepLinkChoiceDto"
               }
             }
           }
@@ -5207,17 +5207,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeepLinkResponseView"
+                  "$ref": "#/components/schemas/DeepLinkAnswerDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeepLinkResponseView"
+                  "$ref": "#/components/schemas/DeepLinkAnswerDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeepLinkResponseView"
+                  "$ref": "#/components/schemas/DeepLinkAnswerDto"
                 }
               }
             }
@@ -5278,7 +5278,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ToolKeyView"
+                    "$ref": "#/components/schemas/ToolKeyDto"
                   }
                 }
               },
@@ -5286,7 +5286,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ToolKeyView"
+                    "$ref": "#/components/schemas/ToolKeyDto"
                   }
                 }
               },
@@ -5294,7 +5294,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ToolKeyView"
+                    "$ref": "#/components/schemas/ToolKeyDto"
                   }
                 }
               }
@@ -5314,17 +5314,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ToolKeyView"
+                  "$ref": "#/components/schemas/ToolKeyDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ToolKeyView"
+                  "$ref": "#/components/schemas/ToolKeyDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ToolKeyView"
+                  "$ref": "#/components/schemas/ToolKeyDto"
                 }
               }
             }
@@ -5462,17 +5462,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterView"
+                  "$ref": "#/components/schemas/RosterViewDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterView"
+                  "$ref": "#/components/schemas/RosterViewDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterView"
+                  "$ref": "#/components/schemas/RosterViewDto"
                 }
               }
             }
@@ -5542,17 +5542,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterEnrolment"
+                  "$ref": "#/components/schemas/RosterEnrolmentDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterEnrolment"
+                  "$ref": "#/components/schemas/RosterEnrolmentDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterEnrolment"
+                  "$ref": "#/components/schemas/RosterEnrolmentDto"
                 }
               }
             }
@@ -5623,7 +5623,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/PlacementView"
+                    "$ref": "#/components/schemas/PlacementDto"
                   }
                 }
               },
@@ -5631,7 +5631,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/PlacementView"
+                    "$ref": "#/components/schemas/PlacementDto"
                   }
                 }
               },
@@ -5639,7 +5639,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/PlacementView"
+                    "$ref": "#/components/schemas/PlacementDto"
                   }
                 }
               }
@@ -5670,17 +5670,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementView"
+                  "$ref": "#/components/schemas/PlacementDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementView"
+                  "$ref": "#/components/schemas/PlacementDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementView"
+                  "$ref": "#/components/schemas/PlacementDto"
                 }
               }
             }
@@ -5737,17 +5737,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/GradeSummary"
+                  "$ref": "#/components/schemas/GradeSummaryDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GradeSummary"
+                  "$ref": "#/components/schemas/GradeSummaryDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GradeSummary"
+                  "$ref": "#/components/schemas/GradeSummaryDto"
                 }
               }
             }
@@ -5859,17 +5859,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementView"
+                  "$ref": "#/components/schemas/PlacementDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementView"
+                  "$ref": "#/components/schemas/PlacementDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlacementView"
+                  "$ref": "#/components/schemas/PlacementDto"
                 }
               }
             }
@@ -6347,7 +6347,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/InvitationView"
+                    "$ref": "#/components/schemas/RegistrationInvitationDto"
                   }
                 }
               },
@@ -6355,7 +6355,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/InvitationView"
+                    "$ref": "#/components/schemas/RegistrationInvitationDto"
                   }
                 }
               },
@@ -6363,7 +6363,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/InvitationView"
+                    "$ref": "#/components/schemas/RegistrationInvitationDto"
                   }
                 }
               }
@@ -6379,17 +6379,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InvitationInput"
+                "$ref": "#/components/schemas/InvitationInputDto"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/InvitationInput"
+                "$ref": "#/components/schemas/InvitationInputDto"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/InvitationInput"
+                "$ref": "#/components/schemas/InvitationInputDto"
               }
             }
           }
@@ -6400,17 +6400,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvitationView"
+                  "$ref": "#/components/schemas/RegistrationInvitationDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvitationView"
+                  "$ref": "#/components/schemas/RegistrationInvitationDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvitationView"
+                  "$ref": "#/components/schemas/RegistrationInvitationDto"
                 }
               }
             }
@@ -6470,17 +6470,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClaimInput"
+                "$ref": "#/components/schemas/ClaimInputDto"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClaimInput"
+                "$ref": "#/components/schemas/ClaimInputDto"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/ClaimInput"
+                "$ref": "#/components/schemas/ClaimInputDto"
               }
             }
           }
@@ -11967,7 +11967,7 @@
         },
         "additionalProperties": false
       },
-      "ClaimInput": {
+      "ClaimInputDto": {
         "required": [
           "ticket"
         ],
@@ -12224,7 +12224,25 @@
         },
         "additionalProperties": false
       },
-      "DeepLinkCandidate": {
+      "DeepLinkAnswerDto": {
+        "required": [
+          "jwt",
+          "returnUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "returnUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "jwt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeepLinkCandidateDto": {
         "required": [
           "id",
           "name",
@@ -12247,7 +12265,7 @@
         },
         "additionalProperties": false
       },
-      "DeepLinkChoice": {
+      "DeepLinkChoiceDto": {
         "type": "object",
         "properties": {
           "activityIds": {
@@ -12260,25 +12278,7 @@
         },
         "additionalProperties": false
       },
-      "DeepLinkResponseView": {
-        "required": [
-          "jwt",
-          "returnUrl"
-        ],
-        "type": "object",
-        "properties": {
-          "returnUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "jwt": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "DeepLinkView": {
+      "DeepLinkChoosingDto": {
         "required": [
           "acceptMultiple",
           "activities",
@@ -12304,7 +12304,7 @@
           "activities": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/DeepLinkCandidate"
+              "$ref": "#/components/schemas/DeepLinkCandidateDto"
             },
             "nullable": true
           }
@@ -12592,7 +12592,7 @@
         },
         "additionalProperties": false
       },
-      "GradeSummary": {
+      "GradeSummaryDto": {
         "required": [
           "deferred",
           "failed",
@@ -13404,46 +13404,10 @@
         },
         "additionalProperties": false
       },
-      "InvitationInput": {
+      "InvitationInputDto": {
         "type": "object",
         "properties": {
           "note": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "InvitationView": {
-        "required": [
-          "expiresAt",
-          "id",
-          "note",
-          "registrationUrl"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "nullable": true
-          },
-          "note": {
-            "type": "string",
-            "nullable": true
-          },
-          "registrationUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "expiresAt": {
-            "type": "string",
-            "nullable": true
-          },
-          "usedAt": {
-            "type": "string",
-            "nullable": true
-          },
-          "platformId": {
             "type": "string",
             "nullable": true
           }
@@ -15379,7 +15343,7 @@
         },
         "additionalProperties": false
       },
-      "PlacementView": {
+      "PlacementDto": {
         "required": [
           "activityId",
           "activityName",
@@ -16226,6 +16190,42 @@
         },
         "additionalProperties": false
       },
+      "RegistrationInvitationDto": {
+        "required": [
+          "expiresAt",
+          "id",
+          "note",
+          "registrationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "registrationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "usedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "platformId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ReportAcceptedDto": {
         "required": [
           "duplicate",
@@ -16441,7 +16441,7 @@
         },
         "additionalProperties": false
       },
-      "RosterDisclosure": {
+      "RosterDisclosureDto": {
         "required": [
           "withEmail",
           "withName",
@@ -16464,7 +16464,7 @@
         },
         "additionalProperties": false
       },
-      "RosterEnrolment": {
+      "RosterEnrolmentDto": {
         "required": [
           "granted",
           "linked",
@@ -16488,14 +16488,14 @@
           "skipped": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RosterSkip"
+              "$ref": "#/components/schemas/RosterSkipDto"
             },
             "nullable": true
           }
         },
         "additionalProperties": false
       },
-      "RosterEntry": {
+      "RosterEntryDto": {
         "required": [
           "roles",
           "subject"
@@ -16544,7 +16544,7 @@
         },
         "additionalProperties": false
       },
-      "RosterSkip": {
+      "RosterSkipDto": {
         "required": [
           "reason",
           "subject"
@@ -16566,7 +16566,7 @@
         },
         "additionalProperties": false
       },
-      "RosterView": {
+      "RosterViewDto": {
         "required": [
           "contextId",
           "contextTitle",
@@ -16601,12 +16601,12 @@
           "members": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RosterEntry"
+              "$ref": "#/components/schemas/RosterEntryDto"
             },
             "nullable": true
           },
           "disclosed": {
-            "$ref": "#/components/schemas/RosterDisclosure"
+            "$ref": "#/components/schemas/RosterDisclosureDto"
           }
         },
         "additionalProperties": false
@@ -17573,7 +17573,7 @@
         },
         "additionalProperties": false
       },
-      "ToolKeyView": {
+      "ToolKeyDto": {
         "required": [
           "createdAt",
           "kid",

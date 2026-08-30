@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AlgoJudge.Server.Lti.Services
 {
     /// <summary>An invitation, as a manager reads it.</summary>
-    public record InvitationView
+    public record RegistrationInvitationDto
     {
         public required string Id { get; init; }
         public required string Note { get; init; }
@@ -37,10 +37,10 @@ namespace AlgoJudge.Server.Lti.Services
 
     public interface IDynamicRegistrationService
     {
-        Task<IReadOnlyList<InvitationView>> ListAsync(CancellationToken ct);
+        Task<IReadOnlyList<RegistrationInvitationDto>> ListAsync(CancellationToken ct);
 
         /// <summary>Expects one registration, and says where to send it.</summary>
-        Task<InvitationView> InviteAsync(string? note, CancellationToken ct);
+        Task<RegistrationInvitationDto> InviteAsync(string? note, CancellationToken ct);
 
         Task RevokeAsync(Guid id, CancellationToken ct);
 
@@ -76,7 +76,7 @@ namespace AlgoJudge.Server.Lti.Services
         private const string ToolConfiguration =
             "https://purl.imsglobal.org/spec/lti-tool-configuration";
 
-        public async Task<IReadOnlyList<InvitationView>> ListAsync(CancellationToken ct)
+        public async Task<IReadOnlyList<RegistrationInvitationDto>> ListAsync(CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
 
@@ -88,7 +88,7 @@ namespace AlgoJudge.Server.Lti.Services
             return invitations.Select(Project).ToList();
         }
 
-        public async Task<InvitationView> InviteAsync(string? note, CancellationToken ct)
+        public async Task<RegistrationInvitationDto> InviteAsync(string? note, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
 
@@ -390,7 +390,7 @@ namespace AlgoJudge.Server.Lti.Services
             return api;
         }
 
-        private InvitationView Project(RegistrationInvitation invitation) => new()
+        private RegistrationInvitationDto Project(RegistrationInvitation invitation) => new()
         {
             Id = Wire.Id(invitation.Id),
             Note = invitation.Note ?? "",
