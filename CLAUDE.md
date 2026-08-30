@@ -3,37 +3,73 @@
 ## Scope
 
 Central persistent state, REST, WebSocket, domain authorization,
-activities, tasks, submissions, `EvaluationJob`, files, and results.
+activities, problems, submissions, `EvaluationJob`, files, and results.
 
-## Expected technology direction
+> **This said `tasks` until 2026-08-30.** The domain term has been `Problem`
+> since 2026-08-03 and the code never said otherwise; two lines of this file
+> did. The other one is under *Rules*.
 
-- .NET / ASP.NET Core
-- Entity Framework Core
-- PostgreSQL
-- OpenAPI
-- Docker for the development environment if confirmed by the repository
+## Technology
 
-After cloning, inspect the solution and project files, then document:
+Not a direction any more — this is what the repository is, read off it on
+2026-08-30. `../PROJECT_CONTEXT.md` and the root `README.md` are the longer
+answers; this is the short one.
 
-- restore,
-- build,
-- format,
-- unit tests,
-- integration tests,
-- migrations,
-- dependency startup.
+- **.NET 10** (`net10.0`, since 2026-08-29), ASP.NET Core, Entity Framework Core
+  with Npgsql, **PostgreSQL 18**
+- **OpenAPI**: `openapi.json` is committed, and a CI job fails if it stops
+  matching what the running stack serves. **Regenerate it from the container,
+  never from the test host** — the two order paths differently and CI diffs
+  textually
+- **Docker**, and not optionally: `example-server-development-docker-compose.yaml`
+  brings up PostgreSQL, RustFS and the Server, and the test suite starts a real
+  PostgreSQL through Testcontainers, so Docker has to be running to test at all
+
+```bash
+dotnet restore AlgoJudge.sln
+dotnet build   AlgoJudge.sln -c Release          # CI adds -warnaserror
+dotnet test    AlgoJudge.sln -c Release --no-build
+docker compose -f example-server-development-docker-compose.yaml up
+dotnet ef database update --project AlgoJudge.Server
+dotnet ef database update --project AlgoJudge.Server --context LtiDbContext
+```
+
+> **The audit this section used to ask for is done** (2026-08-30). It said
+> "Docker for the development environment **if confirmed by the repository**"
+> and told a reader to clone, inspect the solution, and then document restore,
+> build, format, unit tests, integration tests, migrations and dependency
+> startup. Every one of those has an answer now, and three of them have an
+> answer worth writing down rather than a command:
+>
+> - **There is no format step.** No `.editorconfig`, no `dotnet format` in CI or
+>   in any script. What replaced it is `-warnaserror` in the CI build, which has
+>   held the build at **zero warnings** since 2026-08-29.
+> - **There is no unit/integration split.** One test project,
+>   `AlgoJudge.Server.Tests`, and it is integration-shaped throughout: a real
+>   PostgreSQL per collection and a real host. There is nothing to run
+>   separately, and a filter is how a subset is taken.
+> - **Migrations: two contexts, two history tables, and the tool is pinned.**
+>   `.config/dotnet-tools.json` holds `dotnet-ef` at 10.0.11; a command naming
+>   no context gets `ApplicationDbContext`. Outside Development a pending
+>   migration refuses the start unless `AJ_Database__MigrateOnStart=true`.
 
 ## Rules
 
 - The Server does not compile or execute code.
 - The Server does not implement a sandbox or checker.
 - The Server does not require one concrete execution engine.
-- Task semantics must not require Server changes.
+- Problem-type semantics must not require a dedicated controller or table.
 - Job reservation must be atomic.
 - Runner result submission must be idempotent.
 - REST is the persistent source of state.
 - WebSocket publishes events and notifications.
 - LMS grade export must be separated from persistent result storage.
+
+> **The fourth rule said "Task semantics must not require Server changes" until
+> 2026-08-30.** The rule is unchanged; only its wording was stale. The workspace
+> has always stated it correctly — `.claude/rules/server.md` says "Problem-type
+> semantics must not require a dedicated controller or table", which is the
+> wording taken here — so this copy was the one out of step, not the rule.
 
 ## Decisions in force (2026-08-02)
 
@@ -57,11 +93,31 @@ After cloning, inspect the solution and project files, then document:
   - `SessionDto.IsLocal` stops being a hard-coded `true`, and the rule "an SSO
     account may change none of its own fields" moves out of the Client's disabled
     inputs and into this API, where it was always described as living.
-- **`EvaluationJob` is deferred as an entity.** The Runner linkage lives on
+- ~~**`EvaluationJob` is deferred as an entity.** The Runner linkage lives on
   `Result`, which names the Runner that is evaluating or has evaluated a
   submission. Because it must name a Runner while evaluation is in progress,
-  `Result` is created at claim time and doubles as the job record. Atomic
-  reservation, leases and idempotency still apply to it.
+  `Result` is created at claim time and doubles as the job record.~~
+  **`EvaluationJob` is a Server entity.** *Supersedes the 2026-08-02 decision
+  that deferred it onto `Result`.* Read off the code on 2026-08-30:
+  `Database/Models/EvaluationJob.cs` is a class, `ApplicationDbContext` declares
+  `DbSet<EvaluationJob> EvaluationJobs` and maps it `ToTable("EvaluationJobs")`,
+  and the job carries the attempt number, the Runner, the state, the lease and
+  its token, and the delivery count. **`Result` references a job rather than
+  being one**: `Result.EvaluationJobId` has a unique index and a one-to-one
+  `HasForeignKey<Result>`, so a retry or a rejudge adds a **job**, not a result
+  — which is what keeps "which one counts" answerable. Atomic reservation,
+  leases and idempotency apply to the job.
+
+  Struck rather than deleted, because the reasoning behind the deferral was
+  right: something has to name a Runner while evaluation is still running, and
+  that is exactly what the job turned out to be.
+
+  **This copy was the last one still saying the old thing.**
+  `AlgoJudge-Runner/CLAUDE.md` has carried the reversal in this same form for
+  some time, and `AlgoJudge-Design/proposals/Server-api-surface.md` §1 — written
+  2026-08-08, before the entity existed — already described the Server creating
+  an `EvaluationJob` and was correct. Two records agreed and this one did not,
+  which is the shape a stale decision takes.
 - **All identifiers are UUIDs, and the entities now hold them.** `Guid` keys
   throughout `Database/Models`, defaulted from `Uuid.New()`; the only `string`
   key is ASP.NET Identity's `User.Id`, which is a UUID in a string column
@@ -625,6 +681,11 @@ stop on 2026-08-02 and are not where the work continued.
 
 ## Working here
 
-Build and run instructions are in `README.md`. When this repository is checked
-out inside the AlgoJudge workspace, `../PROJECT_CONTEXT.md` is the primary
-architecture context and takes precedence over this file.
+Build and run instructions are in the **repository-root `README.md`**, beside
+this file. There are two READMEs — `AlgoJudge.Server/README.md` is a pointer at
+that one and holds nothing of its own — and this line said only
+"`README.md`" until 2026-08-30, which named neither.
+
+When this repository is checked out inside the AlgoJudge workspace,
+`../PROJECT_CONTEXT.md` is the primary architecture context and takes precedence
+over this file.
