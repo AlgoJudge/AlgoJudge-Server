@@ -25,11 +25,12 @@ always used `Problem`; only the documentation lagged.
 > The state below was read off the code and the test run on 2026-08-10, and
 > the counts were re-read on 2026-08-13 after file storage became a choice.
 
-`Verified fact` — `main`, inspected 2026-08-10.
+`Verified fact` — `main`, inspected 2026-08-10; every count in it re-read
+2026-08-30, and five of the rows had drifted.
 
 | Area | State |
 |---|---|
-| API | **160 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27, 153 until 2026-08-28 and 155 until 2026-08-30; it is a count, so it drifts unless somebody runs it — and the command is now written down below the table, because "somebody runs it" was not something the line said how to do |
+| API | **160 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27, 153 until 2026-08-28 and 155 until 2026-08-30; it is a count, so it drifts unless somebody runs it — and the command it comes from is written down below the table, which it was not until 2026-08-30 |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
 | Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass. This line said 48 until 2026-08-30 |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
