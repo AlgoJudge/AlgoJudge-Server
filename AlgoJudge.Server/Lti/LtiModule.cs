@@ -89,11 +89,15 @@ namespace AlgoJudge.Server.Lti
         /// Brings the module's schema up to date and maps its endpoints.
         /// <para>
         /// The migration lives here rather than in <c>Program.cs</c> for the same
-        /// reason as everything else in this file. It follows the application's
-        /// own rule, which is not "migrate on start": the core migrates only in
-        /// development and otherwise <b>refuses to start with a migration
-        /// pending</b>, because applying schema changes automatically to a
-        /// production database is a decision an operator makes.
+        /// reason as everything else in this file, and it follows the
+        /// application's own rule rather than inventing one:
+        /// <c>Database/Schema.cs</c> decides, this passes it the same switch.
+        /// </para>
+        /// <para>
+        /// <b>It has to read the switch too.</b> Two contexts share this
+        /// database and each has its own history table, so an installation that
+        /// migrated only the application's schema would still be refused here —
+        /// by the module, over a table nobody had mentioned.
         /// </para>
         /// </summary>
         public static WebApplication MapLti(this WebApplication app)
@@ -102,15 +106,14 @@ namespace AlgoJudge.Server.Lti
             {
                 var db = scope.ServiceProvider.GetRequiredService<LtiDbContext>();
 
-                if (app.Environment.IsDevelopment())
-                {
-                    db.Database.Migrate();
-                }
-                else if (db.Database.GetPendingMigrations().Any())
-                {
-                    throw new InvalidOperationException(
-                        "The LTI module has pending migrations");
-                }
+                Database.Schema.Ensure(
+                    db.Database,
+                    app.Environment.IsDevelopment()
+                        || app.Configuration.GetValue<bool>(
+                            Database.Schema.MigrateOnStartSetting),
+                    "The LTI module's schema",
+                    app.Services.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("AlgoJudge.Schema"));
             }
 
             return app;

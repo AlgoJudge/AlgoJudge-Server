@@ -584,6 +584,33 @@ After cloning, inspect the solution and project files, then document:
     new ones needed a migration — `InstanceThemeFiles`, the second in this
     context after the squash, and it changes one constraint and nothing else.
 
+- **A production database can be given its schema** (2026-08-30).
+  `Database:MigrateOnStart` — `AJ_Database__MigrateOnStart`, off by default —
+  and `Database/Schema.cs` is the whole of it. **The refusal is unchanged when
+  it is unset**; what changed is that there is a way to say yes. Four things are
+  easy to get wrong:
+  - **It is not a relaxation, it closes a hole.** Outside Development a pending
+    migration threw and *nothing shipped could apply one*: `aj-admin` has no
+    migrate command, the image has no SDK, and starting as Development to get
+    past the guard seeds the demo world and forces the well-known administrator
+    password. A fresh installation therefore had every migration pending and
+    never started. The documented answer was `dotnet ef database update` from a
+    workstation with the source, which a self-hosted stack does not have.
+  - **Both contexts read it.** They share a database and each has its own
+    history table, so an installation that migrated only `ApplicationDbContext`
+    is still refused by `LtiModule` over a table nobody mentioned.
+  - **It takes a PostgreSQL advisory lock, and that is not decoration.** EF Core
+    10 has no migration lock of its own — measured 2026-08-30 by removing ours:
+    two instances migrating an empty database together kill one with `23505` on
+    `PK___EFMigrationsHistory`, not the `42P07` one would expect, because each
+    migration runs in a transaction so the collision lands on the history row.
+  - **The explicit unlock is belt and braces and says so.** Removing it *and*
+    the `CloseConnection` beside it still leaves no lock held, because disposing
+    the context returns the connection and Npgsql resets it. It stays so that
+    `Ensure` leaves somebody else's `DatabaseFacade` as it found it — and it has
+    no test, deliberately, because the one written for it passed with the line
+    deleted.
+
 ## Layout
 
 The frontend is in

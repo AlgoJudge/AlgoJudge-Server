@@ -402,19 +402,22 @@ namespace AlgoJudge.Server
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
-
-                using var scope = app.Services.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                db.Database.Migrate();
             }
+
+            // Development always migrates; anything else only when the operator
+            // has said so. `Database/Schema.cs` carries why the switch exists —
+            // in short, refusing was the whole policy and nothing shipped could
+            // apply a migration, so a fresh installation never started.
+            var migrateOnStart = app.Environment.IsDevelopment()
+                || app.Configuration.GetValue<bool>(Schema.MigrateOnStartSetting);
 
             using (var scope = app.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                if (db.Database.GetPendingMigrations().Any())
-                {
-                    throw new InvalidOperationException("Database has pending migrations");
-                }
+                Schema.Ensure(
+                    db.Database, migrateOnStart, "The database",
+                    app.Services.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("AlgoJudge.Schema"));
             }
 
             // **Every store a file names has to be one this Server has.** A

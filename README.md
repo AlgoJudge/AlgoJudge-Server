@@ -677,12 +677,37 @@ cannot do.
 ## Migrations
 
 In the Development environment the application applies pending migrations on
-startup. Outside Development it refuses to start while migrations are pending.
+startup. Outside Development it refuses to start while migrations are pending —
+**unless the operator has asked it to apply them**, with
+`AJ_Database__MigrateOnStart=true`.
 
 ```bash
 dotnet ef database update --project AlgoJudge.Server
 dotnet ef database update --project AlgoJudge.Server --context LtiDbContext
 ```
+
+**The switch exists because refusing was the whole policy and nothing shipped
+could apply one** (2026-08-30). `aj-admin` has no migrate command, the image
+carries no SDK, and starting it as Development to get past the guard would seed
+the demo world and replace the administrator's password with a well-known one —
+so a fresh installation had every migration pending and never started at all.
+The commands above need a workstation with the source; a self-hosted stack has
+neither.
+
+It is **off by default**, and the refusal it replaces is unchanged when it is:
+applying a schema change to a production database stays a decision somebody
+makes rather than one a boot makes for them. What changed is that there is now a
+way to say yes. **Take a backup before setting it** — `AlgoJudge-Ops` does this
+for you, in that order.
+
+`Database/Schema.cs` is the whole of it, and it takes a **PostgreSQL advisory
+lock** while it works. Several instances against one database is a supported
+arrangement and they start together after an update; EF Core 10 has no migration
+lock of its own, measured 2026-08-30 by taking ours out and watching one of two
+instances die of `23505` on `PK___EFMigrationsHistory`.
+
+**Both contexts read the switch**, or the LTI module refuses on its own over a
+table nobody mentioned.
 
 **Two contexts, two histories.** `ApplicationDbContext` keeps its migrations in
 `Database/Migrations` and its history in `__EFMigrationsHistory`; the LTI module
