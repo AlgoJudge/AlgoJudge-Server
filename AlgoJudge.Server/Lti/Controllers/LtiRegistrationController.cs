@@ -24,17 +24,17 @@ namespace AlgoJudge.Server.Lti.Controllers
     public class LtiRegistrationsController(IDynamicRegistrationService registrations) : ControllerBase
     {
         [HttpGet]
-        [ProducesResponseType<IReadOnlyList<InvitationView>>(StatusCodes.Status200OK)]
-        public Task<IReadOnlyList<InvitationView>> List(CancellationToken ct) =>
+        [ProducesResponseType<IReadOnlyList<RegistrationInvitationDto>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<RegistrationInvitationDto>> List(CancellationToken ct) =>
             registrations.ListAsync(ct);
 
         /// <summary>
         /// Expects one registration and answers with the address to hand over.
         /// </summary>
         [HttpPost]
-        [ProducesResponseType<InvitationView>(StatusCodes.Status200OK)]
-        public Task<InvitationView> Invite(
-            [FromBody] InvitationInput? input, CancellationToken ct) =>
+        [ProducesResponseType<RegistrationInvitationDto>(StatusCodes.Status200OK)]
+        public Task<RegistrationInvitationDto> Invite(
+            [FromBody] InvitationInputDto? input, CancellationToken ct) =>
             registrations.InviteAsync(input?.Note, ct);
 
         /// <summary>Calls it off. The row stays, expired, so the list still says it happened.</summary>
@@ -48,7 +48,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         }
     }
 
-    public record InvitationInput
+    public record InvitationInputDto
     {
         /// <summary>What to call it while waiting — "WMiI Moodle", say.</summary>
         public string? Note { get; init; }

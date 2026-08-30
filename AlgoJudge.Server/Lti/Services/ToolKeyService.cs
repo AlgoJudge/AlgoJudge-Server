@@ -14,7 +14,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// half</b>, and its absence is the design rather than an omission: a type
     /// that cannot carry a secret cannot leak one.
     /// </summary>
-    public record ToolKeyView
+    public record ToolKeyDto
     {
         public required string Kid { get; init; }
         public required string CreatedAt { get; init; }
@@ -44,7 +44,7 @@ namespace AlgoJudge.Server.Lti.Services
         Task<SigningCredentials> CredentialsAsync(CancellationToken cancellationToken);
 
         /// <summary>What a manager sees: every key, and which one signs.</summary>
-        Task<IReadOnlyList<ToolKeyView>> ListAsync(CancellationToken cancellationToken);
+        Task<IReadOnlyList<ToolKeyDto>> ListAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Mints a new key and stops the old one signing, <b>leaving it
@@ -53,7 +53,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// moment would refuse everything signed before the platform refetched —
         /// an outage in somebody else's installation.
         /// </summary>
-        Task<ToolKeyView> RotateAsync(CancellationToken cancellationToken);
+        Task<ToolKeyDto> RotateAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Closes the overlap: takes a retired key out of the published set and
@@ -213,7 +213,7 @@ namespace AlgoJudge.Server.Lti.Services
                 SecurityAlgorithms.RsaSha256);
         }
 
-        public async Task<IReadOnlyList<ToolKeyView>> ListAsync(CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<ToolKeyDto>> ListAsync(CancellationToken cancellationToken)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, cancellationToken);
 
@@ -230,7 +230,7 @@ namespace AlgoJudge.Server.Lti.Services
             return keys.Select(key => Project(key, key.Id == current.Id)).ToList();
         }
 
-        public async Task<ToolKeyView> RotateAsync(CancellationToken cancellationToken)
+        public async Task<ToolKeyDto> RotateAsync(CancellationToken cancellationToken)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, cancellationToken);
 
@@ -286,7 +286,7 @@ namespace AlgoJudge.Server.Lti.Services
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        private static ToolKeyView Project(ToolKey key, bool signing) => new()
+        private static ToolKeyDto Project(ToolKey key, bool signing) => new()
         {
             Kid = key.Kid,
             CreatedAt = Wire.At(key.CreatedAt),

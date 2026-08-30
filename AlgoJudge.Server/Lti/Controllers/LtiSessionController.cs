@@ -62,7 +62,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         [ProducesResponseType<LaunchContextDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         public async Task<LaunchContextDto> Claim(
-            [FromBody] ClaimInput input, CancellationToken ct)
+            [FromBody] ClaimInputDto input, CancellationToken ct)
         {
             var now = clock.GetUtcNow().UtcDateTime;
             var userId = currentUser.UserId
@@ -116,7 +116,7 @@ namespace AlgoJudge.Server.Lti.Controllers
             };
         }
 
-        public record ClaimInput
+        public record ClaimInputDto
         {
             public required string Ticket { get; init; }
         }

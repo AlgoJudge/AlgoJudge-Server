@@ -9,7 +9,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// <summary>
     /// How one placement's grades stand, as a manager reads it.
     /// </summary>
-    public record GradeSummary
+    public record GradeSummaryDto
     {
         public required int Total { get; init; }
         public required int Synchronised { get; init; }
@@ -38,7 +38,7 @@ namespace AlgoJudge.Server.Lti.Services
 
     public interface IGradeVerifier
     {
-        Task<GradeSummary> SummariseAsync(Guid resourceLinkId, bool verify, CancellationToken ct);
+        Task<GradeSummaryDto> SummariseAsync(Guid resourceLinkId, bool verify, CancellationToken ct);
 
         /// <summary>Marks everything postable as stale, so the worker sends it again.</summary>
         Task<int> ResyncAsync(Guid resourceLinkId, CancellationToken ct);
@@ -67,7 +67,7 @@ namespace AlgoJudge.Server.Lti.Services
         TimeProvider clock
     ) : IGradeVerifier
     {
-        public async Task<GradeSummary> SummariseAsync(
+        public async Task<GradeSummaryDto> SummariseAsync(
             Guid resourceLinkId, bool verify, CancellationToken ct)
         {
             var link = await db.ResourceLinks.AsNoTracking()
@@ -86,7 +86,7 @@ namespace AlgoJudge.Server.Lti.Services
                 drifted = await DriftAsync(link, states, ct);
             }
 
-            return new GradeSummary
+            return new GradeSummaryDto
             {
                 Total = states.Count,
                 Synchronised = states.Count(s => s.State == GradeSyncStatus.Synchronised),

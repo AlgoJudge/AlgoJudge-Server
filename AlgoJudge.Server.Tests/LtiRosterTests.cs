@@ -172,10 +172,10 @@ file sealed class StubbedToolKeyForRoster : IToolKeyService
             new Microsoft.IdentityModel.Tokens.RsaSecurityKey(rsa) { KeyId = "test" },
             Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256));
 
-    public Task<IReadOnlyList<ToolKeyView>> ListAsync(CancellationToken ct) =>
+    public Task<IReadOnlyList<ToolKeyDto>> ListAsync(CancellationToken ct) =>
         throw new NotSupportedException("the roster tests do not rotate keys");
 
-    public Task<ToolKeyView> RotateAsync(CancellationToken ct) =>
+    public Task<ToolKeyDto> RotateAsync(CancellationToken ct) =>
         throw new NotSupportedException("the roster tests do not rotate keys");
 
     public Task WithdrawAsync(string kid, CancellationToken ct) =>

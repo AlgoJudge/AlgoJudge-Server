@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AlgoJudge.Server.Lti.Services
 {
     /// <summary>One course link, as a manager needs to see it.</summary>
-    public record PlacementView
+    public record PlacementDto
     {
         public required Guid Id { get; init; }
         public required Guid PlatformId { get; init; }
@@ -50,7 +50,7 @@ namespace AlgoJudge.Server.Lti.Services
 
     public interface IPlacementService
     {
-        Task<IReadOnlyList<PlacementView>> ListAsync(Guid? activityId, CancellationToken ct);
+        Task<IReadOnlyList<PlacementDto>> ListAsync(Guid? activityId, CancellationToken ct);
 
         /// <summary>
         /// Accepts that this activity is reached from more than one course.
@@ -68,7 +68,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// way back, and that is the platform's own business.
         /// </para>
         /// </summary>
-        Task<PlacementView> AcknowledgeSharingAsync(Guid id, CancellationToken ct);
+        Task<PlacementDto> AcknowledgeSharingAsync(Guid id, CancellationToken ct);
 
         /// <summary>
         /// Gives this placement an activity of its own, copied from the one it
@@ -83,7 +83,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// cannot be left pointing at the wrong activity in between.
         /// </para>
         /// </summary>
-        Task<PlacementView> CopyActivityAsync(
+        Task<PlacementDto> CopyActivityAsync(
             Guid id, string slug, DateTime startsAt, CancellationToken ct);
     }
 
@@ -94,7 +94,7 @@ namespace AlgoJudge.Server.Lti.Services
         IPermissionService permissions
     ) : IPlacementService
     {
-        public async Task<PlacementView> CopyActivityAsync(
+        public async Task<PlacementDto> CopyActivityAsync(
             Guid id, string slug, DateTime startsAt, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
@@ -117,7 +117,7 @@ namespace AlgoJudge.Server.Lti.Services
             return (await ProjectAsync([link], ct)).Single();
         }
 
-        public async Task<IReadOnlyList<PlacementView>> ListAsync(
+        public async Task<IReadOnlyList<PlacementDto>> ListAsync(
             Guid? activityId, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
@@ -167,7 +167,7 @@ namespace AlgoJudge.Server.Lti.Services
             (history ?? "")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        public async Task<PlacementView> AcknowledgeSharingAsync(Guid id, CancellationToken ct)
+        public async Task<PlacementDto> AcknowledgeSharingAsync(Guid id, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
 
@@ -186,7 +186,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// cannot be joined — which is the cost of the module boundary, paid here
         /// where it is one extra read rather than in the launch path.
         /// </summary>
-        private async Task<IReadOnlyList<PlacementView>> ProjectAsync(
+        private async Task<IReadOnlyList<PlacementDto>> ProjectAsync(
             IReadOnlyList<ResourceLink> links, CancellationToken ct)
         {
             if (links.Count == 0) return [];
@@ -210,7 +210,7 @@ namespace AlgoJudge.Server.Lti.Services
                 .Select(g => new { ActivityId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(g => g.ActivityId, g => g.Count, ct);
 
-            return links.Select(l => new PlacementView
+            return links.Select(l => new PlacementDto
             {
                 Id = l.Id,
                 PlatformId = l.PlatformId,
