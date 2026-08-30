@@ -20,7 +20,21 @@ namespace AlgoJudge.Server.Services
     /// language, and the reader needs one of them, once.
     /// </para>
     /// </summary>
-    public class InstanceService(ApplicationDbContext context, TimeProvider clock) : IInstanceService
+    /// <remarks>
+    /// It reads bytes through <see cref="IBlobStoreRegistry"/> rather than
+    /// through <c>IFileService</c>, and that is not a shortcut. This answer is
+    /// public, so there is no authorization question to ask — and the file
+    /// service carries the permission engine and the lockdown filter behind it,
+    /// which would drag both into every caller that only wanted the singleton
+    /// row. The seeder is one such caller, and the production-seed test is what
+    /// said so.
+    /// </remarks>
+    public class InstanceService(
+        ApplicationDbContext context,
+        TimeProvider clock,
+        Storage.IBlobStoreRegistry stores,
+        ILogger<InstanceService> logger
+    ) : IInstanceService
     {
         public async Task<Instance> EnsureAsync(CancellationToken ct)
         {
@@ -102,8 +116,106 @@ namespace AlgoJudge.Server.Services
                     .ToList() is { Count: > 0 } translations ? translations : null,
                 ShowLogo = instance.ShowLogo,
                 ShowLocalSignIn = instance.ShowLocalSignIn,
+                Theme = await ThemeAsync(references, ct),
             };
         }
+
+        /// <summary>
+        /// The theme, read from the file it was published from.
+        /// <para>
+        /// <b>The file is read on every call rather than kept in a column.</b> One
+        /// authoritative copy is worth a small blob read: a column beside the file
+        /// would be a second answer to one question, and the day they disagreed
+        /// nothing would say which was in force. A theme is a few hundred bytes.
+        /// </para>
+        /// <para>
+        /// <b>A theme that cannot be read is no theme, not a broken page.</b> The
+        /// bytes were validated when they were published, so this cannot normally
+        /// fail — and if it does, an installation showing the default colours is a
+        /// great deal better than one whose every screen answers 500. It is logged
+        /// as an error, because it is one.
+        /// </para>
+        /// </summary>
+        private async Task<InstanceThemeDto?> ThemeAsync(
+            List<FileReference> references, CancellationToken ct)
+        {
+            var published = references
+                .Where(r => r.OwnerKind == FileOwnerKind.InstanceTheme)
+                .OrderByDescending(r => r.ValidFrom ?? DateTime.MinValue)
+                .FirstOrDefault();
+
+            if (published?.File is null) return null;
+
+            var faces = references
+                .Where(r => r.OwnerKind == FileOwnerKind.InstanceFont && r.File is not null)
+                .ToDictionary(r => r.Name, StringComparer.Ordinal);
+
+            try
+            {
+                // A store this installation is not configured for is the same
+                // answer as no theme, and is logged below: the file exists and
+                // this Server cannot reach it, which is not a reason to stop
+                // answering "what is this installation called".
+                var store = stores.Find(published.File.StorageId)
+                    ?? throw new InvalidOperationException("the store this file names is not configured");
+
+                await using var content = await store.OpenReadAsync(
+                    new Storage.BlobKey(published.File.Id, published.File.Sha256), ct);
+                using var reader = new StreamReader(content);
+                var text = await reader.ReadToEndAsync(ct);
+
+                var theme = ThemeDocument.Parse(text, faces.Keys.ToHashSet(StringComparer.Ordinal));
+
+                return new InstanceThemeDto
+                {
+                    Light = Colours(theme.Light),
+                    Dark = Colours(theme.Dark),
+                    FontFamily = theme.FontFamily,
+                    FontFamilyHeadings = theme.FontFamilyHeadings,
+                    Fonts = (theme.Fonts ?? [])
+                        .Select(face => new InstanceFontDto
+                        {
+                            Name = face.File!,
+                            Family = face.Family!,
+                            Weight = face.Weight ?? 400,
+                            Style = face.Style ?? "normal",
+                            Url = $"/api/v1/files/{Wire.Id(faces[face.File!].FileId)}",
+                            Sha256 = faces[face.File!].File?.Sha256 ?? "",
+                            SizeBytes = faces[face.File!].File?.SizeBytes ?? 0,
+                        })
+                        .ToList(),
+                    FileId = Wire.Id(published.FileId),
+                    Sha256 = published.File.Sha256,
+                };
+            }
+            catch (Exception error)
+            {
+                logger.LogError(
+                    error,
+                    "The published theme (file {FileId}) could not be read. Serving the default.",
+                    published.FileId);
+                return null;
+            }
+        }
+
+        private static ThemeColoursDto? Colours(ThemeColours? colours) => colours is null ? null : new()
+        {
+            Primary = colours.Primary,
+            Secondary = colours.Secondary,
+            Accent = colours.Accent,
+            Link = colours.Link,
+            Body = colours.Body,
+            Surface = colours.Surface,
+            Text = colours.Text,
+            Dimmed = colours.Dimmed,
+            Border = colours.Border,
+            NavBackground = colours.NavBackground,
+            NavText = colours.NavText,
+            NavActiveBackground = colours.NavActiveBackground,
+            NavActiveText = colours.NavActiveText,
+            HeaderBackground = colours.HeaderBackground,
+            HeaderText = colours.HeaderText,
+        };
 
         private static InstanceLogoDto Logo(FileReference reference) => new()
         {

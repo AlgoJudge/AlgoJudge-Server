@@ -551,6 +551,39 @@ After cloning, inspect the solution and project files, then document:
     one, each admitting and an address outside all three not; and the API write,
     which is what found the 500 above.
 
+- **An installation carries its own colours and typeface** (2026-08-30),
+  specified in `docs/specs/INSTANCE_BRANDING.md` in the workspace. A theme is a
+  stored file — `FileOwnerKind.InstanceTheme`, with `InstanceFont` beside it —
+  and `Services/ThemeDocument.cs` is the whole of reading, refusing and writing
+  one. **Six** things are easy to get wrong:
+  - **The validation is a security boundary, not tidiness.** Every value ends up
+    inside a stylesheet the Client builds, so a colour is `^#[0-9a-fA-F]{6}$` and
+    nothing else. A keyword is a valid CSS colour and is refused anyway: the
+    narrow rule is what makes the wide one — that nothing else gets through —
+    possible to state at all. **The operator never writes a URL**; a face's
+    address is built from a stored file id.
+  - **A face is checked on its bytes**, `wOF2`, not on the type it declared.
+    Every visitor's browser fetches that file.
+  - **Two doors, one document.** The panel's form sends values and this Server
+    writes the canonical YAML; an operator's own file is published **unchanged**,
+    so the checksum a pre-configuration directory compares against still
+    matches. A request stating both is refused.
+  - **`InstanceService` reads the theme through `IBlobStoreRegistry`, not
+    through `IFileService`.** The answer is public, so there is no authorization
+    question to ask — and the file service carries the permission engine and the
+    lockdown filter behind it, which would drag both into every caller that only
+    wanted the singleton row. `ProductionSeedTests` is what said so, by failing
+    to resolve the container.
+  - **Faces are published before the theme**, in pre-configuration and by hand
+    alike: a theme is read by resolving every face it names against what is
+    stored, so one published ahead of its own fonts is unreadable — which is the
+    whole installation silently back on the default. **A theme that cannot be
+    read is served as no theme and logged as an error**, because an installation
+    on the default colours beats one whose every screen answers 500.
+  - The `FileReferences` check constraint enumerates the owner kinds, so the two
+    new ones needed a migration — `InstanceThemeFiles`, the second in this
+    context after the squash, and it changes one constraint and nothing else.
+
 ## Layout
 
 The frontend is in

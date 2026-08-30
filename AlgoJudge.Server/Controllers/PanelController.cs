@@ -4,6 +4,7 @@ using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Services;
 using AlgoJudge.Server.Services.Models;
 using AlgoJudge.Server.Utils;
+using DbFile = AlgoJudge.Server.Database.Models.File;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -349,6 +350,7 @@ namespace AlgoJudge.Server.Controllers
         Database.ApplicationDbContext context,
         IInstanceService instances,
         IDocumentService documents,
+        IFileService files,
         IPermissionService permissions,
         IAccessKeyMinting minting,
         Realtime.IEventHub events
@@ -584,6 +586,254 @@ namespace AlgoJudge.Server.Controllers
 
             return await AnnounceAsync(ct);
         }
+
+        /// <summary>
+        /// Sets the operator's colours and typeface, by either of its two doors.
+        /// <para>
+        /// <b>One thing is in force and one thing can be downloaded.</b> The
+        /// panel's form sends values and this Server writes the canonical YAML;
+        /// an operator with a file of their own sends its id and the bytes are
+        /// published as they arrived — untouched, so the checksum a
+        /// pre-configuration directory compares against still matches.
+        /// </para>
+        /// </summary>
+        [HttpPut("theme")]
+        [ProducesResponseType<InstanceInfoDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<InstanceInfoDto> SetTheme(
+            [FromBody] InstanceThemeInputDto input, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+
+            if ((input.FileId is null) == (input.Theme is null))
+            {
+                throw new ValidationException(
+                    "A theme is set either from a file or from values, and this request states "
+                    + (input.FileId is null ? "neither" : "both") + ".",
+                    "theme.input");
+            }
+
+            var faces = await FontNamesAsync(instance.Id, ct);
+            string fileId;
+
+            if (input.FileId is { } uploaded)
+            {
+                var file = await Stored(uploaded, ct);
+                if (file.SizeBytes > ThemeDocument.MaxBytes)
+                {
+                    throw new ValidationException(
+                        $"A theme is a few hundred bytes of colours; this file is "
+                        + $"{file.SizeBytes} and the ceiling is {ThemeDocument.MaxBytes}.",
+                        "theme.size");
+                }
+
+                // Parsed to refuse it, not to rewrite it. What is published is
+                // what the operator wrote.
+                ThemeDocument.Parse(await TextAsync(file, ct), faces);
+                fileId = uploaded;
+            }
+            else
+            {
+                // Written, then read back through exactly the same validation the
+                // other door goes through, then written again from what came out.
+                // The round trip is what makes the stored document canonical —
+                // and what stops the form having a validation path of its own.
+                var stated = ThemeDocument.Serialise(Root(input.Theme!));
+                var canonical = ThemeDocument.Serialise(ThemeDocument.Parse(stated, faces));
+
+                var bytes = System.Text.Encoding.UTF8.GetBytes(canonical);
+                var stored = await files.StoreAsync(
+                    new MemoryStream(bytes), "theme.yml", "application/yaml",
+                    IFileService.Checksum(bytes), ct);
+                fileId = Wire.Id(stored.Id);
+            }
+
+            await documents.PublishAsync(
+                FileOwnerKind.InstanceTheme, instance.Id, ThemeDocument.ReferenceName,
+                new PublishDocumentInputDto
+                {
+                    Statements = [new NewStatementDto { FileId = fileId }],
+                }, ct);
+
+            return await AnnounceAsync(ct);
+        }
+
+        /// <summary>Withdrawing puts the installation back on the theme the Client ships.</summary>
+        [HttpDelete("theme")]
+        [ProducesResponseType<InstanceInfoDto>(StatusCodes.Status200OK)]
+        public async Task<InstanceInfoDto> UnsetTheme(CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+            await documents.UnpublishAsync(
+                FileOwnerKind.InstanceTheme, instance.Id, ThemeDocument.ReferenceName, ct);
+            return await AnnounceAsync(ct);
+        }
+
+        /// <summary>
+        /// The faces this installation has stored, whether or not a theme uses
+        /// them. <c>/instance</c> lists only the ones in force, so the form needs
+        /// this to offer a face that has been uploaded and not yet declared.
+        /// </summary>
+        [HttpGet("fonts")]
+        [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+        public async Task<IReadOnlyList<string>> Fonts(CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+            return (await FontNamesAsync(instance.Id, ct)).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        }
+
+        /// <summary>
+        /// Publishes one face under the name a theme calls it by.
+        /// <para>
+        /// <b>woff2, checked on the bytes.</b> The declared type is whatever the
+        /// uploader said it was, and this file is fetched by every visitor's
+        /// browser.
+        /// </para>
+        /// </summary>
+        [HttpPost("fonts")]
+        [ProducesResponseType<InstanceInfoDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<InstanceInfoDto> AddFont(
+            [FromBody] InstanceFontInputDto input, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+
+            var name = ThemeDocument.FontFileNameOrRefuse(input.Name);
+            var file = await Stored(input.FileId, ct);
+
+            if (file.SizeBytes > MaxFontBytes)
+            {
+                throw new ValidationException(
+                    $"'{name}' is {file.SizeBytes} bytes and the ceiling is {MaxFontBytes}. A face "
+                    + "subset to the alphabets a screen needs is a small fraction of that; a file "
+                    + "this size is usually a whole family or an unsubsetted one.",
+                    "font.size");
+            }
+
+            await using (var content = await files.OpenAsync(file, ct))
+            {
+                var header = new byte[4];
+                var read = await content.ReadAtLeastAsync(header, 4, throwOnEndOfStream: false, ct);
+                if (read < 4 || !ThemeDocument.IsWoff2(header))
+                {
+                    throw new ValidationException(
+                        $"'{name}' does not begin wOF2, so it is not a WOFF2 face whatever it is "
+                        + "called. Every visitor's browser fetches this file.",
+                        "font.format");
+                }
+            }
+
+            await documents.PublishAsync(
+                FileOwnerKind.InstanceFont, instance.Id, name,
+                new PublishDocumentInputDto
+                {
+                    Statements = [new NewStatementDto { FileId = input.FileId }],
+                }, ct);
+
+            return await AnnounceAsync(ct);
+        }
+
+        /// <summary>
+        /// Withdraws a face — unless the published theme draws with it.
+        /// <para>
+        /// <b>Refused rather than allowed to break the theme.</b> A theme naming a
+        /// face that is not stored cannot be read, and a theme that cannot be read
+        /// is no theme at all: withdrawing this quietly would turn one deletion
+        /// into every colour on the installation reverting.
+        /// </para>
+        /// </summary>
+        [HttpDelete("fonts/{name}")]
+        [ProducesResponseType<InstanceInfoDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<InstanceInfoDto> RemoveFont(string name, CancellationToken ct)
+        {
+            await permissions.RequireAsync(Permissions.InstanceUpdate, null, ct);
+            var instance = await instances.EnsureAsync(ct);
+
+            var stored = ThemeDocument.FontFileNameOrRefuse(name);
+            var info = await instances.GetAsync(ct);
+
+            if (info.Theme?.Fonts.Any(face => face.Name == stored) == true)
+            {
+                throw new ValidationException(
+                    $"The published theme draws with '{stored}'. Publish a theme that does not, "
+                    + "and then withdraw the face.",
+                    "font.inUse");
+            }
+
+            await documents.UnpublishAsync(FileOwnerKind.InstanceFont, instance.Id, stored, ct);
+            return await AnnounceAsync(ct);
+        }
+
+        /// <summary>
+        /// A face subset to the alphabets a screen needs is tens of kilobytes.
+        /// The ceiling is generous enough for one that is not subset at all and
+        /// mean enough to refuse a whole family in one file.
+        /// </summary>
+        private const long MaxFontBytes = 512 * 1024;
+
+        private async Task<HashSet<string>> FontNamesAsync(Guid instanceId, CancellationToken ct) =>
+            (await context.FileReferences
+                .AsNoTracking()
+                .Where(r => r.OwnerKind == FileOwnerKind.InstanceFont
+                    && r.InstanceId == instanceId
+                    && r.SupersededAt == null)
+                .Select(r => r.Name)
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+
+        private async Task<DbFile> Stored(string fileId, CancellationToken ct) =>
+            Guid.TryParse(fileId, out var id) && await files.FindAsync(id, ct) is { } file
+                ? file
+                : throw new ValidationException("That file is not stored", "file.missing");
+
+        private async Task<string> TextAsync(DbFile file, CancellationToken ct)
+        {
+            await using var content = await files.OpenAsync(file, ct);
+            using var reader = new StreamReader(content);
+            return await reader.ReadToEndAsync(ct);
+        }
+
+        /// <summary>The form's values, as the document they are about to be written as.</summary>
+        private static ThemeRoot Root(ThemeColoursInputDto input) => new()
+        {
+            Format = ThemeDocument.Format,
+            Version = ThemeDocument.Version,
+            Light = Scheme(input.Light),
+            Dark = Scheme(input.Dark),
+            FontFamily = input.FontFamily,
+            FontFamilyHeadings = input.FontFamilyHeadings,
+            Fonts = input.Fonts?.Select(face => new ThemeFontFace
+            {
+                Family = face.Family,
+                File = face.File,
+                Weight = face.Weight,
+                Style = face.Style,
+            }).ToList(),
+        };
+
+        private static ThemeColours? Scheme(ThemeColoursDto? colours) => colours is null ? null : new()
+        {
+            Primary = colours.Primary,
+            Secondary = colours.Secondary,
+            Accent = colours.Accent,
+            Link = colours.Link,
+            Body = colours.Body,
+            Surface = colours.Surface,
+            Text = colours.Text,
+            Dimmed = colours.Dimmed,
+            Border = colours.Border,
+            NavBackground = colours.NavBackground,
+            NavText = colours.NavText,
+            NavActiveBackground = colours.NavActiveBackground,
+            NavActiveText = colours.NavActiveText,
+            HeaderBackground = colours.HeaderBackground,
+            HeaderText = colours.HeaderText,
+        };
 
         /// <summary>
         /// Publishing <b>adds</b> a revision with a date rather than replacing

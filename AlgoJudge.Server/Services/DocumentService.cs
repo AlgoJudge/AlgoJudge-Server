@@ -134,7 +134,8 @@ namespace AlgoJudge.Server.Services
             {
                 FileOwnerKind.ActivityDocument => context.FileReferences
                     .Where(r => r.OwnerKind == ownerKind && r.ActivityId == ownerId),
-                FileOwnerKind.InstanceDocument or FileOwnerKind.InstanceLogo => context.FileReferences
+                FileOwnerKind.InstanceDocument or FileOwnerKind.InstanceLogo
+                    or FileOwnerKind.InstanceTheme or FileOwnerKind.InstanceFont => context.FileReferences
                     .Where(r => r.OwnerKind == ownerKind && r.InstanceId == ownerId),
                 _ => throw new InvalidOperationException($"{ownerKind} does not publish documents"),
             };
@@ -148,6 +149,8 @@ namespace AlgoJudge.Server.Services
                     break;
                 case FileOwnerKind.InstanceDocument:
                 case FileOwnerKind.InstanceLogo:
+                case FileOwnerKind.InstanceTheme:
+                case FileOwnerKind.InstanceFont:
                     reference.InstanceId = ownerId;
                     break;
                 default:
