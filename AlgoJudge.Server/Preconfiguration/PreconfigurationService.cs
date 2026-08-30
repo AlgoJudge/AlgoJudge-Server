@@ -183,7 +183,8 @@ namespace AlgoJudge.Server.Preconfiguration
             bool apply,
             CancellationToken ct)
         {
-            if (source.Pages.Count == 0 && source.Logos.Count == 0) return;
+            if (source.Pages.Count == 0 && source.Logos.Count == 0
+                && source.Fonts.Count == 0 && source.Theme is null) return;
 
             var published = await context.FileReferences
                 .AsNoTracking()
@@ -222,6 +223,24 @@ namespace AlgoJudge.Server.Preconfiguration
                 {
                     pending.Add((FileOwnerKind.InstanceLogo, logo));
                 }
+            }
+
+            // **Faces before the theme.** A theme is read by resolving each face
+            // it names against what is stored, so a theme published ahead of its
+            // own fonts would be unreadable until the next apply — and an
+            // unreadable theme is no theme, which is the whole installation
+            // silently back on the default.
+            foreach (var font in source.Fonts)
+            {
+                if (Differs(FileOwnerKind.InstanceFont, font, $"font.{font.Kind}"))
+                {
+                    pending.Add((FileOwnerKind.InstanceFont, font));
+                }
+            }
+
+            if (source.Theme is { } theme && Differs(FileOwnerKind.InstanceTheme, theme, "theme"))
+            {
+                pending.Add((FileOwnerKind.InstanceTheme, theme));
             }
 
             if (!apply || pending.Count == 0) return;

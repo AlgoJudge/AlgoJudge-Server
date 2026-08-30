@@ -647,6 +647,58 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Language { get; init; }
     }
 
+    /// <summary>
+    /// Setting the theme, by either of its two doors.
+    /// <para>
+    /// <b>One mechanism, not two.</b> The panel's form sends
+    /// <see cref="Theme"/> and this Server writes the canonical YAML; an operator
+    /// with a file of their own sends <see cref="FileId"/>. Both end at the same
+    /// published file, so there is one thing in force and one thing to download.
+    /// Exactly one of the two, because a request stating both is a request whose
+    /// author disagrees with themselves.
+    /// </para>
+    /// </summary>
+    public record InstanceThemeInputDto
+    {
+        public string? FileId { get; init; }
+        public ThemeColoursInputDto? Theme { get; init; }
+    }
+
+    /// <summary>
+    /// The form's own shape. Mirrors <see cref="ThemeColoursDto"/> in both
+    /// schemes; an empty string is <b>absent</b>, because the form sends every
+    /// field and an untouched one means the default.
+    /// </summary>
+    public record ThemeColoursInputDto
+    {
+        public ThemeColoursDto? Light { get; init; }
+        public ThemeColoursDto? Dark { get; init; }
+        public string? FontFamily { get; init; }
+        public string? FontFamilyHeadings { get; init; }
+        /// <summary>
+        /// The faces, by the names they were uploaded under. Absent leaves the
+        /// faces this instance already declares — the same reading every other
+        /// absent field on this endpoint gets.
+        /// </summary>
+        public IReadOnlyList<ThemeFontInputDto>? Fonts { get; init; }
+    }
+
+    public record ThemeFontInputDto
+    {
+        public required string Family { get; init; }
+        public required string File { get; init; }
+        public int? Weight { get; init; }
+        public string? Style { get; init; }
+    }
+
+    /// <summary>Publishing one face's file under a name the theme can call it by.</summary>
+    public record InstanceFontInputDto
+    {
+        public required string FileId { get; init; }
+        /// <summary>A file name ending <c>.woff2</c> — never a path, never a URL.</summary>
+        public required string Name { get; init; }
+    }
+
     /// <summary>Publishing adds a revision; it replaces none.</summary>
     public record PublishDocumentInputDto
     {

@@ -149,6 +149,93 @@ namespace AlgoJudge.Server.Api.Contracts
 
         /// <summary>Whether a person may remove their own account from here.</summary>
         public required bool AccountDeletionEnabled { get; init; }
+
+        /// <summary>
+        /// The operator's colours and typeface. Absent means the installation has
+        /// set none and the Client draws the theme it ships with.
+        /// <para>
+        /// <b>The values travel here rather than as a file reference</b>, unlike
+        /// every document beside them. A privacy policy is tens of kilobytes and
+        /// is fetched by whoever is about to read it; a theme is under two, and
+        /// the shell needs it before the first paint — a second round trip would
+        /// guarantee a flash of the wrong colours on every arrival.
+        /// </para>
+        /// <para>
+        /// Public, like every other instance setting, and it has to be: the
+        /// sign-in screen is branded before anybody has signed in.
+        /// </para>
+        /// </summary>
+        public InstanceThemeDto? Theme { get; init; }
+    }
+
+    /// <summary>
+    /// What an installation looks like. <b>Every colour optional, and absent
+    /// means the product's default</b> — never black and never empty.
+    /// </summary>
+    public record InstanceThemeDto
+    {
+        public ThemeColoursDto? Light { get; init; }
+        public ThemeColoursDto? Dark { get; init; }
+        public string? FontFamily { get; init; }
+        public string? FontFamilyHeadings { get; init; }
+        /// <summary>The faces to draw with, resolved to addresses.</summary>
+        public required IReadOnlyList<InstanceFontDto> Fonts { get; init; }
+        /// <summary>
+        /// The file this was published from, so the panel can offer it back.
+        /// </summary>
+        public required string FileId { get; init; }
+        public required string Sha256 { get; init; }
+    }
+
+    /// <summary>
+    /// One colour scheme. Both are stated in full: a dark scheme derived from a
+    /// light one fails a contrast floor unpredictably, and the browser checks
+    /// assert one.
+    /// </summary>
+    public record ThemeColoursDto
+    {
+        /* Brand. One hex each; the Client generates the shades from it. */
+        public string? Primary { get; init; }
+        public string? Secondary { get; init; }
+        public string? Accent { get; init; }
+        /// <summary>Its own key: in an identity system a link is usually a
+        /// different hue rather than a lighter brand colour.</summary>
+        public string? Link { get; init; }
+
+        /* Surface and text. */
+        public string? Body { get; init; }
+        public string? Surface { get; init; }
+        public string? Text { get; init; }
+        public string? Dimmed { get; init; }
+        public string? Border { get; init; }
+
+        /* The shell. Hover and muted are mixed from these by the Client. */
+        public string? NavBackground { get; init; }
+        public string? NavText { get; init; }
+        public string? NavActiveBackground { get; init; }
+        public string? NavActiveText { get; init; }
+        public string? HeaderBackground { get; init; }
+        public string? HeaderText { get; init; }
+    }
+
+    /// <summary>
+    /// One font face, as the Client needs it to write an <c>@font-face</c>.
+    /// <para>
+    /// <b>The address is built here, from a stored file.</b> An operator names a
+    /// face they uploaded and never writes a URL — which is what keeps a value
+    /// somebody typed from becoming a request somebody else's browser makes.
+    /// </para>
+    /// </summary>
+    public record InstanceFontDto
+    {
+        public required string Name { get; init; }
+        public required string Family { get; init; }
+        public required int Weight { get; init; }
+        /// <summary><c>normal</c> or <c>italic</c>.</summary>
+        public required string Style { get; init; }
+        public required string Url { get; init; }
+        public required string Sha256 { get; init; }
+        public required long SizeBytes { get; init; }
     }
 
     // ── Session ───────────────────────────────────────────────────────────────

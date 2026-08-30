@@ -370,7 +370,9 @@ namespace AlgoJudge.Server.Database
                         "(\"OwnerKind\" = 3 AND \"InstanceId\" IS NOT NULL) OR " +
                         "(\"OwnerKind\" = 4 AND \"RunnerId\" IS NOT NULL) OR " +
                         "(\"OwnerKind\" = 5 AND \"SubmissionId\" IS NOT NULL) OR " +
-                        "(\"OwnerKind\" = 6 AND \"EvaluationJobId\" IS NOT NULL)");
+                        "(\"OwnerKind\" = 6 AND \"EvaluationJobId\" IS NOT NULL) OR " +
+                        "(\"OwnerKind\" = 7 AND \"InstanceId\" IS NOT NULL) OR " +
+                        "(\"OwnerKind\" = 8 AND \"InstanceId\" IS NOT NULL)");
                 });
             });
 

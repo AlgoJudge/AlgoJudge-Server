@@ -320,7 +320,9 @@ namespace AlgoJudge.Server.Services
                 .AsNoTracking()
                 .AnyAsync(r => r.FileId == fileId
                     && (r.OwnerKind == FileOwnerKind.InstanceDocument
-                        || r.OwnerKind == FileOwnerKind.InstanceLogo), ct);
+                        || r.OwnerKind == FileOwnerKind.InstanceLogo
+                        || r.OwnerKind == FileOwnerKind.InstanceTheme
+                        || r.OwnerKind == FileOwnerKind.InstanceFont), ct);
 
         private async Task<bool> CanReadThroughAsync(FileReference reference, string? userId, CancellationToken ct)
         {
@@ -328,8 +330,14 @@ namespace AlgoJudge.Server.Services
             {
                 // An instance document and the logo are readable by anybody,
                 // signed in or not — they are what a signed-out screen renders.
+                // So are the theme and its faces: the sign-in screen is drawn in
+                // the operator's colours and typeface before anybody has signed
+                // in, and the theme file holds nothing that is not already on
+                // `/instance` for the same readers.
                 case FileOwnerKind.InstanceDocument:
                 case FileOwnerKind.InstanceLogo:
+                case FileOwnerKind.InstanceTheme:
+                case FileOwnerKind.InstanceFont:
                     return true;
 
                 case FileOwnerKind.ActivityDocument:

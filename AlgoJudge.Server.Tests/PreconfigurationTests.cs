@@ -359,6 +359,96 @@ public class PreconfigurationTests(ServerFixture server) : IDisposable
         Assert.Empty(plan.GetProperty("changes").EnumerateArray());
     }
 
+    /// <summary>
+    /// The colours and the faces they are drawn with, from the same directory.
+    /// <para>
+    /// <b>Faces before the theme</b>, and the assertion below is what proves it:
+    /// a theme is read by resolving every face it names against what is stored,
+    /// so one published ahead of its own fonts would be unreadable — which is the
+    /// whole installation silently back on the default.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_theme_and_its_faces_are_applied_from_the_directory()
+    {
+        var directory = Directory_(
+            Yaml("Themed"),
+            ("theme.yml", Theme),
+            ("fonts/example-400.woff2", Face));
+
+        var (host, _) = await FreshAsync(directory);
+        using var client = host.CreateClient();
+
+        var info = await ReadAsync(await client.GetAsync("/api/v1/instance"));
+        var theme = info.GetProperty("theme");
+
+        Assert.Equal("#0050a9", theme.GetProperty("light").GetProperty("primary").GetString());
+        Assert.Equal("#a98cd8", theme.GetProperty("dark").GetProperty("primary").GetString());
+        Assert.Equal("Example Sans", theme.GetProperty("fontFamily").GetString());
+
+        var face = theme.GetProperty("fonts").EnumerateArray().Single();
+        Assert.Equal("example-400.woff2", face.GetProperty("name").GetString());
+        Assert.StartsWith("/api/v1/files/", face.GetProperty("url").GetString());
+
+        // And a second walk finds nothing to do. Publishing *adds* a revision,
+        // so a comparison that did not hold here would grow the theme's history
+        // once per start.
+        using var admin = Operator(host);
+        var plan = await ReadAsync(await admin.GetAsync(Config));
+        Assert.Empty(plan.GetProperty("changes").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task A_theme_naming_a_face_the_directory_does_not_carry_is_refused()
+    {
+        // No `fonts/` at all, so the family below has nothing behind it. Refused
+        // while somebody is watching the deployment rather than at read time,
+        // when it would look like the theme had simply not been set.
+        var directory = Directory_(Yaml("Faceless"), ("theme.yml", Theme));
+
+        var (host, _) = await SeededAsync(directory);
+        using var admin = Operator(host);
+
+        var body = await RefusalAsync(await admin.GetAsync(Config));
+        Assert.Contains("example-400.woff2", body);
+    }
+
+    [Fact]
+    public async Task A_face_that_is_not_woff2_is_refused_on_its_bytes()
+    {
+        var directory = Directory_(
+            Yaml("Pretender"),
+            ("fonts/example-400.woff2", "GIF89a — a picture with a face's name on it"));
+
+        var (host, _) = await SeededAsync(directory);
+        using var admin = Operator(host);
+
+        var body = await RefusalAsync(await admin.GetAsync(Config));
+        Assert.Contains("wOF2", body);
+    }
+
+    /// <summary>
+    /// Two keys, so the assertion above about what is <i>not</i> set means
+    /// something: everything this file leaves out stays the product's own.
+    /// </summary>
+    private const string Theme = """
+        format: algojudge-theme
+        version: 1
+        light:
+          primary: "#0050a9"
+        dark:
+          primary: "#a98cd8"
+        fontFamily: "Example Sans"
+        fonts:
+          - { family: "Example Sans", weight: 400, style: normal, file: example-400.woff2 }
+        """;
+
+    /// <summary>
+    /// The smallest thing that begins <c>wOF2</c>. Nothing renders it and
+    /// nothing has to — what is being tested is that the bytes are read at all.
+    /// </summary>
+    private const string Face = "wOF2-not-a-real-face-and-it-does-not-have-to-be";
+
     /// <summary>The dry run writes nothing. It is the only reason to trust it.</summary>
     [Fact]
     public async Task The_plan_changes_nothing()

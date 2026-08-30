@@ -36,6 +36,14 @@ namespace AlgoJudge.Server.Database.Models
         Submission = 5,
         /// <summary>One evaluation attempt: its log, its per-test document.</summary>
         Attempt = 6,
+        /// <summary>
+        /// The instance's theme, as the file it was published from. The values
+        /// travel on <c>/instance</c>; this is what was submitted, kept so it can
+        /// be downloaded again and so pre-configuration has a checksum to compare.
+        /// </summary>
+        InstanceTheme = 7,
+        /// <summary>One font face the theme draws with, one file per face.</summary>
+        InstanceFont = 8,
     }
 
     public enum EvaluationJobState

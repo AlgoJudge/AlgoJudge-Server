@@ -58,6 +58,8 @@ namespace AlgoJudge.Server.Preconfiguration
         InstanceSection Instance,
         IReadOnlyList<PreconfigurationFileBytes> Pages,
         IReadOnlyList<PreconfigurationFileBytes> Logos,
+        IReadOnlyList<PreconfigurationFileBytes> Fonts,
+        PreconfigurationFileBytes? Theme,
         IReadOnlyList<string> Warnings);
 
     /// <summary>
@@ -80,6 +82,19 @@ namespace AlgoJudge.Server.Preconfiguration
         public const int Version = 1;
         public const string FileName = "algojudge.yml";
         public const string PagesDirectory = "pages";
+
+        /// <summary>
+        /// The colours and typeface, beside <c>pages/</c> rather than under
+        /// <c>instance:</c>. It is its own document with its own format and
+        /// version — the same reason a page is a file rather than a string in a
+        /// key — and the file here is the file the panel publishes, byte for
+        /// byte, so the checksum comparison that makes re-applying safe works on
+        /// it unchanged.
+        /// </summary>
+        public const string ThemeFileName = "theme.yml";
+
+        /// <summary>The faces the theme draws with, one file per face.</summary>
+        public const string FontsDirectory = "fonts";
 
         /// <summary>The file name a mark is read from, and the reference name it lands on.</summary>
         public static readonly string LogoStem = DocumentService.LogoName(null);
@@ -131,13 +146,80 @@ namespace AlgoJudge.Server.Preconfiguration
 
             var root = Parse(File.ReadAllText(path));
             var warnings = new List<string>();
+            var fonts = Fonts(directory);
 
             return new PreconfigurationSource(
                 directory,
                 Expanded(root.Instance ?? new InstanceSection()),
                 Pages(directory, warnings),
                 Logos(directory),
+                fonts,
+                Theme(directory, fonts),
                 warnings);
+        }
+
+        /// <summary>
+        /// The theme, refused here rather than at publish time — everything in
+        /// this directory fails while somebody is watching the deployment.
+        /// </summary>
+        private static PreconfigurationFileBytes? Theme(
+            string directory, List<PreconfigurationFileBytes> fonts)
+        {
+            var path = Path.Combine(directory, ThemeFileName);
+            if (!File.Exists(path)) return null;
+
+            var bytes = File.ReadAllBytes(path);
+            if (bytes.Length > ThemeDocument.MaxBytes)
+            {
+                throw new ValidationException(
+                    $"'{ThemeFileName}' is {bytes.Length} bytes and the ceiling is "
+                    + $"{ThemeDocument.MaxBytes}. A theme is a few hundred bytes of colours.",
+                    "preconfiguration.theme");
+            }
+
+            // Against the faces this directory carries, not against what the
+            // installation already holds: a directory has to be readable on its
+            // own, or an apply would depend on what happened to be there first.
+            ThemeDocument.Parse(
+                Encoding.UTF8.GetString(bytes),
+                fonts.Select(font => font.Kind).ToHashSet(StringComparer.Ordinal));
+
+            return new PreconfigurationFileBytes(
+                ThemeFileName, ThemeDocument.ReferenceName, null, "application/yaml", bytes,
+                IFileService.Checksum(bytes));
+        }
+
+        private static List<PreconfigurationFileBytes> Fonts(string directory)
+        {
+            var fonts = new List<PreconfigurationFileBytes>();
+            var folder = Path.Combine(directory, FontsDirectory);
+            if (!Directory.Exists(folder)) return fonts;
+
+            foreach (var path in Directory
+                .EnumerateFiles(folder)
+                .OrderBy(path => path, StringComparer.Ordinal))
+            {
+                var name = Path.GetFileName(path);
+                var bytes = File.ReadAllBytes(path);
+
+                // The same two refusals the endpoint makes, for the same reasons:
+                // the name is what a theme calls the face by, and the type is
+                // read off the bytes because every visitor's browser fetches it.
+                var stem = ThemeDocument.FontFileNameOrRefuse(name);
+
+                if (!ThemeDocument.IsWoff2(bytes))
+                {
+                    throw new ValidationException(
+                        $"'{FontsDirectory}/{name}' does not begin wOF2, so it is not a WOFF2 face "
+                        + "whatever it is called.",
+                        "preconfiguration.font");
+                }
+
+                fonts.Add(new PreconfigurationFileBytes(
+                    name, stem, null, ThemeDocument.FontMimeType, bytes, IFileService.Checksum(bytes)));
+            }
+
+            return fonts;
         }
 
         private static PreconfigurationRoot Parse(string text)
