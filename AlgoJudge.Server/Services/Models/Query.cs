@@ -46,6 +46,22 @@ namespace AlgoJudge.Server.Services.Models
             };
         }
 
-        public int Skip => (Page - 1) * PageSize;
+        /// <summary>
+        /// How many rows to pass over, and it cannot be negative.
+        /// <para>
+        /// <b>Computed in <c>long</c> and clamped, because the multiplication
+        /// overflows.</b> <see cref="PageSize"/> is bounded but
+        /// <see cref="Page"/> has only a floor, so <c>?page=2147483647</c> wrapped
+        /// <c>int</c> and produced a <b>negative</b> offset — which PostgreSQL
+        /// refuses, so an absurd page number answered 500 rather than an empty
+        /// page. It stays an <c>int</c> because <c>Queryable.Skip</c> takes one.
+        /// </para>
+        /// <para>
+        /// Clamped rather than refused: a page past the end is not an error, it
+        /// is a page with nothing on it, and that is what every page past the end
+        /// already answered.
+        /// </para>
+        /// </summary>
+        public int Skip => (int)Math.Min((long)(Page - 1) * PageSize, int.MaxValue);
     }
 }
