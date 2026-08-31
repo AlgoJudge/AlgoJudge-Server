@@ -401,11 +401,11 @@ public class RunnerTests(ServerFixture server)
     /// so.</b> A Runner asking for three hundred seconds was granted three
     /// hundred, was <i>told</i> three hundred in the claim answer, and held six
     /// hundred the moment it reported progress. Found from the far end on
-    /// 2026-08-22: <c>AlgoJudge-Runner-UVa</c> reports progress the instant it
-    /// takes a job, so every lease it ever held was ten minutes, and its own
-    /// start-up guards — a lease that must outlast the archive timeout, a poll
-    /// interval that must fit four times inside it — were arithmetic on a number
-    /// this Server had already overridden.
+    /// 2026-08-22: <c>AlgoJudge-External-Runner</c> reports progress the
+    /// instant it takes a job, so every lease it ever held was ten minutes, and
+    /// its own start-up guards — a lease that must outlast the archive timeout,
+    /// a poll interval that must fit four times inside it — were arithmetic on a
+    /// number this Server had already overridden.
     /// </para>
     /// <para>
     /// The harm is not a shortened deadline: <c>Later</c> forbids that. It is a
