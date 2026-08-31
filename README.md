@@ -19,7 +19,7 @@ The domain term is **`Problem`**, never `Task`.
 |---|---|
 | API | **187 controller actions** — 160 in `Controllers/`, 27 in the LTI module — plus what `MapIdentityApi` adds at `/identity`. **All of it under `/api/v1`** (`UsePathBase`), identity included: `/api/v1/identity/register`, never `/identity/register` |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
-| Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
+| Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass — **honoured only in a system-scoped grant**, so a manager of one course never becomes an administrator of the installation |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Identity | several OIDC providers registered at once from the database, first-sign-in provisioning, and a claim-to-permission mapping the installation configures |
@@ -664,6 +664,38 @@ and none of the three exists outside Development.
 may rename themselves to it, and the administrator may not rename itself away:
 the password endpoint resets *the account named `admin`*, so the name is what the
 endpoint points at.
+
+### How everybody else gets an account
+
+Three doors, and an installation decides which are open.
+
+**Somebody here makes the account.** `POST /api/v1/users` for one,
+`POST /api/v1/users/temporary` for a room of them — the second is the manager
+template's, so it does not need an administrator.
+
+**An identity provider vouches for them**, which provisions on first sign-in and
+is the section below. It is **not** gated on the setting under this one: a
+directory this installation deliberately trusts is a different act from a
+stranger filling in a form.
+
+**They sign themselves up**, at `POST /api/v1/identity/register` — the
+framework's own endpoint, and the only one of the three that is off by default.
+
+| Key | Where | Default |
+|---|---|---|
+| `Instance.LocalRegistrationEnabled` | the manager panel, or `instance.localRegistrationEnabled` in a pre-configuration `yml` | **false** |
+
+Closed, an attempt answers **403** with `registration.closed`. It is a column
+rather than an environment variable because an installation changes its mind
+about this — a course opens, a term ends — and neither should need a restart.
+
+**One middleware is the whole of the enforcement**, `Authorization/IdentitySurface`,
+and it stands in front of the endpoint rather than inside it: `MapIdentityApi`
+is framework code that binds a body before anything of ours runs, so a refusal
+has to land earlier. The same middleware closes the endpoints that need a mail
+sender this product does not have — `/forgotPassword`, `/resetPassword`,
+`/resendConfirmationEmail` — and `/manage/info`, which throws for an account
+with no address, and the seeded administrator is one.
 
 ## Registering an identity provider
 
