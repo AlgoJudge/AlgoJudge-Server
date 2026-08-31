@@ -32,6 +32,7 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         ICurrentUserService currentUser,
         IEventHub events,
+        IRequestOrigin origin,
         TimeProvider clock
     ) : IUserService
     {
@@ -405,7 +406,13 @@ namespace AlgoJudge.Server.Services
                 .OrderByDescending(s => s.StartedAt)
                 .ToListAsync(ct);
 
-            var mine = currentUser.UserId;
+            // **The session that made this request, not the person who made it.**
+            // It compared `s.UserId` to the caller, which is true of every row
+            // when somebody reads their own sessions and false of every row when
+            // they read anybody else's — so the marker that exists to stop an
+            // operator ending the session they are working from marked all six
+            // of their browsers, or none.
+            var current = origin.SessionId;
 
             return sessions.Select(s => new UserSessionDto
             {
@@ -423,7 +430,7 @@ namespace AlgoJudge.Server.Services
                 IpAddress = s.IpAddress?.ToString(),
                 UserAgent = s.UserAgent,
                 ExpiresAt = Wire.At(s.ExpiresAt),
-                IsCurrent = s.UserId == mine,
+                IsCurrent = current is { } id && s.Id == id,
             }).ToList();
         }
     }

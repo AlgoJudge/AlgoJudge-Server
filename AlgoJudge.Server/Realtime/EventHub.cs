@@ -277,9 +277,18 @@ namespace AlgoJudge.Server.Realtime
 
             var reading = socket.ReceiveAsync(buffer, ct);
 
+            // **Both waits are held across iterations, and the timer one has to
+            // be.** `PeriodicTimer` permits a single consumer: asking it for the
+            // next tick while a previous ask is still outstanding throws
+            // `InvalidOperationException`. This used to start a fresh wait every
+            // time round, so the first frame a client sent — and the Client sends
+            // none, which is why nobody met it — abandoned that wait and the next
+            // iteration threw. The catch upstairs matches `WebSocketException`
+            // and `OperationCanceledException`, so it escaped the endpoint.
+            var ticked = pings.WaitForNextTickAsync(ct).AsTask();
+
             while (socket.State == WebSocketState.Open)
             {
-                var ticked = pings.WaitForNextTickAsync(ct).AsTask();
                 var finished = await Task.WhenAny(reading, ticked);
 
                 if (finished == reading)
@@ -295,6 +304,11 @@ namespace AlgoJudge.Server.Realtime
                 }
                 else
                 {
+                    // Awaited before the next one is asked for, which is the
+                    // whole of the rule above. False means the timer is done.
+                    if (!await ticked) return;
+                    ticked = pings.WaitForNextTickAsync(ct).AsTask();
+
                     var ping = Encoding.UTF8.GetBytes("""{"type":"ping","data":{}}""");
                     await socket.SendAsync(ping, WebSocketMessageType.Text, true, ct);
                 }
