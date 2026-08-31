@@ -32,6 +32,116 @@ namespace AlgoJudge.Server.Tests;
 public class PermissionResolutionTests(ServerFixture server)
 {
     /// <summary>
+    /// <b>The key that looks like an administrator and is not one.</b>
+    /// <c>IsAdministratorAsync</c> requires <c>ActivityId is null</c> before
+    /// honouring it, so written into an activity grant it confers nothing —
+    /// while the panel shows somebody holding it. Refused at the write now,
+    /// rather than stored and silently inert.
+    /// </summary>
+    [Fact]
+    public async Task The_administrator_key_cannot_be_written_into_an_activity_grant()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var (slug, _) = await Build.ActivityAsync(server);
+
+        string activityId;
+        await using (var context = server.NewContext())
+        {
+            activityId = (await context.Activities.FirstAsync(a => a.Slug == slug)).Id.ToString();
+        }
+
+        var login = "scope-" + Guid.NewGuid().ToString("N")[..8];
+        await Sign.NewAccountAsync(server, login);
+        var userId = await UserIdAsync(login);
+
+        var refused = await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId,
+            activityId,
+            permissions = new[] { "activity:read", "system:administrator" },
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains("grant.permission.scope", await refused.Content.ReadAsStringAsync());
+
+        // **Refused for everybody**, including the administrator making the
+        // request: this is not "may you grant it", it is "does it mean anything
+        // here", and that does not depend on who is asking.
+        await using (var context = server.NewContext())
+        {
+            Assert.False(await context.Grants.AnyAsync(
+                g => g.UserId == userId && g.ActivityId == Guid.Parse(activityId)));
+        }
+
+        // And it is still a system grant's key.
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId,
+            permissions = new[] { "system:administrator" },
+        }));
+
+        await using (var context = server.NewContext())
+        {
+            await context.Grants.Where(g => g.UserId == userId).ExecuteDeleteAsync();
+        }
+    }
+
+    /// <summary>
+    /// <b>Why the rule above names one key instead of reading the catalogue.</b>
+    /// Five of the shipped <c>manager</c> template's keys are declared
+    /// <c>PermissionScope.Global</c> — the <c>problem:*</c> ones — and
+    /// <c>ProblemService</c> requires them with no activity, which unions system
+    /// grants only. So a manager granted the template <i>on an activity</i>, the
+    /// way the seeder and the panel apply it, holds five permissions that do
+    /// nothing.
+    /// <para>
+    /// This test asserts the current behaviour rather than the desired one, so
+    /// that fixing it is a decision somebody takes rather than a surprise. Until
+    /// then, refusing every misplaced global key would refuse the template this
+    /// product ships.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_global_key_in_an_activity_grant_does_nothing()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var (slug, _) = await Build.ActivityAsync(server);
+
+        string activityId;
+        await using (var context = server.NewContext())
+        {
+            activityId = (await context.Activities.FirstAsync(a => a.Slug == slug)).Id.ToString();
+        }
+
+        var login = "global-" + Guid.NewGuid().ToString("N")[..8];
+        var person = await Sign.NewAccountAsync(server, login);
+        var userId = await UserIdAsync(login);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId,
+            activityId,
+            permissions = new[] { "activity:read", "problem:create" },
+        }));
+
+        // Inside the activity the key is there, because an activity grant unions
+        // into its own activity.
+        var inside = await person.GetFromJsonAsync<string[]>(
+            $"/api/v1/permissions/mine?activityId={activityId}");
+        Assert.Contains("problem:create", inside!);
+
+        // And installation-wide — which is where `problem:create` is actually
+        // checked — it is not.
+        var everywhere = await person.GetFromJsonAsync<string[]>("/api/v1/permissions/mine");
+        Assert.DoesNotContain("problem:create", everywhere!);
+
+        await using (var context = server.NewContext())
+        {
+            await context.Grants.Where(g => g.UserId == userId).ExecuteDeleteAsync();
+        }
+    }
+
+    /// <summary>
     /// **System scope is a union now.** One contribution assigned by hand, one
     /// per linked provider, and what the person holds is all of them together.
     /// Until this milestone the database allowed exactly one row and the union

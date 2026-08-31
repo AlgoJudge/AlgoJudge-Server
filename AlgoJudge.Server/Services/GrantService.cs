@@ -230,6 +230,32 @@ namespace AlgoJudge.Server.Services
                 }
             }
 
+            // **`system:administrator` is a system grant's key, and only ever
+            // one.** `PermissionService.IsAdministratorAsync` requires
+            // `ActivityId is null` before honouring it, so written into an
+            // activity grant it confers nothing at all — and the danger is
+            // exactly that it looks as though it does: the panel shows somebody
+            // holding it while every check disagrees, silently.
+            //
+            // **After the rule above, and that is where it belongs.** Anybody
+            // else writing this key is already refused by the excess rule, for a
+            // better reason — they do not hold it. The one actor that rule
+            // exempts is an administrator, and this is the case it leaves.
+            //
+            // **Only this key; the general rule is not enforced.** The catalogue
+            // declares a scope for all 52, but five of the shipped `manager`
+            // template's are `Global` — the `problem:*` ones — and the panel
+            // applies that template to activity grants. Refusing every misplaced
+            // global key would refuse the template this product ships. That
+            // those five are equally inert there is a separate defect, pinned by
+            // `A_global_key_in_an_activity_grant_does_nothing`.
+            if (activityId is not null && wanted.Contains(Permissions.SystemAdministrator))
+            {
+                throw new ValidationException(
+                    "system:administrator is installation-wide; it means nothing in an activity grant",
+                    "grant.permission.scope");
+            }
+
             if (!await context.Users.AnyAsync(u => u.Id == input.UserId, ct))
             {
                 throw new NotFoundException("User");
