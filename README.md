@@ -201,6 +201,14 @@ AJ_Storage__Stores__objects__Region=us-east-1        # optional
 AJ_Storage__Stores__objects__TimeoutSeconds=600      # optional; how long one request may take
 AJ_Storage__Stores__objects__MaxErrorRetry=2         # optional; retries of a retryable failure
 
+# Where the `postgres` and `s3` stores rest an upload while its length becomes
+# known — a multipart section off a socket can be neither seeked nor measured,
+# and the only place that is not memory is disk. Defaults under the system
+# temporary directory, which in a container is the image's own layer; point it
+# at a volume if packages are large. The `filesystem` store spools inside its
+# own root and ignores this.
+AJ_Storage__SpoolPath=/var/lib/algojudge/spool       # optional
+
 # Whose word to take for a visitor's address. Required: the Server does not
 # start without one of these.
 AJ_Forwarded__KnownProxies=10.0.0.2,10.0.0.3   # the address(es) your proxy reaches this Server from
@@ -341,9 +349,10 @@ ALGOJUDGE_S3_ENDPOINT=https://… ALGOJUDGE_S3_ACCESS_KEY=… ALGOJUDGE_S3_SECRE
 **One item cannot be run against either implementation available here**: the
 check writes a known
 string, enables bucket-default encryption and looks for the string in the
-store's files. SeaweedFS 4.41 stores objects readably — so the method works, and
-a test proves it does — but answers `PutBucketEncryption` with an internal
-error. RustFS accepts the call and stores objects in a form no grep can read
+store's files. Measured on SeaweedFS **4.41** (2026-08-13, before the pin moved
+to the 4.43 in the table above): it stores objects readably — so the method
+works, and a test proves it does — but answers `PutBucketEncryption` with an
+internal error. RustFS accepts the call and stores objects in a form no grep can read
 either way. Against an endpoint that supports both, `ALGOJUDGE_S3_SSE=1` runs it.
 
 ### Moving files from one store to another
@@ -823,6 +832,17 @@ implementations alike.
 **Take it from the running container**, never from the test host: the test host
 emits the paths in a different order for identical code, and CI compares the two
 files **textually**.
+
+```sh
+docker compose -f example-server-development-docker-compose.yaml up -d --build --wait
+curl -sS --fail-with-body http://127.0.0.1:8080/api/v1/swagger/v1/swagger.json -o openapi.json
+docker compose -f example-server-development-docker-compose.yaml down -v
+```
+
+`--build` is not optional when the change is yours: without it Compose serves
+the image it already has, and the document you commit is the one from before
+the edit. The endpoint is mapped in Development only, which is what that stack
+runs.
 
 ### Architecture rules
 

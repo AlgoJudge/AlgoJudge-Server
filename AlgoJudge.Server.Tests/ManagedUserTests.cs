@@ -89,6 +89,33 @@ public class ManagedUserTests(ServerFixture server)
         Assert.False(stored.EmailConfirmed);
     }
 
+    /// <summary>
+    /// <b>The marker says which session is reading, not who is.</b> It compared
+    /// the row's owner to the caller, so every one of somebody's own sessions
+    /// came back marked — and the marker exists so an operator does not end the
+    /// session they are working from.
+    /// </summary>
+    [Fact]
+    public async Task Exactly_one_session_is_the_one_asking()
+    {
+        // Two sign-ins, two cookies, two sessions for one account.
+        var first = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        string adminId;
+        await using (var context = server.NewContext())
+        {
+            adminId = (await context.Users.FirstAsync(u => u.UserName == Seeder.AdminLogin)).Id;
+        }
+
+        var sessions = (await Build.GetAsync(first, $"/api/v1/users/{adminId}/sessions"))
+            .EnumerateArray()
+            .ToList();
+
+        Assert.True(sessions.Count >= 2, $"expected several sessions, got {sessions.Count}");
+        Assert.Single(sessions, s => s.GetProperty("isCurrent").GetBoolean());
+    }
+
     private async Task<(string Id, string Address)> PersonAsync()
     {
         var login = "mu-" + Guid.NewGuid().ToString("N")[..10];
