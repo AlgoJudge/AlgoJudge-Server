@@ -188,6 +188,65 @@ namespace AlgoJudge.Server.Lti.Services
         }
 
         /// <summary>
+        /// Runs one outbound call, turning the connect guard's refusal into
+        /// something the page can say.
+        /// <para>
+        /// Without this the guard's exception reaches the controller's broad
+        /// catch and the platform's administrator is told only that something
+        /// went wrong — when the actual answer, "this Server will not dial that
+        /// address", is the one thing that would let them fix it.
+        /// </para>
+        /// </summary>
+        private static async Task<HttpResponseMessage> ReachedAsync(
+            Func<Task<HttpResponseMessage>> call, Uri address)
+        {
+            try
+            {
+                return await call();
+            }
+            catch (HttpRequestException e) when (GuardedHttp.Refused(e))
+            {
+                throw new ValidationException(
+                    $"This Server will not open a connection to {address.Host}",
+                    "lti.registration.unreachable");
+            }
+        }
+
+        /// <summary>
+        /// An address this Server is willing to dial, or a refusal.
+        /// <para>
+        /// <b>HTTPS only, and that is the specification rather than a preference.</b>
+        /// OpenID Connect Discovery requires an issuer to be an <c>https</c> URL
+        /// and the LTI 1.3 security framework requires TLS throughout, so a
+        /// platform offering <c>http</c> is one this Server should not complete a
+        /// registration with — over plain HTTP, whoever answers first decides who
+        /// your users are, and here they also choose where a bearer token goes.
+        /// </para>
+        /// <para>
+        /// Everything before an <c>@</c> is credentials, and the host is the part
+        /// after it — <c>https://moodle.example@evil.example/</c>. Readers get
+        /// that wrong often enough that the form is refused rather than parsed.
+        /// </para>
+        /// <para>
+        /// Which addresses may then be reached is not decided here: that rides
+        /// the connect callback on this module's client, because a name and the
+        /// address it resolves to are two different questions.
+        /// </para>
+        /// </summary>
+        private static Uri Fetchable(
+            string? url, string message, string code = "lti.registration.configuration")
+        {
+            if (!Uri.TryCreate((url ?? "").Trim(), UriKind.Absolute, out var address)
+                || address.Scheme != Uri.UriSchemeHttps
+                || !string.IsNullOrEmpty(address.UserInfo))
+            {
+                throw new ValidationException(message, code);
+            }
+
+            return address;
+        }
+
+        /// <summary>
         /// Parses a body the platform controls, refusing anything that is not a
         /// JSON object.
         /// <para>
@@ -237,15 +296,10 @@ namespace AlgoJudge.Server.Lti.Services
         private async Task<PlatformConfigurationView> ReadConfigurationAsync(
             string url, CancellationToken ct)
         {
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var address)
-                || (address.Scheme != Uri.UriSchemeHttp && address.Scheme != Uri.UriSchemeHttps))
-            {
-                throw new ValidationException(
-                    "The platform gave no usable configuration address", "lti.registration.configuration");
-            }
+            var address = Fetchable(url, "The platform gave no usable configuration address");
 
             var http = clients.CreateClient(nameof(DynamicRegistrationService));
-            using var response = await http.GetAsync(address, ct);
+            using var response = await ReachedAsync(() => http.GetAsync(address, ct), address);
             var body = await response.Content.ReadAsStringAsync(ct);
 
             if (!response.IsSuccessStatusCode)
@@ -364,8 +418,16 @@ namespace AlgoJudge.Server.Lti.Services
                 },
             };
 
+            // **Checked like the first address, because it is one.** This URL
+            // came out of the document the first fetch returned, so whoever
+            // answered that one chooses where this bearer token is posted.
+            var endpoint = Fetchable(
+                platform.RegistrationEndpoint,
+                "The platform gave no usable registration address",
+                "lti.registration.refused");
+
             var http = clients.CreateClient(nameof(DynamicRegistrationService));
-            using var request = new HttpRequestMessage(HttpMethod.Post, platform.RegistrationEndpoint)
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
                 Content = new StringContent(
                     JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
@@ -375,7 +437,7 @@ namespace AlgoJudge.Server.Lti.Services
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             }
 
-            using var response = await http.SendAsync(request, ct);
+            using var response = await ReachedAsync(() => http.SendAsync(request, ct), endpoint);
             var answer = await response.Content.ReadAsStringAsync(ct);
 
             if (!response.IsSuccessStatusCode)

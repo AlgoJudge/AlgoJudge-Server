@@ -137,14 +137,7 @@ namespace AlgoJudge.Server.Services
             }
         }
 
-        private static bool Inside(Exception e)
-        {
-            for (var inner = e.InnerException; inner is not null; inner = inner.InnerException)
-            {
-                if (inner is InsideTheNetworkException) return true;
-            }
-            return false;
-        }
+        private static bool Inside(Exception e) => GuardedHttp.Refused(e);
 
         /// <summary>A name to file it under, from the address and nothing else.</summary>
         private static string NameOf(Uri target)
@@ -169,59 +162,8 @@ namespace AlgoJudge.Server.Services
 
         // ── The client, and the callback that is the whole point ─────────────
 
-        private static readonly HttpClient Http = Build();
+        private static readonly HttpClient Http =
+            new(GuardedHttp.Handler(PublicAddress.IsPublic)) { Timeout = TimeSpan.FromSeconds(30) };
 
-        private static HttpClient Build()
-        {
-            var handler = new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
-                ConnectTimeout = TimeSpan.FromSeconds(10),
-                // Nothing is reused across fetches: a pooled connection is a
-                // connection whose address was checked for somebody else's
-                // request, some minutes ago.
-                PooledConnectionLifetime = TimeSpan.Zero,
-                ConnectCallback = ConnectAsync,
-            };
-
-            return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
-        }
-
-        /// <summary>
-        /// Resolves once, keeps only the addresses that are out on the internet,
-        /// and connects to those.
-        /// <para>
-        /// <b>The gap this closes is the whole reason it exists.</b> Letting the
-        /// stack resolve the name itself would mean the address checked and the
-        /// address connected to are two separate lookups, and a name whose owner
-        /// answers differently the second time is a name that reaches inside.
-        /// </para>
-        /// </summary>
-        private static async ValueTask<Stream> ConnectAsync(
-            SocketsHttpConnectionContext connection, CancellationToken ct)
-        {
-            var resolved = await Dns.GetHostAddressesAsync(connection.DnsEndPoint.Host, ct);
-            var reachable = resolved.Where(PublicAddress.IsPublic).ToArray();
-
-            if (reachable.Length == 0)
-            {
-                throw new InsideTheNetworkException(connection.DnsEndPoint.Host);
-            }
-
-            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-            try
-            {
-                await socket.ConnectAsync(reachable, connection.DnsEndPoint.Port, ct);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch
-            {
-                socket.Dispose();
-                throw;
-            }
-        }
-
-        private sealed class InsideTheNetworkException(string host)
-            : Exception($"{host} resolves only to addresses inside this network");
     }
 }
