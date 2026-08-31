@@ -446,11 +446,16 @@ namespace AlgoJudge.Server.Services
             {
                 throw new ValidationException("An issuer is required", "provider.issuer.required");
             }
-            if (!Uri.TryCreate(issuer, UriKind.Absolute, out var uri))
+            if (!Uri.TryCreate(issuer, UriKind.Absolute, out _))
             {
                 throw new ValidationException("The issuer must be an absolute URL", "provider.issuer.invalid");
             }
-            if (uri.Scheme != Uri.UriSchemeHttps && !uri.IsLoopback)
+
+            // **The same rule the LTI platforms use, and it moved here rather
+            // than being copied.** The version written inline said "https, or
+            // anything on loopback" — and `Uri.IsLoopback` is true of a `file:`
+            // URL, which has no host at all, so `file:///etc/passwd` passed it.
+            if (!SecureUrl.IsHttpsOrLoopback(issuer))
             {
                 throw new ValidationException(
                     "The issuer must be https, except on loopback", "provider.issuer.insecure");

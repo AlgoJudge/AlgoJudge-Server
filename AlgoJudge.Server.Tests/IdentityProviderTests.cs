@@ -323,6 +323,11 @@ public class IdentityProviderTests(ServerFixture server)
     [InlineData("http://auth.example.invalid", "provider.issuer.insecure")]
     [InlineData("auth.example.invalid", "provider.issuer.invalid")]
     [InlineData("", "provider.issuer.required")]
+    // **A scheme with no host used to ride in on the loopback exemption.** The
+    // rule was "https, or anything on loopback", and `Uri.IsLoopback` is true of
+    // a `file:` URL precisely because it has no host to be somewhere else.
+    [InlineData("file:///etc/passwd", "provider.issuer.insecure")]
+    [InlineData("ftp://auth.example.invalid", "provider.issuer.insecure")]
     public async Task An_issuer_is_https_or_loopback(string issuer, string code)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
