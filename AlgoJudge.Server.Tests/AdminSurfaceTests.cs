@@ -292,4 +292,71 @@ public class AdminSurfaceTests(ServerFixture server)
         Assert.True(await context.Users.AnyAsync(u => u.NormalizedUserName == "ADMIN"));
     }
 
+    /// <summary>
+    /// <b>A refused profile change used to answer 200.</b>
+    /// <c>UpdateProfileAsync</c> threw away the <c>IdentityResult</c> of all
+    /// three writes it makes, so a duplicate address was refused by
+    /// <see cref="OptionalEmailValidator"/>, dropped on the floor, and the caller
+    /// was handed a session document describing a change that had not happened.
+    /// </summary>
+    [Fact]
+    public async Task A_profile_change_that_identity_refuses_is_not_reported_as_success()
+    {
+        var first = "prof-" + Guid.NewGuid().ToString("N")[..8];
+        var second = "prof-" + Guid.NewGuid().ToString("N")[..8];
+        await Sign.NewAccountAsync(server, first);
+        var client = await Sign.NewAccountAsync(server, second);
+
+        var taken = $"{first}@example.invalid";
+
+        var refused = await client.PutAsJsonAsync("/api/v1/account", new { email = taken }, Json);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("account.profile", problem.GetProperty("code").GetString());
+
+        // Scoped to the address this test made: the database is shared.
+        await using var context = server.NewContext();
+        Assert.Equal(
+            1, await context.Users.CountAsync(u => u.NormalizedEmail == taken.ToUpperInvariant()));
+    }
+
+    /// <summary>
+    /// The assertion the transaction exists for. <c>SetUserNameAsync</c> writes
+    /// to the database itself, so checking the results without one would answer
+    /// 422 for the address over a login that had already been renamed.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_profile_change_leaves_the_login_alone()
+    {
+        var first = "keep-" + Guid.NewGuid().ToString("N")[..8];
+        var second = "keep-" + Guid.NewGuid().ToString("N")[..8];
+        await Sign.NewAccountAsync(server, first);
+        var client = await Sign.NewAccountAsync(server, second);
+
+        var refused = await client.PutAsJsonAsync(
+            "/api/v1/account",
+            new { username = "renamed-" + Guid.NewGuid().ToString("N")[..8], email = $"{first}@example.invalid" },
+            Json);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+
+        await using var context = server.NewContext();
+        Assert.True(await context.Users.AnyAsync(u => u.NormalizedUserName == second.ToUpperInvariant()));
+    }
+
+    /// <summary>A change nothing objects to still goes through.</summary>
+    [Fact]
+    public async Task An_ordinary_profile_change_still_succeeds()
+    {
+        var login = "ok-" + Guid.NewGuid().ToString("N")[..8];
+        var client = await Sign.NewAccountAsync(server, login);
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/account", new { firstName = "Zofia", lastName = "Nowak" }, Json);
+        await Sign.Succeeded(response);
+
+        var session = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Zofia", session.GetProperty("firstName").GetString());
+    }
 }

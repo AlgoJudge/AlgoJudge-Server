@@ -22,21 +22,43 @@ namespace AlgoJudge.Server.Realtime
         public WebSocket Socket { get; } = socket;
         public Guid Id { get; } = Utils.Uuid.New();
 
+        // Not disposed, and deliberately: disposing it races an in-flight send,
+        // whose `finally` would then throw `ObjectDisposedException` out of a
+        // `finally`. `SemaphoreSlim` only needs disposal once `AvailableWaitHandle`
+        // has been read, and nothing here reads it.
         private readonly SemaphoreSlim writeLock = new(1, 1);
 
         /// <summary>
-        /// Sends one frame. Serialised per connection: a WebSocket permits one
-        /// send at a time, and two events racing would interleave into a frame
-        /// nobody can parse.
+        /// Sends one frame, or gives up. Serialised per connection: a WebSocket
+        /// permits one send at a time, and two events racing would interleave
+        /// into a frame nobody can parse.
+        /// <para>
+        /// <b>Bounded by <paramref name="deadline"/>, which is the whole point.</b>
+        /// A client that opens a socket and stops draining its receive window
+        /// used to park this <c>await</c> for ever — and with the fan-out below
+        /// awaiting each recipient in turn, one such client stopped delivery to
+        /// everybody. `SeriesScheduler` awaits its tick inline on a token that
+        /// only fires at shutdown, so it stopped rounds opening at all.
+        /// </para>
         /// </summary>
-        public async Task<bool> SendAsync(ReadOnlyMemory<byte> payload, CancellationToken ct)
+        public async Task<bool> SendAsync(
+            ReadOnlyMemory<byte> payload, TimeSpan deadline, CancellationToken ct)
         {
             if (Socket.State != WebSocketState.Open) return false;
-            await writeLock.WaitAsync(ct);
+
+            // The `TimeSpan` overload answers `false` rather than throwing, and
+            // the wait is outside the `try` — so a timeout here must not fall
+            // through to the `finally` and release a semaphore it never took.
+            if (!await writeLock.WaitAsync(deadline, ct)) return false;
+
             try
             {
                 if (Socket.State != WebSocketState.Open) return false;
-                await Socket.SendAsync(payload, WebSocketMessageType.Text, true, ct);
+
+                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                bounded.CancelAfter(deadline);
+
+                await Socket.SendAsync(payload, WebSocketMessageType.Text, true, bounded.Token);
                 return true;
             }
             catch (Exception e) when (e is WebSocketException or ObjectDisposedException or OperationCanceledException)
@@ -87,8 +109,21 @@ namespace AlgoJudge.Server.Realtime
         Task SendToUsersAsync(IEnumerable<string> userIds, string type, object data, CancellationToken ct = default);
     }
 
-    public class EventHub(ILogger<EventHub> logger) : IEventHub
+    public class EventHub(ILogger<EventHub> logger, IConfiguration configuration) : IEventHub
     {
+        /// <summary>
+        /// How long one frame may take before its reader is dropped.
+        /// <para>
+        /// A setting rather than a constant so an operator on a slow link has a
+        /// lever. Five seconds is far beyond any healthy client and far below
+        /// anything a person waits through, and nothing here is durable — the
+        /// screen that missed an event refetches, which is what makes dropping a
+        /// reader the right answer rather than a loss.
+        /// </para>
+        /// </summary>
+        private readonly TimeSpan deadline = TimeSpan.FromSeconds(
+            configuration.GetValue("Events:SendTimeoutSeconds", 5.0));
+
         private static readonly JsonSerializerOptions Json = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -113,6 +148,32 @@ namespace AlgoJudge.Server.Realtime
             // connection for the same user.
         }
 
+        /// <summary>
+        /// Drops a connection that would not take a frame.
+        /// <para>
+        /// <see cref="Remove"/> alone only unregisters, and after a send that ran
+        /// out of time the frame is half-written — so the socket is unusable and
+        /// leaving it open holds a connection nobody can send on.
+        /// <c>Abort</c> makes the reader in <c>EventSocket</c> throw, which its
+        /// own catch already treats as the ordinary end of a socket.
+        /// </para>
+        /// </summary>
+        private void Evict(EventConnection connection)
+        {
+            Remove(connection);
+
+            try
+            {
+                connection.Socket.Abort();
+            }
+            catch (Exception e) when (e is WebSocketException or ObjectDisposedException)
+            {
+                // Already gone, which is the outcome wanted.
+            }
+
+            logger.LogDebug("Dropped a connection for {User} that would not take a frame", connection.UserId);
+        }
+
         public int ConnectionsFor(string userId) =>
             byUser.TryGetValue(userId, out var connections)
                 ? connections.Values.Count(c => c.Socket.State == WebSocketState.Open)
@@ -127,20 +188,26 @@ namespace AlgoJudge.Server.Realtime
             var envelope = new EventEnvelopeDto { Type = type, Data = data };
             var payload = JsonSerializer.SerializeToUtf8Bytes(envelope, Json);
 
-            foreach (var userId in userIds.Distinct())
-            {
-                if (!byUser.TryGetValue(userId, out var connections)) continue;
+            var recipients = userIds.Distinct().ToList();
 
-                foreach (var connection in connections.Values)
-                {
-                    if (!await connection.SendAsync(payload, ct))
-                    {
-                        Remove(connection);
-                    }
-                }
+            // **Every recipient at once, and bounded once.** Awaiting them in
+            // turn made the cost of a stalled client the deadline times the
+            // number of recipients ahead of everybody else; in parallel it is one
+            // deadline for the whole fan-out. Each connection holds its own lock,
+            // and `Values` is a snapshot, so evicting while walking is safe.
+            var sends = recipients
+                .Where(byUser.ContainsKey)
+                .SelectMany(userId => byUser[userId].Values)
+                .Select(async connection =>
+                    (Connection: connection, Sent: await connection.SendAsync(payload, deadline, ct)))
+                .ToList();
+
+            foreach (var (connection, sent) in await Task.WhenAll(sends))
+            {
+                if (!sent) Evict(connection);
             }
 
-            logger.LogDebug("Dispatched {Type} to {Count} recipients", type, userIds.Distinct().Count());
+            logger.LogDebug("Dispatched {Type} to {Count} recipients", type, recipients.Count);
         }
     }
 

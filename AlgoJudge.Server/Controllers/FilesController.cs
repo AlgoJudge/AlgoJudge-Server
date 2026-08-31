@@ -141,10 +141,17 @@ namespace AlgoJudge.Server.Controllers
             // Every argument named: the byte[] and Stream overloads differ in
             // what their third positional parameter means, and picking the wrong
             // one is a compile error only by luck.
+            // **What the Server says it is, not what the uploader said.** See
+            // `Utils/Downloads.cs`: the stored type is the uploader's own word
+            // for it, and this endpoint is anonymous for anything public.
+            Response.Headers.ContentDisposition = Downloads.Disposition(file);
+
             return File(
                 fileStream: content,
-                contentType: file.MimeType,
-                fileDownloadName: file.Name,
+                contentType: Downloads.ContentType(file),
+                // Ours is already on the response; a name here would replace it,
+                // and an empty one would remove the header altogether.
+                fileDownloadName: null,
                 lastModified: null,
                 entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{file.Sha256}\""),
                 enableRangeProcessing: true);

@@ -3,7 +3,10 @@ using AlgoJudge.Server.Controllers;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Routing;
@@ -439,6 +442,167 @@ public class FederatedSignInTests(ServerFixture server)
 
         Assert.Equal($"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities",
             challenge.Properties!.RedirectUri);
+
+        // **And which provider the ticket is being asked for.** Every provider
+        // signs into one shared external cookie, so without this the callback has
+        // nothing to check a ticket against and takes the provider from the route
+        // alone — see the test below.
+        Assert.Equal(slug, challenge.Properties.Items[FederatedSchemes.TicketItem]);
+    }
+
+    /// <summary>
+    /// A ticket obtained from one provider must not be redeemable at another's
+    /// landing address.
+    /// <para>
+    /// <c>FederatedOidcConfigure</c> gives every dynamic provider
+    /// <c>SignInScheme = IdentityConstants.ExternalScheme</c> — one cookie for
+    /// all of them — and the callback used to pick the provider from the route
+    /// and never look at the ticket. So somebody who could sign in through a
+    /// low-trust provider could walk that principal to a high-trust one's
+    /// address, have <b>its</b> claim mapping applied to <b>their</b> claims, and
+    /// be provisioned under its namespace.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_ticket_issued_for_one_provider_does_not_complete_another()
+    {
+        await NewProviderAsync("weak", rules: []);
+        await NewProviderAsync("strong", rules: []);
+
+        var subject = "walked-" + Guid.NewGuid().ToString("N")[..10];
+
+        var properties = new AuthenticationProperties();
+        FederatedSchemes.Mark(properties, "weak");
+
+        var ticket = new AuthenticationTicket(
+            Token(subject, ("preferred_username", "walker")),
+            properties,
+            IdentityConstants.ExternalScheme);
+
+        using var host = server.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+                services.AddScoped<IAuthenticationService>(sp => new TicketFromWeak(sp, ticket))));
+
+        var browser = host.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+
+        var arrived = await browser.GetAsync("/api/v1/identity/providers/strong/signed-in");
+
+        Assert.Equal(HttpStatusCode.Redirect, arrived.StatusCode);
+        Assert.Contains("error=provider.ticket.mismatch", arrived.Headers.Location!.ToString());
+
+        // The harm, not just the refusal: nothing was provisioned under the
+        // provider whose address was used.
+        await using var context = server.NewContext();
+        Assert.False(await context.UserIdentities.AnyAsync(i => i.Subject == subject));
+    }
+
+    /// <summary>
+    /// Answers the external-scheme authenticate with a ticket the test built, and
+    /// forwards everything else to the real service. There is no way to put a
+    /// ticket into that cookie from outside — it is written by the handler that
+    /// would have issued it — so the seam has to be here.
+    /// </summary>
+    private sealed class TicketFromWeak(IServiceProvider services, AuthenticationTicket ticket)
+        : IAuthenticationService
+    {
+        private readonly IAuthenticationService real =
+            ActivatorUtilities.CreateInstance<AuthenticationService>(services);
+
+        public Task<AuthenticateResult> AuthenticateAsync(HttpContext context, string? scheme) =>
+            scheme == IdentityConstants.ExternalScheme
+                ? Task.FromResult(AuthenticateResult.Success(ticket))
+                : real.AuthenticateAsync(context, scheme);
+
+        public Task ChallengeAsync(
+            HttpContext context, string? scheme, AuthenticationProperties? properties) =>
+            real.ChallengeAsync(context, scheme, properties);
+
+        public Task ForbidAsync(
+            HttpContext context, string? scheme, AuthenticationProperties? properties) =>
+            real.ForbidAsync(context, scheme, properties);
+
+        public Task SignInAsync(
+            HttpContext context, string? scheme, ClaimsPrincipal principal,
+            AuthenticationProperties? properties) =>
+            real.SignInAsync(context, scheme, principal, properties);
+
+        public Task SignOutAsync(
+            HttpContext context, string? scheme, AuthenticationProperties? properties) =>
+            scheme == IdentityConstants.ExternalScheme
+                ? Task.CompletedTask
+                : real.SignOutAsync(context, scheme, properties);
+    }
+
+    // ── the login a provider's name becomes ──────────────────────────────────
+
+    /// <summary>
+    /// <b>A Polish name used to be a 500.</b> <c>Sanitise</c> kept every Unicode
+    /// letter, because <c>char.IsLetterOrDigit</c> says yes to all of them, while
+    /// Identity's default <c>AllowedUserNameCharacters</c> is ASCII — and
+    /// <c>AddUserValidator</c> adds to that chain rather than replacing it. So
+    /// <c>CreateAsync</c> refused, <c>ProvisionAsync</c> threw
+    /// <c>InvalidOperationException</c>, and somebody signing in for the first
+    /// time got an Internal Server Error and no account. With local registration
+    /// closed by default this <i>is</i> the onboarding path, and both identity
+    /// deployments this product ships can emit the input.
+    /// </summary>
+    [Theory]
+    [InlineData("Żaneta Łąkowska-Ćwikła", "zaneta-lakowska-cwikla")]
+    [InlineData("Paweł", "pawel")]
+    [InlineData("Zażółć gęślą jaźń", "zazolc-gesla-jazn")]
+    [InlineData("Grüße", "grusse")]
+    public async Task A_polish_name_becomes_a_login_that_is_still_recognisable(
+        string claimed, string expected)
+    {
+        var provider = await NewProviderAsync(
+            "fold-" + Guid.NewGuid().ToString("N")[..8],
+            rules: [("students", "participant")]);
+
+        var outcome = await SignInAsync(
+            provider,
+            Token(
+                "sub-" + Guid.NewGuid().ToString("N")[..10],
+                ("groups", "students"),
+                ("preferred_username", claimed)));
+
+        Assert.True(outcome.Admitted, outcome.Reason);
+        Assert.Equal(expected, outcome.User!.UserName);
+    }
+
+    /// <summary>
+    /// And when nothing survives the fold there is still an account.
+    /// <c>Sanitise</c> answered an empty string rather than refusing, and
+    /// <c>CreateAsync("")</c> is the same 500 by another road.
+    /// </summary>
+    [Fact]
+    public async Task A_name_with_nothing_ascii_in_it_still_provisions_an_account()
+    {
+        var slug = "cjk-" + Guid.NewGuid().ToString("N")[..8];
+        var provider = await NewProviderAsync(slug, rules: [("students", "participant")]);
+        var subject = "sub-" + Guid.NewGuid().ToString("N")[..10];
+
+        var outcome = await SignInAsync(
+            provider,
+            Token(subject, ("groups", "students"), ("preferred_username", "日本語のなまえ")));
+
+        Assert.True(outcome.Admitted, outcome.Reason);
+
+        var login = outcome.User!.UserName!;
+        Assert.StartsWith(slug, login);
+
+        // The property, not the exact string: what matters is that Identity can
+        // store it, and its allowed set is ASCII.
+        Assert.All(login, c => Assert.InRange(c, ' ', '~'));
+
+        // Deterministic, so the same person arriving twice is the same account
+        // rather than a second one.
+        var again = await SignInAsync(
+            provider,
+            Token(subject, ("groups", "students"), ("preferred_username", "日本語のなまえ")));
+        Assert.Equal(login, again.User!.UserName);
     }
 
     /// <summary>

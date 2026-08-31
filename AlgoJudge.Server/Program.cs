@@ -44,11 +44,16 @@ namespace AlgoJudge.Server
 
             builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(
                 options => options.Limits.MaxRequestBodySize = maxRequestBytes);
-            builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
-            {
-                options.MultipartBodyLengthLimit = maxRequestBytes;
-                options.ValueLengthLimit = int.MaxValue;
-            });
+
+            // **`FormOptions` is left at the framework defaults, deliberately.**
+            // It used to raise `ValueLengthLimit` to `int.MaxValue`, which let an
+            // anonymous caller post one form value of `MaxRequestBytes` to the two
+            // LTI endpoints that read a form — `ReadFormAsync` materialises each
+            // value as a string, so 128 MB of body is 256 MB of managed memory,
+            // and nothing here rate-limits. Nothing needs it: form parsing is
+            // reached only by `Lti/Controllers/LtiLaunchController`, and every
+            // upload streams past it through `Utils/MultipartUpload`, which sets
+            // its own `BodyLengthLimit` and disables form value binding.
 
             {
                 var dbConnectionString = builder.Configuration.GetConnectionString("DbConnectionString");
@@ -118,8 +123,16 @@ namespace AlgoJudge.Server
                 options.SignIn.RequireConfirmedEmail = false;
             })
                 .AddEntityFrameworkStores<ApplicationDbContext>()
-                // Replaces the built-in one, which would demand an address of
-                // every account. An address stays unique when there is one.
+                // **Beside the built-in one, not instead of it** — this line said
+                // "replaces" until 2026-08-31 and never did: `AddUserValidator`
+                // appends, and `UserValidator<User>` stays in the chain. It
+                // happens not to demand an address only because
+                // `RequireUniqueEmail` is false above. What it does still enforce
+                // is `AllowedUserNameCharacters`, which is left at the framework
+                // default — ASCII — deliberately: widening it would admit
+                // non-ASCII logins through `POST /users`, the reserved-login
+                // check and every normalisation path. `FederatedSignInService`
+                // folds a provider's name to fit rather than the set being moved.
                 .AddUserValidator<OptionalEmailValidator>()
                 // The one login this product reserves. A validator because it is
                 // the only place that catches `MapIdentityApi`'s own /register,

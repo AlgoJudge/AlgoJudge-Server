@@ -300,17 +300,33 @@ namespace AlgoJudge.Server.Services
             var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id, ct)
                 ?? throw new NotFoundException("User");
 
+            // **The address first, and through the manager so the validators
+            // run.** It used to be written straight onto the entity, three lines
+            // further down, which meant `OptionalEmailValidator` never saw it and
+            // two accounts could end up on one address — the state it exists to
+            // prevent, and one that then made `ResetPasswordAsync` refuse with
+            // the *other* account's address in the message, because that path
+            // does run the chain. `SetEmailAsync` normalises through the lookup
+            // normaliser and clears the confirmation itself.
+            //
+            // Before the assignments below rather than after them, because it
+            // saves as it validates: a refusal has to leave this entity clean, or
+            // the fields set first would still be flushed by whatever saves next.
+            if (input.Email is not null && input.Email.Trim() != user.Email)
+            {
+                var changed = await users.SetEmailAsync(
+                    user, string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim());
+                if (!changed.Succeeded)
+                {
+                    throw new ValidationException(
+                        string.Join("; ", changed.Errors.Select(e => e.Description)), "user.update");
+                }
+            }
+
             if (input.FirstName is not null) user.FirstName = input.FirstName.Trim();
             if (input.LastName is not null) user.LastName = input.LastName.Trim();
             if (input.Note is not null) user.Note = input.Note;
             if (input.Tags is not null) user.Tags = JsonSerializer.Serialize(input.Tags);
-
-            if (input.Email is not null && input.Email.Trim() != user.Email)
-            {
-                user.Email = string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim();
-                user.NormalizedEmail = user.Email?.ToUpperInvariant();
-                user.EmailConfirmed = false;
-            }
 
             await context.SaveChangesAsync(ct);
             var projected = Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct));

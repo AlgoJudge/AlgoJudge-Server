@@ -119,7 +119,15 @@ namespace AlgoJudge.Server.Utils
                             "Only one file may be sent at a time", "file.tooMany");
                     }
 
-                    fileName = HeaderUtilities.RemoveQuotes(disposition.FileName).Value ?? "";
+                    // **Either header, because `HasFile` accepts either.** This
+                    // read only `filename`, so a part carrying just `filename*=`
+                    // was a file part with no name at all — and a stored file
+                    // with no name is one the download used to hand over with no
+                    // `Content-Disposition` header of any kind.
+                    fileName = HeaderUtilities.RemoveQuotes(
+                        disposition.FileName.HasValue
+                            ? disposition.FileName
+                            : disposition.FileNameStar).Value ?? "";
                     contentType = section.ContentType ?? "application/octet-stream";
 
                     // The ceiling rides on the stream, so it is enforced against

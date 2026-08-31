@@ -131,7 +131,7 @@ namespace AlgoJudge.Server.Realtime
                 .AsNoTracking()
                 .Where(g => g.State == GrantState.Active)
                 .Where(scope)
-                .Select(g => new { g.UserId, g.Permissions })
+                .Select(g => new { g.UserId, g.ActivityId, g.Permissions })
                 .ToListAsync(ct);
 
             var holders = new HashSet<string>(StringComparer.Ordinal);
@@ -151,9 +151,15 @@ namespace AlgoJudge.Server.Realtime
                     continue;
                 }
 
-                // The administrator bypass is checked first and at every scope,
-                // exactly as `PermissionService` checks it.
-                if (keys.Contains(Permissions.SystemAdministrator) || keys.Contains(permission))
+                // **The administrator bypass is only meaningful at the system
+                // scope**, exactly as `PermissionService.IsAdministratorAsync`
+                // reads it. It was applied at every scope until 2026-08-31, and
+                // `ActivityId` was not even carried out of the query to check —
+                // so an activity grant carrying the string made its holder a
+                // recipient of every installation-wide event, which a fetch
+                // through the same permission would have refused.
+                if ((grant.ActivityId is null && keys.Contains(Permissions.SystemAdministrator))
+                    || keys.Contains(permission))
                 {
                     holders.Add(grant.UserId);
                 }

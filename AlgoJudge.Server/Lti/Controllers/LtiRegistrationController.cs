@@ -119,6 +119,21 @@ namespace AlgoJudge.Server.Lti.Controllers
                 logger.LogWarning(e, "A dynamic registration was refused");
                 return Page("That did not work", e.Message, close: false);
             }
+            // **Nothing here may answer anything but a page.** This action is
+            // read inside the platform's own iframe and declares itself
+            // `text/html`; without this, an unhandled fault reached the global
+            // handler and rendered `problem+json` into it. Never `e.Message`:
+            // the catch above already gives the reader what is theirs to have.
+            catch (Exception e)
+            {
+                logger.LogError(e, "A dynamic registration failed");
+                return Page(
+                    "That did not work",
+                    "Something went wrong at the AlgoJudge end. Nothing was registered, and the "
+                    + "invitation has not been used — try again, and tell whoever sent it if it "
+                    + "keeps happening.",
+                    close: false);
+            }
         }
 
         /// <summary>

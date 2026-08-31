@@ -51,6 +51,13 @@ namespace AlgoJudge.Server.Services
             var user = await currentUser.RequireAsync(ct);
             RequireLocal(user, "change your details");
 
+            // **One transaction, because the writes are not one write.**
+            // `SetUserNameAsync` saves the rename itself, so checking the results
+            // without this would answer 422 for a refused address over a login
+            // that had already changed. `UserStore` shares this scoped context,
+            // so all three enlist.
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
             if (input.Username is { } username && username.Trim() != user.UserName)
             {
                 var wanted = username.Trim();
@@ -86,12 +93,12 @@ namespace AlgoJudge.Server.Services
                 {
                     throw new ConflictException("That login is taken", "account.username.taken");
                 }
-                await users.SetUserNameAsync(user, wanted);
+                Checked(await users.SetUserNameAsync(user, wanted));
             }
 
             if (input.Email is { } email && email.Trim() != user.Email)
             {
-                await users.SetEmailAsync(user, email.Trim());
+                Checked(await users.SetEmailAsync(user, email.Trim()));
                 // A changed address is an unconfirmed address. Carrying the old
                 // confirmation forward would let somebody confirm one mailbox and
                 // then move the account to another.
@@ -101,8 +108,35 @@ namespace AlgoJudge.Server.Services
             if (input.FirstName is not null) user.FirstName = input.FirstName.Trim();
             if (input.LastName is not null) user.LastName = input.LastName.Trim();
 
-            await users.UpdateAsync(user);
+            Checked(await users.UpdateAsync(user));
+            await transaction.CommitAsync(ct);
             return Projections.Session(user);
+        }
+
+        /// <summary>
+        /// Refuses what Identity refused.
+        /// <para>
+        /// <b>All three results here used to be discarded.</b>
+        /// <c>SetUserNameAsync</c> and <c>SetEmailAsync</c> each call
+        /// <c>UpdateUserAsync</c> internally — they validate <i>and save</i> — so
+        /// a duplicate or malformed address was refused by
+        /// <see cref="OptionalEmailValidator"/>, dropped on the floor, and the
+        /// caller was handed a 200 describing a change that had not happened.
+        /// </para>
+        /// <para>
+        /// One code rather than three: the Client switches on the code, and
+        /// Identity's own descriptions say which field it was better than any
+        /// sentence written here — the same argument
+        /// <see cref="ChangePasswordAsync"/> already makes for
+        /// <c>account.password</c>.
+        /// </para>
+        /// </summary>
+        private static void Checked(IdentityResult result)
+        {
+            if (result.Succeeded) return;
+
+            throw new ValidationException(
+                string.Join("; ", result.Errors.Select(e => e.Description)), "account.profile");
         }
 
         public async Task ChangePasswordAsync(string current, string replacement, CancellationToken ct)

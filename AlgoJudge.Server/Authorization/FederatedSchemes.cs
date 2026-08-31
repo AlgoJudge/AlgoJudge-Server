@@ -37,6 +37,28 @@ namespace AlgoJudge.Server.Authorization
             scheme.StartsWith(Prefix, StringComparison.Ordinal) ? scheme[Prefix.Length..] : null;
 
         /// <summary>
+        /// The mark on the challenge, saying which provider a ticket was asked
+        /// for. It travels in the external cookie, so the callback can tell.
+        /// <para>
+        /// <b>Every provider signs into one shared cookie</b>
+        /// (<c>IdentityConstants.ExternalScheme</c>), and the callback used to
+        /// take the provider from the route alone. So a ticket obtained from a
+        /// low-trust provider could be redeemed at another provider's landing
+        /// address: that provider's claim mapping was applied to the first one's
+        /// claims, and the account was keyed under it.
+        /// </para>
+        /// </summary>
+        public const string TicketItem = "aj:provider";
+
+        /// <summary>Stamps the provider a challenge is being issued for.</summary>
+        public static void Mark(AuthenticationProperties properties, string slug) =>
+            properties.Items[TicketItem] = slug;
+
+        /// <summary>The provider a ticket was issued for, when it says.</summary>
+        public static string? SlugOn(AuthenticationProperties? properties) =>
+            properties?.Items.TryGetValue(TicketItem, out var slug) == true ? slug : null;
+
+        /// <summary>
         /// Where a provider sends the browser back to, below the API path base.
         /// <para>
         /// One definition, used by the handler options and by what the panel

@@ -188,13 +188,7 @@ namespace AlgoJudge.Server.Services
         private async Task<User> ProvisionAsync(
             IdentityProvider provider, ClaimsPrincipal principal, string subject, CancellationToken ct)
         {
-            var wanted = Sanitise(
-                First(principal, "preferred_username")
-                ?? First(principal, ClaimTypes.Name)
-                ?? First(principal, "email")
-                ?? $"{provider.Slug}-{subject}");
-
-            var login = await FreeLoginAsync(wanted, subject, ct);
+            var login = await FreeLoginAsync(LoginStem(provider, principal, subject), subject, ct);
 
             // **The address is decoration; the key is issuer plus `sub`.**
             // Addresses stay unique across accounts here, and two providers
@@ -246,6 +240,30 @@ namespace AlgoJudge.Server.Services
             return user;
         }
 
+        /// <summary>
+        /// The login to try first.
+        /// <para>
+        /// A provider that emits nothing usable — a display name with no ASCII in
+        /// it, a blank claim — still gets an account. <see cref="Sanitise"/>
+        /// answers an empty string rather than refusing, and <c>CreateAsync("")</c>
+        /// is an <c>InvalidUserName</c>, which surfaced as a 500 in the middle of
+        /// somebody's first sign-in.
+        /// </para>
+        /// </summary>
+        private static string LoginStem(
+            IdentityProvider provider, ClaimsPrincipal principal, string subject)
+        {
+            var claimed = Sanitise(
+                First(principal, "preferred_username")
+                ?? First(principal, ClaimTypes.Name)
+                ?? First(principal, "email")
+                ?? "");
+            if (claimed.Length > 0) return claimed;
+
+            var fallback = Sanitise($"{provider.Slug}-{subject}");
+            return fallback.Length > 0 ? fallback : "user";
+        }
+
         private async Task<string> FreeLoginAsync(string wanted, string subject, CancellationToken ct)
         {
             if (!await context.Users.AnyAsync(u => u.NormalizedUserName == wanted.ToUpperInvariant(), ct)
@@ -254,15 +272,21 @@ namespace AlgoJudge.Server.Services
                 return wanted;
             }
 
-            // Deterministic rather than a counter: the same subject arriving
-            // twice, in a race, lands on the same candidate and one of the two
-            // insertions loses on the unique index instead of both succeeding.
-            var suffix = Convert.ToHexString(
-                System.Security.Cryptography.SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(subject)))[..6].ToLowerInvariant();
-
-            return $"{wanted}-{suffix}";
+            // Truncated so the decorated login still fits: `Sanitise` caps at
+            // `MaxLogin`, and the separator and the suffix go on top of that.
+            var stem = wanted[..Math.Min(wanted.Length, MaxLogin - SuffixLength - 1)];
+            return $"{stem}-{Suffix(subject)}";
         }
+
+        /// <summary>
+        /// Deterministic rather than a counter: the same subject arriving twice,
+        /// in a race, lands on the same candidate and one of the two insertions
+        /// loses on the unique index instead of both succeeding.
+        /// </summary>
+        private static string Suffix(string subject) =>
+            Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(subject)))[..SuffixLength].ToLowerInvariant();
 
         /// <summary>
         /// Writes this provider's contribution, replacing whatever it said before.
@@ -372,17 +396,71 @@ namespace AlgoJudge.Server.Services
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
+        /// <summary>The longest login this produces, before any decoration.</summary>
+        private const int MaxLogin = 64;
+
+        /// <summary>Hex characters of the subject that <see cref="Suffix"/> keeps.</summary>
+        private const int SuffixLength = 6;
+
         /// <summary>
-        /// A login this product will accept: the password policy is length-only,
-        /// but Identity still refuses characters outside its allowed set, and a
-        /// provider may emit an address or a display name with spaces in it.
+        /// A login this product will accept: Identity's default
+        /// <c>AllowedUserNameCharacters</c> is ASCII, and a provider may emit an
+        /// address, a display name with spaces, or a Polish name.
+        /// <para>
+        /// <b>It folds rather than filters, and that is the fix.</b>
+        /// <c>char.IsLetterOrDigit</c> is true of every Unicode letter, so
+        /// <c>żaneta</c> used to survive here and then fail <c>CreateAsync</c> —
+        /// a 500 in the middle of a first sign-in, on a product whose users are
+        /// mostly Polish. Folding keeps the login recognisable, which is the
+        /// whole reason for taking it from the provider rather than minting one.
+        /// </para>
         /// </summary>
         private static string Sanitise(string raw)
         {
-            var cleaned = new string([.. raw.Trim().ToLowerInvariant()
-                .Select(c => char.IsLetterOrDigit(c) || c is '-' or '.' or '_' or '@' ? c : '-')]);
+            // **The letters that do not decompose.** `FormD` splits a letter from
+            // its accent, so ą, ć, ę, ń, ó, ś and ź fold on their own — but ł
+            // carries no combining mark and would otherwise become a separator.
+            // It is the one this product cannot afford to get wrong.
+            var mapped = new System.Text.StringBuilder(raw.Length);
+            foreach (var c in raw.Trim().ToLowerInvariant())
+            {
+                mapped.Append(c switch
+                {
+                    'ł' => "l",
+                    'đ' => "d",
+                    'ø' => "o",
+                    'ß' => "ss",
+                    'æ' => "ae",
+                    'œ' => "oe",
+                    'þ' => "th",
+                    'ð' => "d",
+                    _ => c.ToString(),
+                });
+            }
 
-            return cleaned.Length is > 0 and <= 64 ? cleaned : cleaned[..Math.Min(64, cleaned.Length)];
+            var cleaned = new System.Text.StringBuilder(mapped.Length);
+            foreach (var c in mapped.ToString().Normalize(System.Text.NormalizationForm.FormD))
+            {
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                    == System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    continue;
+                }
+
+                if (c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '.' or '_' or '@')
+                {
+                    cleaned.Append(c);
+                }
+                else if (cleaned.Length > 0 && cleaned[^1] != '-')
+                {
+                    // One separator, not one per character: `Żółć  Łąka` is
+                    // `zolc-laka` rather than `zolc--laka`.
+                    cleaned.Append('-');
+                }
+            }
+
+            var login = cleaned.ToString().Trim('-');
+            return login[..Math.Min(MaxLogin, login.Length)];
         }
 
         private static IReadOnlyList<string> Deserialize(string json)
