@@ -61,8 +61,8 @@
       The handler's copy does not: `FederatedSignInTests` deliberately begins
       after a validated principal exists, because state, nonce, PKCE and
       `id_token` validation are the framework's code rather than this product's.
-      Signing in against a running deployment — `AlgoJudge-Identity-Keycloak`'s
-      `scripts/e2e-against-server.py` — is what would exercise that half.
+      Signing in against a running identity deployment is what would exercise
+      that half.
 
       MIT, maintained by Microsoft in `AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet`,
       shipping stable releases. No alpha or beta package goes on this path, which

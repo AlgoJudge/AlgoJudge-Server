@@ -34,12 +34,10 @@ namespace AlgoJudge.Server.Database.Models
     /// </para>
     /// <para>
     /// The Server sees a <b>plain OIDC provider</b> and nothing more.
-    /// <b>Two</b> deployments sit behind these in practice —
-    /// <c>AlgoJudge-Identity-Keycloak</c> and <c>AlgoJudge-Identity-Authentik</c>,
-    /// both supported since 2026-08-26 — and neither is named anywhere in this
-    /// model. That the Authentik one implements the deletion channel with an
-    /// event matcher policy and a webhook, and the Keycloak one with an Event
-    /// Listener SPI provider, is known only to those repositories.
+    /// <b>Two</b> different products sit behind these in practice, and neither
+    /// is named anywhere in this model. That one implements the deletion
+    /// channel with an event matcher policy and a webhook, and the other with
+    /// an event listener extension, is known only to those deployments.
     /// </para>
     /// <para>
     /// Nothing here may grow a field that only one product could fill. Two
