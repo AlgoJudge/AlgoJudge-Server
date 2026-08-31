@@ -87,19 +87,15 @@ id like every other stored document, rather than fields on the row.
   `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` — **read its
   two amendment tables first**, because the body of an amended section still
   states the pre-amendment form.
-- ~~**`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
-  `Result`, which is created at claim time and doubles as the job record.~~
-  **Reversed — it is an entity.** `EvaluationJob` carries the attempt number, the
-  Runner, the state, the lease and its token, and `Result` hangs off *it* rather
-  than the other way round. Struck rather than deleted, because the reasoning
-  behind the deferral — something has to name a Runner while evaluation is still
-  running — is exactly what the job turned out to be.
-- ~~**All identifiers become string UUIDs.** The entities still use `int` keys;
-  that migration is outstanding.~~ **Done.** Every entity carries a `Guid` from
-  `Utils/Uuid.cs`, and specifically a **version 7** one: time-ordered, so inserts
-  append to the index instead of fragmenting it. `Uuid.New()` calls
-  `Guid.CreateVersion7()`, and the wrapper stays so the choice of v7 keeps one
-  place to live. `User` keeps Identity's own string key.
+- **`EvaluationJob` is an entity of its own.** It carries the attempt number,
+  the Runner, the state, the lease and its token, and `Result` hangs off *it*
+  rather than the other way round — something has to name a Runner while an
+  evaluation is still running.
+- **Every entity carries a `Guid` from `Utils/Uuid.cs`, and specifically a
+  version 7 one**: time-ordered, so inserts append to the index instead of
+  fragmenting it. `Uuid.New()` calls `Guid.CreateVersion7()`, and the wrapper
+  stays so the choice of v7 keeps one place to live. `User` keeps Identity's own
+  string key.
 - `Activity.Type` is the type discriminator, formatted `name@version`. Adding a
   problem or activity type must not require a change here.
 
@@ -642,55 +638,40 @@ endpoint points at.
 
 The Server sees a **plain OIDC provider** and nothing else — it holds no field
 that only one product could fill, and it never learns which one is behind a
-registration. What follows is therefore not a list of supported products; it is
-the two AlgoJudge itself deploys, and what to type for each.
+registration.
 
-Both are supported and neither is a fallback:
+| Field | What it is |
+|---|---|
+| `issuer` | the provider's issuer URL, the one its discovery document is served under |
+| `claimPath` | where group membership sits in the token |
+| `scopes` | `openid profile email` |
+| `accountUrl` | where somebody manages the identity itself |
+| `deletionUrl` | where somebody ends the identity itself |
+| `deletionChannelEnabled` | `true` once the provider id and the secret it mints are configured at the provider |
 
-| | `AlgoJudge-Identity-Keycloak` | `AlgoJudge-Identity-Authentik` |
-|---|---|---|
-| `issuer` | `https://auth.example/realms/algojudge` | `https://auth.example/application/o/algojudge` |
-| `claimPath` | `groups` | `groups` |
-| `scopes` | `openid profile email` | `openid profile email` |
-| `accountUrl` | `…/realms/algojudge/account/` | `…/if/user/` |
-| `deletionUrl` | `…/realms/algojudge/account/#/personal-info` | the unenrolment flow's own URL |
-| `deletionChannelEnabled` | `true`, once the provider id and secret are set there | `true`, once the provider id and secret are set there |
+**`claimPath` is a dotted path and nothing else** — never an expression, which
+would be code executed against the contents of a token. `ClaimMappingService`
+walks it and flattens both a repeated claim and a JSON array, so a provider
+emitting bare names at `groups` and one emitting a nested shape both work.
+`FederatedSignInTests` drives a whole sign-in through each.
 
-**`claimPath` is `groups` for both, and that is a choice made in the Keycloak
-realm rather than a fact about Keycloak.** Its default group claim is
-`realm_access.roles`; the AlgoJudge realm declares a group-membership mapper
-emitting `groups` with bare names instead, so an installation moving between the
-two deployments changes neither the path nor a single mapping rule. A provider
-emitting the nested shape works too — `ClaimMappingService` walks a dotted path
-and flattens both a repeated claim and a JSON array, and `FederatedSignInTests`
-drives a whole sign-in through each.
+**The deletion channel is generic.** A provider that can call out reports a
+deleted identity to one endpoint, in one shape, with one header, and the Server
+holds nothing about how the provider produced it. Register the provider with the
+channel enabled, take the provider id and the shared secret it mints, and put
+both into the provider's own configuration — **the secret is write-only here**,
+so a lost one is generated again rather than looked up.
 
-**Both deployments carry the deletion channel.** Authentik uses an event
-matcher and a webhook transport, Keycloak an Event Listener SPI provider of its
-own, and the Server holds nothing about either: the report arrives on the same
-endpoint, in the same shape, with the same header.
-
-Turning it on is the same act for either. Register the provider with the channel
-enabled, take the provider id and the shared secret it mints, and put both into
-that deployment's `.env` — **the secret is write-only here**, so a lost one is
-generated again rather than looked up.
-
-The one difference worth knowing when a report does not arrive: **Authentik
-retries across a restart and Keycloak does not.** Authentik's worker keeps a
-queue in its database; the Keycloak extension retries in memory for about ninety
-seconds, then prints one `ERROR` naming the subject and the request id, for an
-operator to replay by hand. Either way the Server answers **404** to a wrong
-provider id, a wrong secret and a channel switched off alike — deliberately
-indistinguishable, so nobody can learn which by asking, and worth remembering
-when diagnosing from the other side.
+The Server answers **404** to a wrong provider id, a wrong secret and a channel
+switched off alike — deliberately indistinguishable, so nobody can learn which by
+asking, and worth remembering when diagnosing from the other side.
 
 **Neither issuer may be plain HTTP** except on loopback, which is exempted so a
 development stack can be registered. Over plain HTTP on a real network, whoever
 answers first decides who your users are.
 
-`AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` is the accepted
-record for the model; each deployment's own repository carries what it can and
-cannot do.
+The accepted record for the model is
+`AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md`.
 
 ## Migrations
 
@@ -792,20 +773,14 @@ controller, table or conditional.
 - `AlgoJudge-Ops` (private) — the self-hosted production Compose stack, and the
   update, backup and restore scripts around it. No application code, no build:
   every image is pulled from GHCR by tag
-- `AlgoJudge-Identity-Keycloak` and `AlgoJudge-Identity-Authentik` (both
-  private) — **two supported deployments for `auth.algojudge.app`, and neither
-  is a fallback for the other.** An installation runs one. To this Server both
-  are a plain OIDC provider and nothing else; what to type for each is under
-  *Registering an identity provider* above
-
 ### The frontend that used to live here
 
 A copy of the frontend once sat in `algojudge-client/` here. **Look for that
 code and its history in
 [`AlgoJudge-Client`](https://github.com/AlgoJudge/AlgoJudge-Client), not here**:
-it was migrated there with its commits, so that repository's history starts in
-December 2023, well before the repository itself was created, and it carries the
-authors who worked on the copy that used to be in this one.
+it was migrated there with its commits, so that repository's history reaches
+back further than the repository itself, and carries the authors who worked on
+the copy that used to be in this one.
 
 ## Contributing
 
@@ -818,6 +793,6 @@ By contributing you agree that your work is licensed under the terms below.
 ## License
 
 This project is licensed under the MIT License.
-See LICENSE.
+See [LICENSE](LICENSE).
 
-Authors are listed in AUTHORS.txt.
+Authors are listed in [AUTHORS.txt](AUTHORS.txt).
