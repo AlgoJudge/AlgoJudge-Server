@@ -374,6 +374,144 @@ public class PanelTests(ServerFixture server)
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// <b>A limit the Server enforces is checked when it is set, not only when
+    /// it bites.</b>
+    /// <para>
+    /// The three of them are explicit columns precisely because the Server
+    /// polices them (decided 2026-08-04), and <c>SubmissionService</c> does.
+    /// Nothing checked the value going in, so a manager could store a ceiling
+    /// above <c>UploadLimits.Submission</c> — which the endpoint refuses before
+    /// that check is ever reached, so the panel showed a number the product
+    /// could not honour — or a zero that closes the problem while reporting
+    /// that somebody has no submissions left.
+    /// </para>
+    /// <para>
+    /// The same shape as the <c>MaxAttachments</c> amendment of 2026-08-22:
+    /// stored, projected, editable, unpoliced.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_activity_limit_the_product_cannot_honour_is_refused()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        async Task<HttpResponseMessage> Creating(long? upload, int? attachments, int? submissions) =>
+            await admin.PostAsJsonAsync("/api/v1/activities", new
+            {
+                slug = "PANEL-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant(),
+                name = "Limits",
+                type = "contest@1",
+                rankingType = "icpc",
+                timeZone = "Europe/Warsaw",
+                joinPolicy = "open",
+                maxUploadBytes = upload,
+                maxAttachments = attachments,
+                maxSubmissionsPerProblem = submissions,
+            });
+
+        // Above the wall the request never gets past, so it would be a ceiling
+        // nothing consults.
+        await Refused(await Creating(100L * 1024 * 1024, null, null), "activity.maxUploadBytes.tooLarge");
+        await Refused(await Creating(0, null, null), "activity.maxUploadBytes.invalid");
+        // Zero submissions is not "closed"; it is every attempt refused with a
+        // message about an allowance.
+        await Refused(await Creating(null, null, 0), "activity.maxSubmissions.invalid");
+        await Refused(await Creating(null, -1, null), "activity.maxAttachments.invalid");
+
+        // **And the rule refuses only what it should.** The wall itself is a
+        // legal setting, and so is an activity that takes no attachment —
+        // `SubmissionService` reads that one and answers it in words.
+        await Sign.Succeeded(await Creating(8L * 1024 * 1024, 0, null));
+    }
+
+    /// <summary>
+    /// <b>And the other three paths are the same rule.</b> <c>CheckMaxPoints</c>
+    /// says why in its own comment: a value is created on one path and changed
+    /// on another, and a rule enforced on the first alone is a rule the second
+    /// removes. There are four here — an activity created and edited, an
+    /// assignment attached and edited.
+    /// <para>
+    /// On an activity of its own throughout. Pointing the assignment half at
+    /// the seeded <c>DEV-2026</c> would write a zero allowance into shared data
+    /// the moment the rule under test stopped holding, and take an unrelated
+    /// test down with it — which is exactly what the sabotage run did.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Editing_and_attaching_cannot_set_a_limit_creating_would_have_refused()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var slug = await NewActivityAsync(admin);
+
+        // The whole record, because `ActivityInputDto` requires the identifying
+        // fields on an edit as well as on a create — a partial body is refused
+        // at the binder and would never reach the rule under test.
+        await Refused(
+            await admin.PutAsJsonAsync($"/api/v1/activities/{slug}", new
+            {
+                slug,
+                name = "Panel test",
+                type = "contest@1",
+                rankingType = "icpc",
+                timeZone = "Europe/Warsaw",
+                maxUploadBytes = 100L * 1024 * 1024,
+            }),
+            "activity.maxUploadBytes.tooLarge");
+
+        var round = await Post(admin, $"/api/v1/activities/{slug}/series", new
+        {
+            slug = "r1",
+            name = "R1",
+            startDate = "2026-09-01T10:00:00Z",
+            endDate = "2026-09-01T15:00:00Z",
+        });
+        var roundId = round.GetProperty("id").GetString()!;
+
+        // Asked for by name rather than taken off the first page: the suite
+        // shares one database and every run adds problems to it.
+        var problems = await admin.GetFromJsonAsync<JsonElement>(
+            "/api/v1/problems?page=1&pageSize=50&search=sum");
+        var problemId = problems.GetProperty("items").EnumerateArray()
+            .First(p => p.GetProperty("slug").GetString() == "sum")
+            .GetProperty("id").GetString();
+
+        // Attaching is the third path.
+        await Refused(
+            await admin.PostAsJsonAsync($"/api/v1/series/{roundId}/problems", new
+            {
+                problemId,
+                slug = "a",
+                maxSubmissions = 0,
+            }),
+            "assignment.maxSubmissions.invalid");
+
+        // …and editing what was attached is the fourth.
+        var attached = await Post(admin, $"/api/v1/series/{roundId}/problems", new
+        {
+            problemId,
+            slug = "a",
+        });
+        var assignmentId = attached.GetProperty("problems").EnumerateArray()
+            .First().GetProperty("id").GetString();
+
+        await Refused(
+            await admin.PutAsJsonAsync($"/api/v1/series-problems/{assignmentId}", new
+            {
+                problemId,
+                slug = "a",
+                maxSubmissions = 0,
+            }),
+            "assignment.maxSubmissions.invalid");
+    }
+
+    private static async Task Refused(HttpResponseMessage response, string code)
+    {
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(code, problem.GetProperty("code").GetString());
+    }
+
     private static async Task<JsonElement> Post(HttpClient client, string path, object body)
     {
         var response = await client.PostAsJsonAsync(path, body);

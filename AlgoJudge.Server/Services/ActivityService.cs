@@ -606,6 +606,8 @@ namespace AlgoJudge.Server.Services
             }
 
             var policy = ParseJoinPolicy(input.JoinPolicy);
+            SubmissionLimits.Check(
+                input.MaxUploadBytes, input.MaxAttachments, input.MaxSubmissionsPerProblem, "activity");
             var activity = new Activity
             {
                 // **Made deliberately, so it exists deliberately.** The
