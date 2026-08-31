@@ -21,18 +21,34 @@ public sealed class CountingEventHub : IEventHub
 
     public IReadOnlyList<(string Type, object Data)> Sent => sent.ToList();
 
+    private readonly ConcurrentBag<(string Type, IReadOnlyList<string> To)> addressed = [];
+
+    /// <summary>
+    /// Who each announcement was addressed to.
+    /// <para>
+    /// Beside <see cref="Sent"/> rather than folded into it: several tests read
+    /// that tuple and counting announcements is a different question from asking
+    /// who hears one. This one exists for the second — the scheduler used to
+    /// resolve its own audience, and got a different answer from every other
+    /// caller.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<(string Type, IReadOnlyList<string> To)> Addressed => addressed.ToList();
+
     public Task SendToUsersAsync(
         IEnumerable<string> userIds, string type, object data, CancellationToken ct = default)
     {
         // Once per send, not once per recipient: the question is how many times
         // the Server decided to announce something, not how many people heard it.
         sent.Add((type, data));
+        addressed.Add((type, userIds.ToList()));
         return Task.CompletedTask;
     }
 
     public Task SendToUserAsync(string userId, string type, object data, CancellationToken ct = default)
     {
         sent.Add((type, data));
+        addressed.Add((type, new List<string> { userId }));
         return Task.CompletedTask;
     }
 

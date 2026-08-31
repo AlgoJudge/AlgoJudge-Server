@@ -32,7 +32,34 @@ namespace AlgoJudge.Server.Authorization
     /// </summary>
     public static class IdentitySurface
     {
-        private const string Group = "/identity";
+        private static readonly PathString Group = new("/identity");
+
+        /// <summary>
+        /// Whether the rest of the path <b>is</b> this endpoint, trailing slash
+        /// and all.
+        /// <para>
+        /// <b>This was <c>EndsWith</c> until 2026-08-31, and the slash walked
+        /// past it.</b> Endpoint routing normalises a trailing slash, so
+        /// <c>POST /identity/register/</c> reached <c>MapIdentityApi</c>'s
+        /// register handler while <c>"/register/".EndsWith("/register")</c> was
+        /// false — and this is the only place in the tree that reads
+        /// <see cref="Database.Models.Instance.LocalRegistrationEnabled"/>, which
+        /// every installation ships switched off. Anybody could sign up on an
+        /// installation that said it was closed, and then sign in.
+        /// </para>
+        /// <para>
+        /// A suffix match was also wrong in the other direction: it would have
+        /// refused <c>/identity/manage/2fa/register</c>, an endpoint this rule
+        /// has nothing to say about.
+        /// </para>
+        /// </summary>
+        private static bool Is(PathString rest, string endpoint)
+        {
+            var value = rest.Value ?? "";
+            if (value.Length > 1 && value[^1] == '/') value = value[..^1];
+
+            return string.Equals(value, endpoint, StringComparison.OrdinalIgnoreCase);
+        }
 
         /// <summary>Needs a mail sender the product does not have.</summary>
         private static readonly string[] NeedsMail =
@@ -78,15 +105,16 @@ namespace AlgoJudge.Server.Authorization
         public static IApplicationBuilder UseIdentitySurfaceRules(this IApplicationBuilder app) =>
             app.Use(async (context, next) =>
             {
-                var path = context.Request.Path.Value ?? "";
-
-                if (!path.StartsWith(Group, StringComparison.OrdinalIgnoreCase))
+                // `StartsWithSegments` rather than `StartsWith`, as `Program`'s own
+                // API-base guard does: the string form also matched `/identityfoo`.
+                if (!context.Request.Path.StartsWithSegments(
+                        Group, StringComparison.OrdinalIgnoreCase, out var rest))
                 {
                     await next();
                     return;
                 }
 
-                if (path.EndsWith("/register", StringComparison.OrdinalIgnoreCase))
+                if (Is(rest, "/register"))
                 {
                     var instances = context.RequestServices.GetRequiredService<IInstanceService>();
                     var instance = await instances.EnsureAsync(context.RequestAborted);
@@ -100,7 +128,7 @@ namespace AlgoJudge.Server.Authorization
 
                 foreach (var blocked in NeedsMail)
                 {
-                    if (path.EndsWith(blocked, StringComparison.OrdinalIgnoreCase))
+                    if (Is(rest, blocked))
                     {
                         throw new ForbiddenActionException(
                             "This instance sends no mail, so this is unavailable", "mail.unavailable");
@@ -109,7 +137,7 @@ namespace AlgoJudge.Server.Authorization
 
                 foreach (var blocked in Unanswerable)
                 {
-                    if (path.EndsWith(blocked, StringComparison.OrdinalIgnoreCase))
+                    if (Is(rest, blocked))
                     {
                         throw new ForbiddenActionException(
                             "This endpoint cannot answer for an account without an address; "

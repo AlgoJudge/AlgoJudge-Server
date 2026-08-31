@@ -220,10 +220,15 @@ namespace AlgoJudge.Server.Controllers
             // Every argument named: the byte[] and Stream overloads differ in
             // what their third positional parameter means, and picking the wrong
             // one is a compile error only by luck.
+            // The same rule as the participant-facing endpoint, and deliberately
+            // the same code: these two answers must not drift. See
+            // `Utils/Downloads.cs`.
+            Response.Headers.ContentDisposition = Downloads.Disposition(file);
+
             return File(
                 fileStream: content,
-                contentType: file.MimeType,
-                fileDownloadName: file.Name,
+                contentType: Downloads.ContentType(file),
+                fileDownloadName: null,
                 lastModified: null,
                 entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{file.Sha256}\""),
                 enableRangeProcessing: true);

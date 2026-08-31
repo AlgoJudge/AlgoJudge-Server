@@ -43,6 +43,23 @@ public sealed class FakePlatformRegistry : HttpMessageHandler
     /// <summary>Fields to leave out of the configuration, for the refusals.</summary>
     public HashSet<string> Omit { get; } = [];
 
+    /// <summary>
+    /// What the platform calls itself. Empty is the interesting value: it is a
+    /// JSON string, so it passed the kind test and then indexed the first
+    /// character of nothing.
+    /// </summary>
+    public string ProductFamilyCode { get; set; } = "moodle";
+
+    /// <summary>
+    /// Set to answer the configuration request with this exact body instead of a
+    /// well-formed document — for the answers that are not JSON, or not an
+    /// object.
+    /// </summary>
+    public string? ConfigurationBody { get; set; }
+
+    /// <summary>The same, for the registration answer.</summary>
+    public string? RegistrationBody { get; set; }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -50,6 +67,8 @@ public sealed class FakePlatformRegistry : HttpMessageHandler
 
         if (url == ConfigurationUrl)
         {
+            if (ConfigurationBody is not null) return Json(ConfigurationBody);
+
             var configuration = new Dictionary<string, object?>
             {
                 ["issuer"] = Issuer,
@@ -66,7 +85,7 @@ public sealed class FakePlatformRegistry : HttpMessageHandler
                 ["https://purl.imsglobal.org/spec/lti-platform-configuration"] =
                     new Dictionary<string, object?>
                     {
-                        ["product_family_code"] = "moodle",
+                        ["product_family_code"] = ProductFamilyCode,
                         ["version"] = "5.2.2 (Build: 20260810)",
                         ["variables"] = new[] { "User.username", "Context.id.history" },
                     },
@@ -81,6 +100,8 @@ public sealed class FakePlatformRegistry : HttpMessageHandler
         {
             Registered.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
             Tokens.Add(request.Headers.Authorization?.Parameter);
+
+            if (RegistrationBody is not null) return Json(RegistrationBody);
 
             if (RegistrationStatus != HttpStatusCode.OK)
             {

@@ -95,21 +95,25 @@ namespace AlgoJudge.Server.Workers
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var events = scope.ServiceProvider.GetRequiredService<IEventHub>();
             var gate = scope.ServiceProvider.GetRequiredService<ISeriesGate>();
+            // The one rule for who hears an event. This worker had its own copy
+            // until 2026-08-31; see `MembersAsync` in the history for what it
+            // got wrong that this does not.
+            var audience = scope.ServiceProvider.GetRequiredService<IEventAudience>();
 
             var now = clock.GetUtcNow().UtcDateTime;
             var announced = 0;
 
-            announced += await OpenAsync(context, events, gate, now, ct);
-            announced += await CloseAsync(context, events, gate, now, ct);
-            announced += await WindowsAsync(context, events, now, ct);
-            announced += await UnfreezeAsync(context, events, now, ct);
+            announced += await OpenAsync(context, events, audience, gate, now, ct);
+            announced += await CloseAsync(context, events, audience, gate, now, ct);
+            announced += await WindowsAsync(context, events, audience, now, ct);
+            announced += await UnfreezeAsync(context, events, audience, now, ct);
 
             return announced;
         }
 
         private async Task<int> OpenAsync(
-            ApplicationDbContext context, IEventHub events, ISeriesGate gate,
-            DateTime now, CancellationToken ct)
+            ApplicationDbContext context, IEventHub events, IEventAudience audience,
+            ISeriesGate gate, DateTime now, CancellationToken ct)
         {
             var due = await context.Series
                 .Include(s => s.Activity)
@@ -153,15 +157,15 @@ namespace AlgoJudge.Server.Workers
                         "Series {Series} opened {Minutes:F0} minutes late",
                         round.Id, (now - round.StartDate!.Value).TotalMinutes);
                 }
-                await AnnounceAsync(context, events, gate, round, "opened", late, ct);
+                await AnnounceAsync(events, audience, gate, round, "opened", late, ct);
             }
 
             return opened;
         }
 
         private async Task<int> CloseAsync(
-            ApplicationDbContext context, IEventHub events, ISeriesGate gate,
-            DateTime now, CancellationToken ct)
+            ApplicationDbContext context, IEventHub events, IEventAudience audience,
+            ISeriesGate gate, DateTime now, CancellationToken ct)
         {
             var due = await context.Series
                 .Include(s => s.Activity)
@@ -192,7 +196,7 @@ namespace AlgoJudge.Server.Workers
                 closed++;
 
                 var late = round.EndDate is { } end && now - end > Slack;
-                await AnnounceAsync(context, events, gate, round, "closed", late, ct);
+                await AnnounceAsync(events, audience, gate, round, "closed", late, ct);
             }
 
             return closed;
@@ -203,7 +207,8 @@ namespace AlgoJudge.Server.Workers
         /// a board that was not there", and the screen fetches it.
         /// </summary>
         private async Task<int> WindowsAsync(
-            ApplicationDbContext context, IEventHub events, DateTime now, CancellationToken ct)
+            ApplicationDbContext context, IEventHub events, IEventAudience audience,
+            DateTime now, CancellationToken ct)
         {
             var due = await context.Series
                 .Where(s => s.Activity!.PublishedAt != null)
@@ -223,7 +228,7 @@ namespace AlgoJudge.Server.Workers
                 if (claimed == 0) continue;
 
                 announced++;
-                await RankingAsync(context, events, round, "windowOpened", ct);
+                await RankingAsync(events, audience, round, "windowOpened", ct);
             }
 
             return announced;
@@ -234,7 +239,8 @@ namespace AlgoJudge.Server.Workers
         /// readable, and what the reader holds is incomplete.
         /// </summary>
         private async Task<int> UnfreezeAsync(
-            ApplicationDbContext context, IEventHub events, DateTime now, CancellationToken ct)
+            ApplicationDbContext context, IEventHub events, IEventAudience audience,
+            DateTime now, CancellationToken ct)
         {
             var due = await context.Series
                 .Where(s => s.Activity!.PublishedAt != null)
@@ -254,7 +260,7 @@ namespace AlgoJudge.Server.Workers
                 if (claimed == 0) continue;
 
                 announced++;
-                await RankingAsync(context, events, round, "unfrozen", ct);
+                await RankingAsync(events, audience, round, "unfrozen", ct);
             }
 
             return due.Count;
@@ -269,10 +275,10 @@ namespace AlgoJudge.Server.Workers
         /// </para>
         /// </summary>
         private static async Task AnnounceAsync(
-            ApplicationDbContext context, IEventHub events, ISeriesGate gate,
+            IEventHub events, IEventAudience audience, ISeriesGate gate,
             Series round, string change, bool late, CancellationToken ct)
         {
-            var members = await MembersAsync(context, round.ActivityId, Permissions.ActivityRead, ct);
+            var members = await audience.InActivityAsync(round.ActivityId, Permissions.ActivityRead, ct);
             if (members.Count == 0) return;
 
             var open = round.Activity is not null && gate.MayReadProblems(round, round.Activity);
@@ -319,10 +325,10 @@ namespace AlgoJudge.Server.Workers
         }
 
         private static async Task RankingAsync(
-            ApplicationDbContext context, IEventHub events,
+            IEventHub events, IEventAudience audience,
             Series round, string change, CancellationToken ct)
         {
-            var members = await MembersAsync(context, round.ActivityId, Permissions.RankingRead, ct);
+            var members = await audience.InActivityAsync(round.ActivityId, Permissions.RankingRead, ct);
             if (members.Count == 0) return;
 
             await events.SendToUsersAsync(members, EventTypes.RankingChanged, new RankingChangedData
@@ -333,25 +339,19 @@ namespace AlgoJudge.Server.Workers
             }, ct);
         }
 
-        /// <summary>
-        /// Who in this activity holds the permission the event's data is guarded
-        /// by. The fan-out runs through the same rule as a fetch would.
-        /// </summary>
-        private static async Task<List<string>> MembersAsync(
-            ApplicationDbContext context, Guid activityId, string permission, CancellationToken ct)
-        {
-            var grants = await context.Grants
-                .AsNoTracking()
-                .Where(g => g.ActivityId == activityId && g.State == GrantState.Active)
-                .Select(g => new { g.UserId, g.Permissions })
-                .ToListAsync(ct);
-
-            return grants
-                .Where(g => g.Permissions.Contains(permission, StringComparison.Ordinal)
-                    || g.Permissions.Contains(Permissions.SystemAdministrator, StringComparison.Ordinal))
-                .Select(g => g.UserId)
-                .Distinct()
-                .ToList();
-        }
+        // **`MembersAsync` lived here until 2026-08-31**, the third copy of
+        // audience resolution that `IEventAudience` was written to replace. It
+        // was wrong in four ways, and only one of them was the reported bug:
+        //
+        //  - it matched with a raw `Contains` on the serialised JSON, so
+        //    `ranking:read` matched inside `ranking:read:unfrozen`;
+        //  - it never deserialised, so it had no answer for an unparseable row;
+        //  - it read activity grants only, so somebody holding a **system**
+        //    grant heard nothing this worker announced;
+        //  - it honoured `system:administrator` in an activity grant, which
+        //    `PermissionService` deliberately does not.
+        //
+        // Two of those change who receives an event, in both directions. That is
+        // the correction, not a regression.
     }
 }

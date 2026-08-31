@@ -122,6 +122,7 @@ namespace AlgoJudge.Server.Controllers
 
         [HttpPut("{id}")]
         [ProducesResponseType<ManagedUserDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         public Task<ManagedUserDto> Update(
             string id, [FromBody] UserUpdateInputDto input, CancellationToken ct) =>
             users.UpdateAsync(id, input, ct);

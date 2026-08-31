@@ -424,17 +424,30 @@ public class EndToEndTests(ServerFixture server)
         Assert.NotNull(await Sign.TryInAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword));
     }
 
-    [Fact]
-    public async Task Registration_is_refused_when_the_instance_says_it_is_closed()
+    /// <summary>
+    /// <b>The trailing slash is not a variation, it is the bug.</b> The guard
+    /// matched with <c>EndsWith</c> while endpoint routing normalises a trailing
+    /// slash, so <c>/identity/register/</c> reached the framework's own register
+    /// handler with nothing in front of it — and this middleware is the only
+    /// place in the tree that reads <c>LocalRegistrationEnabled</c>, which every
+    /// installation ships switched off. Anybody could sign up on an installation
+    /// that said it was closed, and then sign in.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/v1/identity/register")]
+    [InlineData("/api/v1/identity/register/")]
+    public async Task Registration_is_refused_when_the_instance_says_it_is_closed(string path)
     {
         var client = server.CreateClient();
 
         var instance = await client.GetFromJsonAsync<JsonElement>("/api/v1/instance");
         Assert.False(instance.GetProperty("localRegistrationEnabled").GetBoolean());
 
-        var response = await client.PostAsJsonAsync("/api/v1/identity/register", new
+        var address = $"intruder-{Guid.NewGuid():N}@example.invalid";
+
+        var response = await client.PostAsJsonAsync(path, new
         {
-            email = "intruder@example.invalid",
+            email = address,
             password = "twelve-characters-at-least",
         });
 
@@ -445,7 +458,7 @@ public class EndToEndTests(ServerFixture server)
         // And nothing was created, so nothing can sign in with it.
         var signIn = await client.PostAsJsonAsync(
             "/api/v1/identity/login?useSessionCookies=true",
-            new { email = "intruder@example.invalid", password = "twelve-characters-at-least" });
+            new { email = address, password = "twelve-characters-at-least" });
         Assert.Equal(HttpStatusCode.Unauthorized, signIn.StatusCode);
     }
 
@@ -458,6 +471,11 @@ public class EndToEndTests(ServerFixture server)
     [InlineData("forgotPassword")]
     [InlineData("resetPassword")]
     [InlineData("resendConfirmationEmail")]
+    // The same three with a trailing slash, which routing accepts and the guard
+    // used to miss.
+    [InlineData("forgotPassword/")]
+    [InlineData("resetPassword/")]
+    [InlineData("resendConfirmationEmail/")]
     public async Task Everything_that_needs_mail_is_refused(string endpoint)
     {
         var client = server.CreateClient();
@@ -487,15 +505,18 @@ public class EndToEndTests(ServerFixture server)
     /// </para>
     /// </summary>
     [Theory]
-    [InlineData("GET")]
-    [InlineData("POST")]
-    public async Task The_frameworks_info_endpoint_is_refused_and_ours_answers(string method)
+    [InlineData("GET", "/api/v1/identity/manage/info")]
+    [InlineData("POST", "/api/v1/identity/manage/info")]
+    [InlineData("GET", "/api/v1/identity/manage/info/")]
+    [InlineData("POST", "/api/v1/identity/manage/info/")]
+    public async Task The_frameworks_info_endpoint_is_refused_and_ours_answers(
+        string method, string path)
     {
         var admin = await SignInAsync(Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
         var response = method == "GET"
-            ? await admin.GetAsync("/api/v1/identity/manage/info")
-            : await admin.PostAsJsonAsync("/api/v1/identity/manage/info", new { });
+            ? await admin.GetAsync(path)
+            : await admin.PostAsJsonAsync(path, new { });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();

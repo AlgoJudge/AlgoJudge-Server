@@ -127,6 +127,14 @@ namespace AlgoJudge.Server.Lti.Services
         {
             var now = clock.GetUtcNow().UtcDateTime;
 
+            // **The claim is a reservation, not a spend.** It used to be written
+            // outside any transaction and before the two outbound calls below, so
+            // every refusal — a platform answering something malformed, most of
+            // all — burnt a single-use code that only a manager could reissue.
+            // Inside a transaction the row is still locked for the duration, so
+            // two platforms racing for one invitation is still one admission.
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
             // **Claimed by a conditional update, not by reading and writing.** Two
             // platforms arriving with the same address would otherwise both find
             // it unused, and one invitation would admit two.
@@ -170,6 +178,7 @@ namespace AlgoJudge.Server.Lti.Services
 
             invitation.PlatformId = platform.Id;
             await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
 
             logger.LogInformation(
                 "A platform registered itself dynamically: {Issuer}, invited by {User}",
@@ -177,6 +186,48 @@ namespace AlgoJudge.Server.Lti.Services
 
             return new RegistrationOutcome(configuration.ProductName, configuration.Issuer, platform.Id);
         }
+
+        /// <summary>
+        /// Parses a body the platform controls, refusing anything that is not a
+        /// JSON object.
+        /// <para>
+        /// <b>Both parse sites were bare.</b> A 200 carrying something that is
+        /// not JSON threw <see cref="JsonException"/>, and a root that parsed but
+        /// was not an object made the <c>TryGetProperty</c> below throw
+        /// <see cref="InvalidOperationException"/> — neither matches the
+        /// controller's catch filter, so a platform could turn its own malformed
+        /// answer into a 500 with a <c>problem+json</c> body, rendered inside an
+        /// iframe on an endpoint that declares itself <c>text/html</c>.
+        /// </para>
+        /// </summary>
+        private static JsonDocument ObjectOrRefuse(string body, string message, string code)
+        {
+            JsonDocument document;
+            try
+            {
+                document = JsonDocument.Parse(body);
+            }
+            catch (JsonException)
+            {
+                throw new ValidationException(message, code);
+            }
+
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                document.Dispose();
+                throw new ValidationException(message, code);
+            }
+
+            return document;
+        }
+
+        /// <summary>
+        /// Cuts a platform-controlled string down to something that can be a
+        /// display name. The same ceiling the refusal messages use.
+        /// </summary>
+        private static string Truncated(string value) =>
+            char.ToUpperInvariant(value[0])
+            + (value.Length > 64 ? value[1..64] : value[1..]);
 
         /// <summary>
         /// The platform's own description of itself, fetched from the address it
@@ -204,7 +255,10 @@ namespace AlgoJudge.Server.Lti.Services
                     "lti.registration.configuration");
             }
 
-            using var document = JsonDocument.Parse(body);
+            using var document = ObjectOrRefuse(
+                body,
+                "The platform's configuration was not a JSON object",
+                "lti.registration.configuration");
             var root = document.RootElement;
 
             string Text(string name) =>
@@ -217,10 +271,15 @@ namespace AlgoJudge.Server.Lti.Services
                 ? platform
                 : default;
 
+            // `{ Length: > 0 }` and not just `JsonValueKind.String`: an empty
+            // `product_family_code` is a string, so it passed the kind test and
+            // then indexed `product[0]` — an `IndexOutOfRangeException` on a
+            // platform-controlled field, thrown after the invitation was spent.
             var product = lti.ValueKind == JsonValueKind.Object
                     && lti.TryGetProperty("product_family_code", out var family)
                     && family.ValueKind == JsonValueKind.String
-                ? family.GetString()!
+                    && family.GetString()?.Trim() is { Length: > 0 } named
+                ? named
                 : "platform";
 
             var view = new PlatformConfigurationView
@@ -230,7 +289,7 @@ namespace AlgoJudge.Server.Lti.Services
                 AuthorizationEndpoint = Text("authorization_endpoint"),
                 JwksUri = Text("jwks_uri"),
                 RegistrationEndpoint = Text("registration_endpoint"),
-                ProductName = char.ToUpperInvariant(product[0]) + product[1..],
+                ProductName = Truncated(product),
             };
 
             if (view.Issuer.Length == 0 || view.RegistrationEndpoint.Length == 0
@@ -327,7 +386,10 @@ namespace AlgoJudge.Server.Lti.Services
                     "lti.registration.refused");
             }
 
-            using var document = JsonDocument.Parse(answer);
+            using var document = ObjectOrRefuse(
+                answer,
+                "The platform accepted the registration and answered with something that is not an object",
+                "lti.registration.refused");
             if (!document.RootElement.TryGetProperty("client_id", out var clientId)
                 || clientId.GetString() is not { Length: > 0 } id)
             {

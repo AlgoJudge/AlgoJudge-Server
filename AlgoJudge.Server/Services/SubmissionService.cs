@@ -34,7 +34,8 @@ namespace AlgoJudge.Server.Services
         ISeriesLockdown lockdown,
         IEventHub events,
         IEventAudience audience,
-        IRequestOrigin origin
+        IRequestOrigin origin,
+        ILogger<SubmissionService> log
     ) : ISubmissionService
     {
         public async Task<PageDto<SubmissionSummaryDto>> ListAsync(
@@ -267,9 +268,21 @@ namespace AlgoJudge.Server.Services
             // it from the request would make it forgeable.
             var group = await Contestant.GroupAsync(context, activity.Id, user.Id, ct);
 
+            // **One transaction around the whole write.** There was none, and two
+            // things needed one. The ceiling below has to hold its count and its
+            // insert together or it can be raced past; and `CommitAsync` saves the
+            // `Files` row itself, so any refusal after it used to leave a row
+            // pointing at bytes the controller had already discarded.
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
             var ceiling = assignment.MaxSubmissions ?? activity.MaxSubmissionsPerProblem;
             if (ceiling is { } limit)
             {
+                // Held for the rest of the transaction, so a second submission by
+                // this contestant waits here and is then refused on a count that
+                // includes the first. Only taken when there is a ceiling to spend.
+                await Contestant.LockAsync(context, user.Id, group, assignment.Id, ct);
+
                 // **The group spends one allowance, not one per member.** Two
                 // people in one group share the ceiling; the fourth attempt
                 // against a limit of three is refused whoever sends it.
@@ -366,7 +379,20 @@ namespace AlgoJudge.Server.Services
             });
 
             await context.SaveChangesAsync(ct);
-            await AnnounceAsync(submission.Id, ct);
+            await transaction.CommitAsync(ct);
+
+            // **After the commit, and it may not throw.** The controller
+            // compensates a throw out of here by discarding the staged bytes — of
+            // a submission that now exists. A lost announcement is a refetch,
+            // which is what the hub itself says it is; a lost blob is not.
+            try
+            {
+                await AnnounceAsync(submission.Id, ct);
+            }
+            catch (Exception e)
+            {
+                log.LogError(e, "Announcing submission {Submission} failed", submission.Id);
+            }
 
             var stored = await context.Submissions
                 .Include(s => s.SeriesProblem)!.ThenInclude(sp => sp!.Problem)

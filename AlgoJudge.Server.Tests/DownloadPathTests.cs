@@ -44,6 +44,123 @@ public class DownloadPathTests(ServerFixture server)
         return (client, stored.GetProperty("id").GetString()!, bytes);
     }
 
+    // ── what the response says the bytes are ────────────────────────────────
+
+    /// <summary>
+    /// Uploads with a declared type and, optionally, a name written into the
+    /// part's own <c>Content-Disposition</c> so a shape the helpers cannot make
+    /// can still be sent.
+    /// </summary>
+    private async Task<(HttpClient Client, string Id)> DeclaredAsync(
+        string mimeType, string? fileName, string? rawDisposition = null)
+    {
+        var client = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var bytes = Encoding.UTF8.GetBytes("<script>alert(1)</script>");
+
+        var part = new ByteArrayContent(bytes);
+        part.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
+        part.Headers.TryAddWithoutValidation(
+            "Content-Disposition",
+            rawDisposition ?? $"form-data; name=\"file\"; filename=\"{fileName}\"");
+
+        using var content = new MultipartFormDataContent
+        {
+            part,
+            { new StringContent(Sha256Of(bytes)), "sha256" },
+        };
+
+        var response = await client.PostAsync("/api/v1/files", content);
+        await Sign.Succeeded(response);
+        var stored = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return (client, stored.GetProperty("id").GetString()!);
+    }
+
+    /// <summary>
+    /// <b>The stored type is the uploader's own word for it</b> —
+    /// <c>CommitAsync</c> only replaces a blank one — and both download endpoints
+    /// used to hand it straight back. A file uploaded as <c>text/html</c> was
+    /// served as <c>text/html</c>, on the API origin, from an endpoint that is
+    /// anonymous for anything an instance document points at. The edge's
+    /// <c>nosniff</c> is no help when the type is declared rather than guessed.
+    /// </summary>
+    [Fact]
+    public async Task A_file_whose_type_is_not_one_we_render_is_served_as_bytes()
+    {
+        var (client, id) = await DeclaredAsync("text/html", "payload.html");
+
+        var response = await client.GetAsync($"/api/v1/files/{id}");
+        await Sign.Succeeded(response);
+
+        Assert.Equal("application/octet-stream", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
+    /// <summary>
+    /// <c>MultipartUpload.HasFile</c> accepts either <c>filename</c> or
+    /// <c>filename*</c>, but only the first was ever read — so a part carrying
+    /// just the encoded form was stored with an empty name, and MVC omits
+    /// <c>Content-Disposition</c> altogether when the download name is empty.
+    /// That is what turned a declared type into a rendered page.
+    /// </summary>
+    [Fact]
+    public async Task A_file_that_arrived_with_only_an_encoded_name_still_has_a_name()
+    {
+        var (client, id) = await DeclaredAsync(
+            "text/html",
+            fileName: null,
+            rawDisposition: "form-data; name=\"file\"; filename*=UTF-8''payload.html");
+
+        var response = await client.GetAsync($"/api/v1/files/{id}");
+        await Sign.Succeeded(response);
+
+        var disposition = response.Content.Headers.ContentDisposition;
+        Assert.NotNull(disposition);
+        Assert.Equal("attachment", disposition!.DispositionType);
+
+        // **The name itself, not merely that there is one.** `NameOrDefault`
+        // falls back to `{id}.bin`, so asserting non-emptiness passes just as
+        // well against a Server that never read `filename*` at all — which is
+        // the half of this fix that lives in `MultipartUpload`.
+        Assert.Equal("payload.html", disposition.FileName?.Trim('"'));
+    }
+
+    /// <summary>
+    /// A statement is read in an <c>&lt;object data&gt;</c>, and a browser
+    /// honours <c>attachment</c> even there — so the one type that has to be
+    /// shown in place says so.
+    /// </summary>
+    [Fact]
+    public async Task A_statement_that_is_a_pdf_is_shown_rather_than_offered()
+    {
+        var (client, id) = await DeclaredAsync("application/pdf", "statement.pdf");
+
+        var response = await client.GetAsync($"/api/v1/files/{id}");
+        await Sign.Succeeded(response);
+
+        Assert.Equal("application/pdf", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("inline", response.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
+    /// <summary>
+    /// <b>Both halves of the SVG answer are deliberate.</b> The type survives, so
+    /// an instance logo still renders in an <c>&lt;img&gt;</c> — which ignores
+    /// the disposition, and which <c>nosniff</c> would otherwise refuse if the
+    /// type were collapsed to bytes. And it is never <c>inline</c>, so a
+    /// top-level navigation to the same address downloads rather than running the
+    /// script an SVG may carry.
+    /// </summary>
+    [Fact]
+    public async Task A_mark_is_still_a_picture_and_still_not_a_page()
+    {
+        var (client, id) = await DeclaredAsync("image/svg+xml", "mark.svg");
+
+        var response = await client.GetAsync($"/api/v1/files/{id}");
+        await Sign.Succeeded(response);
+
+        Assert.Equal("image/svg+xml", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
     [Fact]
     public async Task A_caller_that_already_has_it_is_told_so()
     {

@@ -47,6 +47,7 @@ namespace AlgoJudge.Server.Controllers
         [HttpPut]
         [ProducesResponseType<SessionDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         public Task<SessionDto> Update([FromBody] ProfileInputDto input, CancellationToken ct) =>
             accounts.UpdateProfileAsync(input, ct);
 

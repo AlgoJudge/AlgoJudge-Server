@@ -52,5 +52,56 @@ namespace AlgoJudge.Server.Services
             groupId is { } group
                 ? submissions.Where(s => s.GroupId == group)
                 : submissions.Where(s => s.UserId == userId && s.GroupId == null);
+
+        /// <summary>
+        /// Ours, in PostgreSQL's one flat advisory-lock namespace. "AJSB", and
+        /// carrying no meaning beyond being ours — the same reasoning as
+        /// <c>Database/Schema.cs</c>'s migration lock.
+        /// </summary>
+        private const int LockNamespace = 0x414A_5342;
+
+        /// <summary>
+        /// Holds this contestant's allowance for the rest of the transaction, so
+        /// the count and the insert cannot be interleaved.
+        /// <para>
+        /// <b>The ceiling was a read-then-insert until 2026-08-31.</b> Two
+        /// submissions sent at once both counted the same number, both passed
+        /// <c>used &gt;= limit</c>, and both were written — a scoring-integrity
+        /// defect reachable with two parallel requests wherever a limit is set.
+        /// </para>
+        /// <para>
+        /// <b>Blocking, not <c>pg_try_</c>, and that is the opposite of the sweeps.</b>
+        /// <c>FileCollector</c> and <c>StorageMigrator</c> skip when somebody else
+        /// holds the lock, which is right because a sweep is idempotent and the
+        /// next one is a day away. Here the loser must wait and then be
+        /// <i>correctly refused</i>: skipping the wait is exactly the bug.
+        /// </para>
+        /// <para>
+        /// <b>Transaction-scoped, so it needs no unlock and no held connection.</b>
+        /// It does require an explicit transaction — outside one, every statement
+        /// is its own and the lock would be released before the count was read.
+        /// </para>
+        /// <para>
+        /// The key is the contestant, which is the group when there is one: a
+        /// group spends one allowance, so its members must take one lock.
+        /// Hashed rather than <c>GetHashCode</c>, which is randomised per process
+        /// and would have two Server instances taking different locks.
+        /// </para>
+        /// </summary>
+        public static Task LockAsync(
+            ApplicationDbContext context,
+            string userId,
+            Guid? groupId,
+            Guid assignmentId,
+            CancellationToken ct)
+        {
+            var key = BitConverter.ToInt32(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(
+                        $"{groupId?.ToString() ?? userId}|{assignmentId}")));
+
+            return context.Database.ExecuteSqlAsync(
+                $"SELECT pg_advisory_xact_lock({LockNamespace}, {key})", ct);
+        }
     }
 }

@@ -362,6 +362,112 @@ public class RunnerTests(ServerFixture server)
         await runner.ReportAsync(jobId, leaseToken);
     }
 
+    /// <summary>
+    /// <b>The attach is what opens the read.</b> <c>MayReadAsync</c> answers by
+    /// <see cref="FileReference"/>, and all three attach paths checked only that
+    /// the file <i>existed</i> — so an approved Runner could name any file id in
+    /// the installation, create the reference itself, and then fetch the bytes:
+    /// another activity's problem package, another participant's source.
+    /// </summary>
+    [Fact]
+    public async Task A_runner_cannot_attach_somebody_elses_file_to_its_own_job()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(5)\n");
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        // Somebody else's, and nothing points at it yet — the two-step publish
+        // window, where the bytes exist and only their uploader may read them.
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var theirs = await Build.UploadAsync(admin, "/api/v1/files", "secret.txt", "not the runner's\n");
+
+        var refused = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/files",
+            new { leaseToken, fileId = theirs, name = "stolen" });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("file.missing", problem.GetProperty("code").GetString());
+
+        // And the read the attach would have opened is still shut.
+        var fetched = await runner.Client.GetAsync($"/api/v1/runner/files/{theirs}");
+        Assert.Equal(HttpStatusCode.NotFound, fetched.StatusCode);
+
+        await runner.ReportAsync(jobId, leaseToken);
+    }
+
+    /// <summary>
+    /// The regression guard for the same predicate: a Runner's own upload must
+    /// still attach, or the fix has closed the path it exists to protect.
+    /// </summary>
+    [Fact]
+    public async Task A_runners_own_upload_still_attaches()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(6)\n");
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        var mine = await runner.UploadAsync("stderr.txt", "nothing to report\n");
+
+        var attached = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/files",
+            new { leaseToken, fileId = mine, name = "stderr" });
+        Assert.Equal(HttpStatusCode.NoContent, attached.StatusCode);
+
+        await using (var context = server.NewContext())
+        {
+            Assert.True(await context.FileReferences.AnyAsync(
+                r => r.FileId == Guid.Parse(mine) && r.EvaluationJobId == Guid.Parse(jobId)));
+        }
+
+        await runner.ReportAsync(jobId, leaseToken);
+    }
+
+    /// <summary>
+    /// The half a references-only check would have got wrong. A trial package is
+    /// uploaded by a person and carries <b>no</b> reference on purpose — that is
+    /// what lets it be collected once the trial is over (D-12). A Runner minting
+    /// the first reference on it would make it undeletable for ever.
+    /// </summary>
+    [Fact]
+    public async Task A_trial_package_cannot_be_claimed_by_a_runner_as_its_own_output()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(7)\n");
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var package = await Build.UploadAsync(admin, "/api/v1/files", "trial.zip", "a package\n");
+
+        var refused = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/files",
+            new { leaseToken, fileId = package, name = "package" });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+
+        await using (var context = server.NewContext())
+        {
+            Assert.False(await context.FileReferences.AnyAsync(r => r.FileId == Guid.Parse(package)));
+        }
+
+        await runner.ReportAsync(jobId, leaseToken);
+    }
+
     [Fact]
     public async Task Cancelling_an_attempt_stops_the_runner_reporting_on_it()
     {

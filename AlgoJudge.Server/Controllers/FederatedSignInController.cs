@@ -93,9 +93,10 @@ namespace AlgoJudge.Server.Controllers
             // because this action, the one that writes that log, never ran.
             var landing = Url.Action(nameof(Complete), new { slug, returnUrl = target })!;
 
-            return Challenge(
-                new AuthenticationProperties { RedirectUri = landing },
-                FederatedSchemes.For(slug));
+            var properties = new AuthenticationProperties { RedirectUri = landing };
+            FederatedSchemes.Mark(properties, slug);
+
+            return Challenge(properties, FederatedSchemes.For(slug));
         }
 
         /// <summary>
@@ -116,16 +117,30 @@ namespace AlgoJudge.Server.Controllers
             if (registry.Find(slug) is not { } provider) throw new NotFoundException("Identity provider");
 
             var ticket = await HttpContext.AuthenticateAsync(IdentityConstants.ExternalScheme);
+
+            // The external cookie has done its job whatever happens below, and
+            // leaving one behind would let a later request be mistaken for a
+            // fresh ticket. **Signed out here rather than after the sign-in, so
+            // that it covers the refusals too** — it used to be reached only by
+            // the paths that got as far as asking the provider service.
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
             if (!ticket.Succeeded || ticket.Principal is null)
             {
                 return Refused(slug, "provider.ticket.missing");
             }
 
-            var outcome = await federated.CompleteAsync(provider.Id, ticket.Principal, ct);
+            // **The ticket has to be the one this address asked for.** One shared
+            // external cookie plus a provider read out of the route means an
+            // unchecked callback will apply this provider's claim mapping to
+            // whatever principal happens to be in the cookie.
+            if (FederatedSchemes.SlugOn(ticket.Properties) is not { } issued
+                || !string.Equals(issued, slug, StringComparison.Ordinal))
+            {
+                return Refused(slug, "provider.ticket.mismatch");
+            }
 
-            // The external cookie has done its job either way, and leaving one
-            // behind would let a later request be mistaken for a fresh ticket.
-            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            var outcome = await federated.CompleteAsync(provider.Id, ticket.Principal, ct);
 
             if (!outcome.Admitted || outcome.User is null)
             {

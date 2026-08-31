@@ -592,7 +592,7 @@ namespace AlgoJudge.Server.Services
             foreach (var attachment in report.Files ?? [])
             {
                 if (!Guid.TryParse(attachment.FileId, out var fileId)) continue;
-                if (!await context.Files.AnyAsync(f => f.Id == fileId, ct)) continue;
+                if (!await IsRunnerOutputAsync(fileId, ct)) continue;
 
                 context.FileReferences.Add(new FileReference
                 {
@@ -816,6 +816,30 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
+        /// Whether this file is something a Runner uploaded and nothing owns yet
+        /// — the only kind of file a Runner may name in an attachment.
+        /// <para>
+        /// <b>The three attach paths checked that the file existed, and nothing
+        /// else.</b> Since this answers by reference and an attachment
+        /// <i>creates</i> the reference, an approved Runner could name any file
+        /// id in the installation and then read the bytes: another activity's
+        /// problem package, another participant's <c>source</c>.
+        /// </para>
+        /// <para>
+        /// <b>Both halves are load-bearing.</b> A Runner uploads with no
+        /// principal, so <see cref="DbFile.UploadedByUserId"/> is null — but so
+        /// is a seeder's or a pre-configuration's, which is why the absence of a
+        /// reference is asked for too. And a reference test on its own would let
+        /// a Runner mint the <i>first</i> reference on a trial package, which is
+        /// uploaded by a person and deliberately carries none; that reference
+        /// would then stop the package ever being collected.
+        /// </para>
+        /// </summary>
+        private async Task<bool> IsRunnerOutputAsync(Guid fileId, CancellationToken ct) =>
+            await context.Files.AnyAsync(f => f.Id == fileId && f.UploadedByUserId == null, ct)
+            && !await context.FileReferences.AnyAsync(r => r.FileId == fileId, ct);
+
+        /// <summary>
         /// A Runner reads what the jobs it is <b>currently holding</b> need, and
         /// nothing else.
         /// <para>
@@ -823,6 +847,10 @@ namespace AlgoJudge.Server.Services
         /// any approved Runner could fetch every test package in the
         /// installation by asking for file ids — and the packages are the
         /// problems.
+        /// </para>
+        /// <para>
+        /// It answers by <see cref="FileReference"/>, so what a Runner may attach
+        /// decides what it may read. See <see cref="IsRunnerOutputAsync"/>.
         /// </para>
         /// </summary>
         public async Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct)
@@ -862,7 +890,7 @@ namespace AlgoJudge.Server.Services
         public async Task AttachToSelfAsync(
             DbRunner runner, Guid fileId, string name, CancellationToken ct)
         {
-            if (!await context.Files.AnyAsync(f => f.Id == fileId, ct))
+            if (!await IsRunnerOutputAsync(fileId, ct))
             {
                 throw new ValidationException("That file is not stored", "file.missing");
             }
@@ -899,17 +927,23 @@ namespace AlgoJudge.Server.Services
         {
             var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
 
-            if (!await context.Files.AnyAsync(f => f.Id == fileId, ct))
-            {
-                throw new ValidationException("That file is not stored", "file.missing");
-            }
-
+            // **The duplicate name is asked about first**, and the order matters:
+            // attaching the same file twice under the same name is a Runner
+            // repeating itself, and it must keep saying so. The check below would
+            // otherwise answer it — the first attachment is what gives the file
+            // the reference that check refuses — and a Runner would be told its
+            // own log did not exist.
             var already = await context.FileReferences
                 .AnyAsync(r => r.EvaluationJobId == job.Id && r.Name == name, ct);
             if (already)
             {
                 throw new ConflictException(
                     $"This attempt already has a file called {name}", "attempt.file.duplicate");
+            }
+
+            if (!await IsRunnerOutputAsync(fileId, ct))
+            {
+                throw new ValidationException("That file is not stored", "file.missing");
             }
 
             context.FileReferences.Add(new FileReference

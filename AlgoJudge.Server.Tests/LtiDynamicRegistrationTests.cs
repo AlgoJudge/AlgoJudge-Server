@@ -269,6 +269,110 @@ public class LtiDynamicRegistrationTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
     }
 
+    // ── What a malformed answer may do to the page ──────────────────────────
+
+    /// <summary>
+    /// <b>Three platform-controlled answers used to reach the global handler.</b>
+    /// An empty <c>product_family_code</c> indexed the first character of nothing;
+    /// a 200 carrying something that was not JSON, or was JSON but not an object,
+    /// threw out of <c>JsonDocument.Parse</c> and <c>TryGetProperty</c>. None of
+    /// them matched the controller's catch filter, so each answered
+    /// <c>problem+json</c> with a 500 — inside the platform's own iframe, on an
+    /// endpoint that declares itself <c>text/html</c>, with the close message
+    /// never sent. The person standing in the platform's admin screen saw a raw
+    /// error document and had no idea what to do with it.
+    /// </summary>
+    [Theory]
+    [InlineData("configuration that is not json")]
+    [InlineData("configuration that is not an object")]
+    [InlineData("registration answer that is not json")]
+    [InlineData("registration answer that is not an object")]
+    public async Task A_malformed_platform_answer_is_still_answered_with_a_page(string shape)
+    {
+        var (host, registry, manager) = await BuildAsync();
+
+        switch (shape)
+        {
+            case "configuration that is not json": registry.ConfigurationBody = "not json at all"; break;
+            case "configuration that is not an object": registry.ConfigurationBody = "[]"; break;
+            case "registration answer that is not json": registry.RegistrationBody = "<html>no</html>"; break;
+            case "registration answer that is not an object": registry.RegistrationBody = "true"; break;
+        }
+
+        var invitation = await InviteAsync(manager, "a platform with something to say");
+        var page = await RegisterAsync(host, invitation);
+
+        // A page, and nothing that belongs to an API. Printed rather than
+        // asserted plainly, for the reason the first test in this file gives.
+        Assert.True(page.Contains("did not work"), page);
+        Assert.DoesNotContain("application/problem+json", page);
+        Assert.DoesNotContain("\"status\"", page);
+
+        // **And a reason, which is what says the guard ran.** There is a broad
+        // catch behind these, so a page appears either way — but it can only say
+        // "something went wrong", because an exception nobody expected is not a
+        // message to hand a stranger. Reaching that catch means the specific
+        // guard did not fire, and the person in the platform's admin screen is
+        // told nothing they can act on.
+        Assert.DoesNotContain("Something went wrong at the AlgoJudge end", page);
+
+        // And it did not tell the platform to close a registration that never
+        // happened.
+        Assert.DoesNotContain("org.imsglobal.lti.close", page);
+    }
+
+    /// <summary>
+    /// An empty <c>product_family_code</c> is the one that <b>crashed</b>: it is
+    /// a JSON string, so it passed the kind test and then indexed
+    /// <c>product[0]</c>. It is not a refusal — a platform that will not say what
+    /// it is called is still a platform — so what it must do now is register,
+    /// under the fallback name.
+    /// </summary>
+    [Fact]
+    public async Task A_platform_that_will_not_name_itself_still_registers()
+    {
+        var (host, registry, manager) = await BuildAsync();
+        registry.ProductFamilyCode = "";
+
+        var invitation = await InviteAsync(manager, "a platform with no name for itself");
+        var page = await RegisterAsync(host, invitation);
+
+        Assert.True(page.Contains("registered"), page);
+
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LtiDbContext>();
+        var platform = await db.Platforms.FirstAsync(p => p.Issuer == FakePlatformRegistry.Issuer);
+        Assert.Equal("Platform", platform.DisplayName);
+    }
+
+    /// <summary>
+    /// The invitation is single-use and only a manager can mint another, so a
+    /// refusal that spends one leaves the platform's administrator stuck. It was
+    /// claimed by an <c>ExecuteUpdateAsync</c> outside any transaction, before
+    /// either outbound call — so every one of the failures above burnt a code.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_does_not_spend_the_invitation()
+    {
+        var (host, registry, manager) = await BuildAsync();
+
+        var invitation = await InviteAsync(manager, "a platform that gets it wrong first");
+
+        registry.ConfigurationBody = "not json at all";
+        var refused = await RegisterAsync(host, invitation);
+        Assert.True(refused.Contains("did not work"), refused);
+
+        // The same code, once the platform is answering properly.
+        registry.ConfigurationBody = null;
+        var page = await RegisterAsync(host, invitation);
+
+        Assert.True(page.Contains("registered"), page);
+
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LtiDbContext>();
+        Assert.True(await db.Platforms.AnyAsync(p => p.Issuer == FakePlatformRegistry.Issuer));
+    }
+
     // ── Getting there ────────────────────────────────────────────────────────
 
     private async Task<(WebApplicationFactory<Program> Host, FakePlatformRegistry Registry, HttpClient Manager)>
