@@ -261,17 +261,29 @@ namespace AlgoJudge.Server.Lti.Services
                 }
             }
 
+            // **The issuer is in this list now**, and it was in none: it was
+            // checked for being present and never for being a URL at all, while
+            // the three below were checked for a scheme but accepted plain
+            // `http` anywhere. `IdentityProviderService` has required
+            // "https, except on loopback" of its own issuer since it was
+            // written — one rule, two places, and this was the loose one.
+            //
+            // It is the specification's rule rather than a preference: OpenID
+            // Connect Discovery requires an issuer to be an `https` URL and the
+            // LTI 1.3 security framework requires TLS throughout. A platform
+            // reached over plain HTTP is one whose launches anybody on the path
+            // can rewrite, and its key set is what decides whose token is real.
             foreach (var (url, name) in new[]
             {
-                (input.KeySetUrl, "keySetUrl"), (input.AuthTokenUrl, "authTokenUrl"),
-                (input.AuthLoginUrl, "authLoginUrl"),
+                (input.Issuer, "issuer"), (input.KeySetUrl, "keySetUrl"),
+                (input.AuthTokenUrl, "authTokenUrl"), (input.AuthLoginUrl, "authLoginUrl"),
             })
             {
-                if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var parsed)
-                    || (parsed.Scheme != Uri.UriSchemeHttps && parsed.Scheme != Uri.UriSchemeHttp))
+                if (!SecureUrl.IsHttpsOrLoopback(url))
                 {
                     throw new ValidationException(
-                        $"{name} must be an absolute http or https URL", $"lti.platform.{name}.invalid");
+                        $"{name} must be an absolute https URL, or http on loopback",
+                        $"lti.platform.{name}.invalid");
                 }
             }
 

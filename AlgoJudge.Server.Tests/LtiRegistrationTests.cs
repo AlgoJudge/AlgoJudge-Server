@@ -192,6 +192,72 @@ public class LtiRegistrationTests(ServerFixture server)
             (await admin.PostAsJsonAsync("/api/v1/lti/platforms", body)).StatusCode);
     }
 
+    /// <summary>
+    /// <b>The same rule identity providers have had since they were written.</b>
+    /// A platform accepted plain <c>http</c> anywhere, and its issuer was checked
+    /// for being present and never for being a URL at all — while
+    /// <c>IdentityProviderService</c> next door required "https, except on
+    /// loopback" of its own. One rule in two places, and this was the loose one.
+    /// <para>
+    /// It is the specification's, not a preference: a platform reached over plain
+    /// HTTP is one whose launches anybody on the path can rewrite, and its key
+    /// set is what decides whose token is real.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("issuer")]
+    [InlineData("keySetUrl")]
+    [InlineData("authTokenUrl")]
+    [InlineData("authLoginUrl")]
+    public async Task A_platforms_addresses_are_https_or_loopback(string field)
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        const string plain = "http://moodle.algojudge.invalid/mod/lti/certs.php";
+
+        var body = new
+        {
+            displayName = "Plain " + field,
+            issuer = field == "issuer" ? plain : "https://moodle.algojudge.invalid",
+            clientId = Guid.NewGuid().ToString("N"),
+            deploymentId = Guid.NewGuid().ToString("N"),
+            keySetUrl = field == "keySetUrl" ? plain : "https://moodle.algojudge.invalid/mod/lti/certs.php",
+            authTokenUrl = field == "authTokenUrl" ? plain : "https://moodle.algojudge.invalid/mod/lti/token.php",
+            authLoginUrl = field == "authLoginUrl" ? plain : "https://moodle.algojudge.invalid/mod/lti/auth.php",
+            isIdentityAuthority = false,
+            identityNamespace = (string?)null,
+        };
+
+        var refused = await admin.PostAsJsonAsync("/api/v1/lti/platforms", body);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Contains($"lti.platform.{field}.invalid", await refused.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// And the exemption that makes a development stack registrable: the
+    /// reference Moodle is served on <c>http://localhost:8451</c>.
+    /// </summary>
+    [Fact]
+    public async Task A_platform_on_loopback_may_still_be_plain_http()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var accepted = await admin.PostAsJsonAsync("/api/v1/lti/platforms", new
+        {
+            displayName = "Reference Moodle",
+            issuer = "http://localhost:8451",
+            clientId = Guid.NewGuid().ToString("N"),
+            deploymentId = Guid.NewGuid().ToString("N"),
+            keySetUrl = "http://localhost:8451/mod/lti/certs.php",
+            authTokenUrl = "http://localhost:8451/mod/lti/token.php",
+            authLoginUrl = "http://localhost:8451/mod/lti/auth.php",
+            isIdentityAuthority = false,
+            identityNamespace = (string?)null,
+        });
+
+        await Sign.Succeeded(accepted);
+    }
+
     [Fact]
     public async Task Registration_tells_an_operator_to_send_the_username()
     {
