@@ -766,10 +766,11 @@ controller, table or conditional.
 
 - [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client) — the web frontend
 - [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner) — isolated execution and evaluation
-- [AlgoJudge-Runner-UVa](https://github.com/AlgoJudge/AlgoJudge-Runner-UVa) — a **second Runner implementation**, which
-  judges nothing: it forwards `uva@1` submissions to `onlinejudge.org` and
-  reports the archive's verdict. It registers, claims and reports over the same
-  contract as the first, which is the point of the contract
+- [AlgoJudge-External-Runner](https://github.com/AlgoJudge/AlgoJudge-External-Runner) — a **second Runner implementation**, which
+  judges nothing: it forwards submissions to external judging systems and
+  reports their verdicts, with UVa Online Judge as its one integration, serving
+  `uva@1` against `onlinejudge.org`. It registers, claims and reports over the
+  same contract as the first, which is the point of the contract
 - `AlgoJudge-Ops` (private) — the self-hosted production Compose stack, and the
   update, backup and restore scripts around it. No application code, no build:
   every image is pulled from GHCR by tag
