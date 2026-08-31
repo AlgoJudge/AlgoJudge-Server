@@ -575,6 +575,8 @@ namespace AlgoJudge.Server.Services
             }
 
             CheckMaxPoints(input.MaxPoints);
+            SubmissionLimits.Check(
+                input.MaxUploadBytes, input.MaxAttachments, input.MaxSubmissions, "assignment");
 
             var order = await context.SeriesProblems.CountAsync(sp => sp.SeriesId == seriesId, ct) + 1;
 

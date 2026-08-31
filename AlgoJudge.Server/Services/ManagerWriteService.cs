@@ -156,6 +156,8 @@ namespace AlgoJudge.Server.Services
             if (input.HideEndedSeriesProblems is { } hide) activity.HideEndedSeriesProblems = hide;
             if (input.ShowGroupMembers is { } roster) activity.ShowGroupMembers = roster;
             if (input.Props is not null) activity.Props = Opaque.Store(input.Props, "props");
+            SubmissionLimits.Check(
+                input.MaxUploadBytes, input.MaxAttachments, input.MaxSubmissionsPerProblem, "activity");
             if (input.MaxUploadBytes is { } upload) activity.MaxUploadBytes = upload;
             if (input.MaxAttachments is { } attachments) activity.MaxAttachments = attachments;
             activity.MaxSubmissionsPerProblem = input.MaxSubmissionsPerProblem;
@@ -523,6 +525,8 @@ namespace AlgoJudge.Server.Services
 
             assignment.Name = input.Name;
             CheckMaxPoints(input.MaxPoints);
+            SubmissionLimits.Check(
+                input.MaxUploadBytes, input.MaxAttachments, input.MaxSubmissions, "assignment");
             assignment.MaxPoints = input.MaxPoints;
             assignment.MaxUploadBytes = input.MaxUploadBytes;
             assignment.MaxAttachments = input.MaxAttachments;
