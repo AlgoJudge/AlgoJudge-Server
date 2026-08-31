@@ -68,8 +68,18 @@ namespace AlgoJudge.Server.Lti
 
             // Short: a person is watching a spinner in an iframe on somebody
             // else's site while this runs.
+            //
+            // **The one client here whose address is chosen by a stranger.** Every
+            // other call in this module goes to a platform an administrator wrote
+            // out; this one goes wherever the `openid_configuration` query
+            // parameter says. So it is the one that carries the connect guard —
+            // widened to the operator's own network, because a paired Moodle is
+            // routinely on it, and still closed to cloud metadata and to this
+            // Server's own loopback.
             services.AddHttpClient(nameof(Services.DynamicRegistrationService),
-                http => http.Timeout = TimeSpan.FromSeconds(20));
+                    http => http.Timeout = TimeSpan.FromSeconds(20))
+                .ConfigurePrimaryHttpMessageHandler(
+                    () => Utils.GuardedHttp.Handler(Utils.PublicAddress.IsPublicOrPrivateNetwork));
 
             // **A singleton, because the cache is the point.** A per-request
             // instance would fetch every platform's key set on every launch.

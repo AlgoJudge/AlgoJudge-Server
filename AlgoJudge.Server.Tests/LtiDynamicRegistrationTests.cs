@@ -373,6 +373,42 @@ public class LtiDynamicRegistrationTests(ServerFixture server)
         Assert.True(await db.Platforms.AnyAsync(p => p.Issuer == FakePlatformRegistry.Issuer));
     }
 
+    // ── Where this Server is willing to be sent ─────────────────────────────
+
+    /// <summary>
+    /// <b>The address is chosen by whoever holds the invitation</b>, which is the
+    /// only endpoint in this module where that is true — every other call goes to
+    /// a platform an administrator wrote out. So the scheme is the specification's
+    /// rather than a preference: OpenID Connect Discovery requires an <c>https</c>
+    /// issuer and LTI 1.3 requires TLS throughout, and over plain HTTP whoever
+    /// answers first decides who your users are and where a bearer token goes.
+    /// </summary>
+    [Theory]
+    [InlineData("http://platform.invalid/mod/lti/openid-configuration.php")]
+    [InlineData("https://platform.invalid@evil.invalid/openid-configuration.php")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("not a url at all")]
+    public async Task An_address_this_server_will_not_fetch_is_refused(string configurationUrl)
+    {
+        var (host, _, manager) = await BuildAsync();
+
+        var invitation = await InviteAsync(manager, "a platform pointing somewhere odd");
+        var page = await RegisterAsync(host, invitation, configurationUrl: configurationUrl);
+
+        Assert.True(page.Contains("did not work"), page);
+        Assert.DoesNotContain("org.imsglobal.lti.close", page);
+
+        // **The reason, not merely a refusal.** Asserting "did not work" alone
+        // passes just as happily when the address was dialled and answered 404 —
+        // which is what the fake does for anything it does not recognise. Only
+        // this message says the address was rejected before anything was dialled.
+        Assert.True(page.Contains("no usable configuration address"), page);
+
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LtiDbContext>();
+        Assert.False(await db.Platforms.AnyAsync(p => p.Issuer == FakePlatformRegistry.Issuer));
+    }
+
     // ── Getting there ────────────────────────────────────────────────────────
 
     private async Task<(WebApplicationFactory<Program> Host, FakePlatformRegistry Registry, HttpClient Manager)>
@@ -421,12 +457,16 @@ public class LtiDynamicRegistrationTests(ServerFixture server)
     }
 
     private static async Task<string> RegisterAsync(
-        WebApplicationFactory<Program> host, string code, string? token = "registration-token")
+        WebApplicationFactory<Program> host,
+        string code,
+        string? token = "registration-token",
+        string? configurationUrl = null)
     {
         var anonymous = host.CreateClient();
         var response = await anonymous.GetAsync(
             $"/api/v1/lti/register?code={Uri.EscapeDataString(code)}"
-            + $"&openid_configuration={Uri.EscapeDataString(FakePlatformRegistry.ConfigurationUrl)}"
+            + "&openid_configuration="
+            + Uri.EscapeDataString(configurationUrl ?? FakePlatformRegistry.ConfigurationUrl)
             + (token is null ? "" : $"&registration_token={Uri.EscapeDataString(token)}"));
 
         return await response.Content.ReadAsStringAsync();

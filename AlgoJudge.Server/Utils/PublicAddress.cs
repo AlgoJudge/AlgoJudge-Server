@@ -49,6 +49,65 @@ namespace AlgoJudge.Server.Utils
             };
         }
 
+        /// <summary>
+        /// Whether this Server may open a connection to it, <b>counting the
+        /// operator's own network as somewhere a service legitimately lives</b>.
+        /// <para>
+        /// <see cref="IsPublic"/> is the right rule for fetching a statement off
+        /// the internet. It is the wrong one for reaching a platform an
+        /// installation is deliberately paired with: a university runs its Moodle
+        /// and its AlgoJudge on one private network, and so does this project's
+        /// own reference stack — so refusing <c>10/8</c> there refuses the
+        /// ordinary deployment while protecting nothing.
+        /// </para>
+        /// <para>
+        /// <b>What stays refused is what no platform is ever at.</b>
+        /// <c>169.254.0.0/16</c> is where every major cloud answers instance
+        /// credentials; <c>127.0.0.0/8</c> is where this Server's own operator
+        /// surface deliberately lives; carrier NAT, multicast, and the reserved
+        /// and documentation ranges host nobody's Moodle. Widening to a private
+        /// network is not the same as widening to everything, and this is the
+        /// line between them.
+        /// </para>
+        /// </summary>
+        public static bool IsPublicOrPrivateNetwork(IPAddress address)
+        {
+            if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+
+            return IsPublic(address) || IsPrivateNetwork(address);
+        }
+
+        /// <summary>
+        /// The three RFC 1918 ranges and IPv6's unique local addresses, and
+        /// nothing else — in particular not loopback and not link-local.
+        /// </summary>
+        private static bool IsPrivateNetwork(IPAddress address)
+        {
+            if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+
+            if (address.AddressFamily == AddressFamily.InterNetwork)
+            {
+                var b = address.GetAddressBytes();
+
+                return b[0] switch
+                {
+                    10 => true,
+                    172 when b[1] >= 16 && b[1] <= 31 => true,
+                    192 when b[1] == 168 => true,
+                    _ => false,
+                };
+            }
+
+            if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                // fc00::/7, and site-local fec0::/10 which is deprecated but
+                // still what some estates number with.
+                return (address.GetAddressBytes()[0] & 0xFE) == 0xFC || address.IsIPv6SiteLocal;
+            }
+
+            return false;
+        }
+
         private static bool IsPublicV4(IPAddress address)
         {
             var b = address.GetAddressBytes();
