@@ -11,43 +11,31 @@ results, and moves data between the Client and the Runners. It never compiles or
 executes submitted code, and it holds no knowledge of what a particular problem
 type means.
 
-The domain term is **`Problem`**, never `Task` — renamed 2026-08-03, and the code
-always used `Problem`; only the documentation lagged.
+The domain term is **`Problem`**, never `Task`.
 
-## Status
-
-> **Rewritten 2026-08-10.** Everything this section said had stopped being true:
-> it described three endpoints, one migration named `20240130140424_InitialCreate`
-> that no longer exists, and listed as "not implemented" the WebSocket, the
-> Runner registry, job reservation, file upload and result payloads — all of
-> which ship. It also said authorization only checks that a request is
-> authenticated, which is the most misleading thing a README can be wrong about.
-> The state below was read off the code and the test run on 2026-08-10, and
-> the counts were re-read on 2026-08-13 after file storage became a choice.
-
-`Verified fact` — `main`, inspected 2026-08-10; every count in it re-read
-2026-08-30, and five of the rows had drifted.
+## What it does
 
 | Area | State |
 |---|---|
-| API | **160 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity`. This line said 132 until 2026-08-27, 153 until 2026-08-28 and 155 until 2026-08-30; it is a count, so it drifts unless somebody runs it — and the command it comes from is written down below the table, which it was not until 2026-08-30 |
+| API | **160 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity` |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
-| Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass. This line said 48 until 2026-08-30 |
+| Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
-| Background work | **eight hosted services** in `Program.cs`: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the merge sweeper, the address sweeper, the file collector, the storage migrator. The LTI module registers a ninth, the grade synchroniser. This line said **six** until 2026-08-30 and had been wrong since 2026-08-23, when the address sweeper landed, and more so from 2026-08-24 with the merge sweeper |
-| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage`, `/admin/keyring` and `/admin/config` behind loopback and a token. `/admin/config` is not new — it arrived with pre-configuration on 2026-08-28 — but this row did not name it until 2026-08-30 |
-| Schema | **two migrations in the main context and one in the LTI one.** Thirty-one and seven were squashed to `InitialCreate` and `LtiInitialCreate` on 2026-08-28, before 0.1.0; `InstanceThemeFiles` was added on 2026-08-30. This line said 13 until 2026-08-24, 29 until the squash and **one per context** until 2026-08-30, and had been wrong for most of the twenties |
+| Identity | several OIDC providers registered at once from the database, first-sign-in provisioning, and a claim-to-permission mapping the installation configures |
+| LTI | grade synchronisation, roster and deep linking |
+| Background work | **nine hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the merge sweeper, the address sweeper, the file collector, the storage migrator, and the LTI module's grade synchroniser |
+| Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage`, `/admin/keyring` and `/admin/config` behind loopback and a token |
+| Schema | **two migrations in the main context and one in the LTI one** |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 
-**Thirty-two `DbSet`s** on top of `IdentityDbContext<User>` — this said
-twenty-seven until 2026-08-30. The main ones: `Activity`, `Series`,
-`SeriesProblem`, `Problem`, `ProblemVersion`, `Submission`, `EvaluationJob`,
-`Trial`, `Result`, `Runner`, `Question`, `File`, `Grant`, `PermissionTemplate`,
-`Instance`, `MaintenanceState`, `UserSession`, `StorageMigration`.
+**Thirty-two `DbSet`s** on top of `IdentityDbContext<User>`. The main ones:
+`Activity`, `Series`, `SeriesProblem`, `Problem`, `ProblemVersion`,
+`Submission`, `EvaluationJob`, `Trial`, `Result`, `Runner`, `Question`, `File`,
+`Grant`, `PermissionTemplate`, `Instance`, `MaintenanceState`, `UserSession`,
+`StorageMigration`.
 
-**Three of those numbers are commands**, written down here on 2026-08-30 so that
-the next person can re-read them rather than trust the date beside them:
+**Three of those numbers are commands**, so read them rather than trust them:
 
 ```sh
 grep -rhoE '^ +\[Http[A-Za-z]+' AlgoJudge.Server/Controllers | wc -l         # 160
@@ -57,9 +45,9 @@ grep -c 'public DbSet<' AlgoJudge.Server/Database/ApplicationDbContext.cs    # 3
 
 The permission catalogue is written down in three repositories — here, the
 Client's fake, and `docs/specs/PERMISSIONS.md` — and
-`scripts/check-permissions.py` in the workspace is what compares all three. The
-Server is the source of truth; the grep above reads it directly, so the two
-agree by construction rather than by luck.
+`scripts/check-permissions.py` in the workspace compares all three. The Server is
+the source of truth; the grep above reads it directly, so the two agree by
+construction rather than by luck.
 
 Every identifier is a **UUIDv7**, except `User`, which keeps Identity's string
 key. The reason for version 7 is under *Decisions in force*.
@@ -68,17 +56,7 @@ key. The reason for version 7 is under *Decisions in force*.
 `Extra`; the per-test table and the compiler log are **attachments**, reached by
 id like every other stored document, rather than fields on the row.
 
-### What is genuinely not here
-
-> **Two entries left this list on 2026-08-29, having been wrong for some time.**
-> It said identity phase 2 was *"not built"* and that LTI was *"a later
-> direction"*. Measured against the committed `openapi.json` that day, the Server
-> serves **15** identity and provider paths — registering providers from the
-> database, the challenge and its return, first-sign-in provisioning, a
-> claim-to-permission mapping per provider, and a provider-initiated deletion
-> channel — and **22** LTI paths, with grade synchronisation, roster and deep
-> linking behind them. `SessionDto.IsLocal` is derived from whether the account
-> has a password, not hard-coded.
+### Not implemented
 
 - **Mail.** There is no sender, so password reset and confirmation resend do not
   exist. They are **refused rather than absent**: `MapIdentityApi` maps them
@@ -105,12 +83,10 @@ id like every other stored document, rather than fields on the row.
   temporary accounts, permanently. ASP.NET Identity and password storage remain.
   Phase 2 was never a move but an *addition*, and it is **built**: several OIDC
   providers registered at once, from the database, with a claim-to-permission
-  mapping the installation configures. Specified 2026-08-09,
+  mapping the installation configures. The specification is
   `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md` — **read its
   two amendment tables first**, because the body of an amended section still
-  states the pre-amendment form. This line said "not yet implemented" until
-  2026-08-29, by which time both identity deployments had been running against
-  it.
+  states the pre-amendment form.
 - ~~**`EvaluationJob` is deferred as an entity.** The Runner linkage will live on
   `Result`, which is created at claim time and doubles as the job record.~~
   **Reversed — it is an entity.** `EvaluationJob` carries the attempt number, the
@@ -121,9 +97,8 @@ id like every other stored document, rather than fields on the row.
 - ~~**All identifiers become string UUIDs.** The entities still use `int` keys;
   that migration is outstanding.~~ **Done.** Every entity carries a `Guid` from
   `Utils/Uuid.cs`, and specifically a **version 7** one: time-ordered, so inserts
-  append to the index instead of fragmenting it. The layout was written out by
-  hand until the move to .NET 10 on 2026-08-29; `Uuid.New()` now calls
-  `Guid.CreateVersion7()` and the wrapper stays, so the choice of v7 keeps one
+  append to the index instead of fragmenting it. `Uuid.New()` calls
+  `Guid.CreateVersion7()`, and the wrapper stays so the choice of v7 keeps one
   place to live. `User` keeps Identity's own string key.
 - `Activity.Type` is the type discriminator, formatted `name@version`. Adding a
   problem or activity type must not require a change here.
@@ -254,15 +229,15 @@ AJ_UvaExplorer__Origin=https://uvaexplorer.example   # optional; defaults to the
 ```
 
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
-deadline at all** — measured 2026-08-23, an unassigned `AmazonS3Config` carries a
-`Timeout` of twenty-four days — and this Server holds a gate across its S3 calls
+deadline at all** — an unassigned `AmazonS3Config` carries a `Timeout` of
+twenty-four days — and this Server holds a gate across its S3 calls
 while it checks the bucket, so one unanswered request would have queued every
 upload in the installation behind it with no end. Ten minutes is generous
 against the 128 MiB ceiling on a single write; lower it only where the link is
 known.
 
-**The access key stored for `uvaexplorer` is never handed to a browser** (since
-2026-08-26). An administrator sets the long-lived `uexpl_…` key in the instance
+**The access key stored for `uvaexplorer` is never handed to a browser.** An
+administrator sets the long-lived `uexpl_…` key in the instance
 settings; when a manager opens the problem picker, this Server exchanges it at
 `{UvaExplorer:Origin}/api/access/token` for an hourly `uexplt_…` token and sends
 only that. The picker puts whatever it is given into an iframe address, which is
@@ -270,12 +245,9 @@ why the exchange exists. **A failed exchange is a refusal, never a fallback to
 the stored key** — and an installation holding no key at all gets a 404, which
 the Client reads as "browse the public archive".
 
-**`Forwarded__KnownProxies` is required and has no default.** Until 2026-08-23
-the Server trusted `X-Forwarded-For` from whoever sent it, which is not "no
-proxies" — it is no checking. That was a log line's problem until the address
-became something a judge is shown and asked whether a solution came from the
-examination room: a participant who can reach this Server past the proxy states
-their own address, and the audit then *exonerates* them.
+**`Forwarded__KnownProxies` is required and has no default.** The address is
+shown to a judge asked whether a solution came from the examination room, so
+`X-Forwarded-For` is honoured only from a proxy named here.
 
 There is no safe default. Trusting everyone is where this came from; trusting
 only loopback silently records the proxy's own address in a container network
@@ -348,8 +320,8 @@ needs to look at the store's own data directory:
 ALGOJUDGE_S3_ENDPOINT=https://… ALGOJUDGE_S3_ACCESS_KEY=… ALGOJUDGE_S3_SECRET_KEY=…   dotnet test AlgoJudge.sln -c Release --filter S3BlobStoreTests
 ```
 
-**One item cannot be run against either implementation available here**, and
-that is measured rather than assumed (2026-08-13): the check writes a known
+**One item cannot be run against either implementation available here**: the
+check writes a known
 string, enables bucket-default encryption and looks for the string in the
 store's files. SeaweedFS 4.41 stores objects readably — so the method works, and
 a test proves it does — but answers `PutBucketEncryption` with an internal
@@ -393,11 +365,6 @@ otherwise.
 AJ_DataProtection__Kind=database   # the default; the keys live beside everything else
 AJ_DataProtection__Kind=ephemeral  # in memory, lost on restart — Development only
 ```
-
-**Until 2026-08-27 there was no configuration at all**, so the framework built a
-key ring local to the process. Every restart signed everybody out, a federated
-sign-in that was in flight lost its `state` and `nonce`, and a second instance
-could not read a cookie the first had minted.
 
 `ephemeral` **refuses to start** unless the environment is Development. It is
 the arrangement above with a name, and on a real installation it presents as
@@ -454,9 +421,9 @@ nobody can read, which looks exactly like having no key ring at all.
 
 #### Turning it on later does nothing until the ring rotates
 
-Measured on the development stack, 2026-08-27, and worth knowing before an
-operator concludes it did not work: **adding the setting to an installation that
-already has a key is neither disruptive nor effective**. Sessions continue — the
+Worth knowing before an operator concludes it did not work: **adding the
+setting to an installation that already has a key is neither disruptive nor
+effective**. Sessions continue — the
 existing plaintext key is still readable — and that key **stays plaintext**,
 because Data Protection encrypts a key when it *writes* one and it writes one
 only near the current key's expiry, ninety days out.
@@ -576,10 +543,11 @@ Runner requires anyway.
 
 ## Running with Docker Compose
 
-**This file is for development, and there is now a separate one for
-installing.** `AlgoJudge-Ops` — created 2026-08-30, and the self-hosted Compose
-stack 0.1.0 targets — assembles the Server, the Client and a Runner behind
-nginx, and carries the update, backup and restore scripts an installation needs.
+**This file is for development, and there is a separate one for installing.**
+[`AlgoJudge-Ops`](https://github.com/AlgoJudge/AlgoJudge-Ops) — the self-hosted
+Compose stack 0.1.0 targets — assembles the Server, the Client and a Runner
+behind nginx, and carries the update, backup and restore scripts an installation
+needs.
 It builds nothing: every image is pulled from GHCR by tag. **An administrator
 standing an installation up wants that repository, not this file**, and this
 one is unaffected by it — a developer running the Server still runs what is
@@ -647,9 +615,8 @@ password `admin-development-only` on the account. Both are in a public repositor
 and neither is a secret; the Server warns on every start where that token is in
 force outside Development.
 
-**The Development seed adds somebody to compete against it**, and nothing here
-said so until 2026-08-30 — while `preconfig.example/pages/home.md`, the page
-that installation shows, already pointed at this file for the answer:
+**The Development seed adds somebody to compete against it**, which
+`preconfig.example/pages/home.md` points at this file for:
 
 | | login | password | what it is |
 |---|---|---|---|
@@ -698,11 +665,10 @@ emitting the nested shape works too — `ClaimMappingService` walks a dotted pat
 and flattens both a repeated claim and a JSON array, and `FederatedSignInTests`
 drives a whole sign-in through each.
 
-**Both can carry the deletion channel, since 2026-08-27.** Anything written
-before that says to turn it off for Keycloak, and that was right at the time —
-Keycloak has no outbound webhook in configuration. It now ships an Event Listener
-SPI provider of its own, and the Server did not change for it: the report arrives
-on the same endpoint, in the same shape, with the same header.
+**Both deployments carry the deletion channel.** Authentik uses an event
+matcher and a webhook transport, Keycloak an Event Listener SPI provider of its
+own, and the Server holds nothing about either: the report arrives on the same
+endpoint, in the same shape, with the same header.
 
 Turning it on is the same act for either. Register the provider with the channel
 enabled, take the provider id and the shared secret it mints, and put both into
@@ -738,13 +704,10 @@ dotnet ef database update --project AlgoJudge.Server
 dotnet ef database update --project AlgoJudge.Server --context LtiDbContext
 ```
 
-**The switch exists because refusing was the whole policy and nothing shipped
-could apply one** (2026-08-30). `aj-admin` has no migrate command, the image
-carries no SDK, and starting it as Development to get past the guard would seed
-the demo world and replace the administrator's password with a well-known one —
-so a fresh installation had every migration pending and never started at all.
-The commands above need a workstation with the source; a self-hosted stack has
-neither.
+**The switch exists because nothing else shipped can apply a migration.**
+`aj-admin` has no migrate command and the image carries no SDK; the commands
+above need a workstation with the source, which a self-hosted stack does not
+have.
 
 It is **off by default**, and the refusal it replaces is unchanged when it is:
 applying a schema change to a production database stays a decision somebody
@@ -754,9 +717,9 @@ for you, in that order.
 
 `Database/Schema.cs` is the whole of it, and it takes a **PostgreSQL advisory
 lock** while it works. Several instances against one database is a supported
-arrangement and they start together after an update; EF Core 10 has no migration
-lock of its own, measured 2026-08-30 by taking ours out and watching one of two
-instances die of `23505` on `PK___EFMigrationsHistory`.
+arrangement and they start together after an update; EF Core 10 has no
+migration lock of its own, so without this one of the instances dies of `23505`
+on `PK___EFMigrationsHistory`.
 
 **Both contexts read the switch**, or the LTI module refuses on its own over a
 table nobody mentioned.
@@ -766,7 +729,7 @@ table nobody mentioned.
 keeps its own in `Lti/Migrations` and `__EFMigrationsHistory_Lti`, and applies
 them itself (`Lti/LtiModule.cs`). A command that names no context gets the first.
 
-**Squashed to one each on 2026-08-28**, before 0.1.0 and therefore before any
+**Each was squashed to one**, before 0.1.0 and therefore before any
 installation had a database to carry forward. What the old chain carried and
 these do not is its backfills — every one of them rewrote rows that a new
 database does not have.
@@ -787,12 +750,10 @@ is not an EF entity. `FileStorageSchemaTests` fails if it goes — including if 
 survives without `SET STORAGE EXTERNAL`, which was checked by removing exactly
 that line.
 
-## Contributing
+## Building and testing
 
-`main` is the integration and default branch; changes arrive through pull
-requests. ~~There is no CI and no test project yet, so `dotnet build` is the
-whole gate.~~ **Both exist**, and the gate is three CI jobs — the first of which
-builds with `-warnaserror` since 2026-08-29, so **a warning fails it**:
+The gate is three CI jobs, and the first builds with `-warnaserror`, so **a
+warning fails it**:
 
 ```bash
 dotnet build AlgoJudge.sln -c Release
@@ -802,64 +763,29 @@ dotnet test  AlgoJudge.sln -c Release --no-build
 `AlgoJudge.Server.Tests` runs against a **real PostgreSQL** started by
 Testcontainers, so Docker has to be running — an in-memory provider would not
 exercise the guarantees being relied on, several of which are the database's.
-**666 test cases**, two of them skipped where no object store is configured. The
-last timing is **2 m 15 s**; it was 4 m 49 s until 2026-08-29, when the fifty
-classes that sat in one xUnit collection — and therefore ran one at a time —
-were split across three, each with a database of its own.
+The object-store cases skip where no object store is configured.
 
-> **The count and the timing are now two different measurements, and only one
-> of them is cheap** (2026-08-30). The count above is read off the source rather
-> than off a run — 543 `[Fact]`, 95 `[InlineData]` rows under 28 `[Theory]`, the
-> two conditional facts in `S3BlobStoreTests`, and `BlobStoreContract`'s
-> thirteen once more for each of its three concrete subclasses, because xUnit
-> discovers an inherited test per derived class. That is 666. This line said
-> **646** from a run until 2026-08-30; a static count needs no Docker, so it is
-> the one that can be kept honest, and the timing is left dated instead of
-> guessed at.
->
-> **A run the same day agreed**: `dotnet test AlgoJudge.sln` reported 664
-> passed, 2 skipped, 666 total in 2 m 51 s. So the static method is not merely
-> cheaper — on this suite it is exact, and the two timings above are the same
-> suite on two different machines rather than a regression.
+`BlobStoreContract` is abstract and xUnit discovers an inherited test once per
+derived class, so its cases run against the filesystem, PostgreSQL and S3
+implementations alike.
 
-CI adds two jobs beside that one: the container image is built, and the
-development stack is brought up and asserted against — that the API answers under
-`/api/v1` and *not* at the root, that the migrations created the schema, that the
-instance table really is a singleton, that the database refuses a file reference
-with no owner, that the committed `openapi.json` still matches what is served,
-that registration is closed by default, that `/health` does not disclose where
-the files are, that the key ring is in the database and a restart signs nobody
-out, that the key-ring commands do what they say, that an installation
-configures itself from disk and a second apply changes nothing, and that
-`aj-admin` works inside the shipped image.
+`openapi.json` is committed, and CI fails if it stops matching what is served.
+**Take it from the running container**, never from the test host: the test host
+emits the paths in a different order for identical code, and CI compares the two
+files **textually**.
 
-**Regenerate `openapi.json` from the running stack, not from the test host.**
+### Architecture rules
 
-```sh
-docker compose -f example-server-development-docker-compose.yaml up -d --build
-curl -sS http://127.0.0.1:8080/api/v1/swagger/v1/swagger.json -o openapi.json
-```
-
-The test host serves the same document — Swagger is mapped in Development and
-`WebApplicationFactory` runs there — and it is **not interchangeable**. It emits
-the paths in a different order for identical code, and CI compares the two files
-**textually**, so a document taken from a test produces a diff of a hundred and
-twenty-four moved lines against an endpoint that is correct in every respect.
-Learned on 2026-08-25, which is what this paragraph is for.
-
-Architecture rules that apply here: the Server does not compile or execute code,
-does not implement a sandbox or a checker, and must not depend on one Runner
-implementation. Adding an activity or problem type must not require a change to
-this repository — no type-specific controller, table or conditional.
+The Server does not compile or execute code, does not implement a sandbox or a
+checker, and must not depend on one Runner implementation. Adding an activity or
+problem type must not require a change to this repository — no type-specific
+controller, table or conditional.
 
 ## Related repositories
 
-This list held only the first two until 2026-08-30, by which time four more
-repositories talked to this one.
-
 - [AlgoJudge-Client](https://github.com/AlgoJudge/AlgoJudge-Client) — the web frontend
 - [AlgoJudge-Runner](https://github.com/AlgoJudge/AlgoJudge-Runner) — isolated execution and evaluation
-- `AlgoJudge-Runner-UVa` (private) — a **second Runner implementation**, which
+- [AlgoJudge-Runner-UVa](https://github.com/AlgoJudge/AlgoJudge-Runner-UVa) — a **second Runner implementation**, which
   judges nothing: it forwards `uva@1` submissions to `onlinejudge.org` and
   reports the archive's verdict. It registers, claims and reports over the same
   contract as the first, which is the point of the contract
@@ -874,19 +800,24 @@ repositories talked to this one.
 
 ### The frontend that used to live here
 
-A copy of the frontend sat in `algojudge-client/` in this repository until
-2026-08-02. It was verified as an outdated duplicate and removed, and its
-`AlgoJudge.sln` entry went with it, so `dotnet build` no longer runs
-`npm install`.
+A copy of the frontend once sat in `algojudge-client/` here. **Look for that
+code and its history in
+[`AlgoJudge-Client`](https://github.com/AlgoJudge/AlgoJudge-Client), not here**:
+it was migrated there with its commits, so that repository's history starts in
+December 2023, well before the repository itself was created, and it carries the
+authors who worked on the copy that used to be in this one.
 
-**Look for that code and its history in `AlgoJudge-Client`, not here.** The
-frontend was migrated there with its commits: that repository's history starts
-in December 2023, well before the repository itself was created, and it carries
-the contributors who worked on the copy that used to be in this one.
+## Contributing
 
-Commits touching `algojudge-client/` do still exist in this repository's own
-history, but they end on 2026-08-02 and are not where the work continued.
+Open an issue saying what you expected, what happened, and how to reproduce it.
+Or open a pull request against `main`: one subject per pull request, with a note
+on what changes and why.
+
+By contributing you agree that your work is licensed under the terms below.
 
 ## License
 
-See [LICENSE](LICENSE). Contributors are listed in [AUTHORS.txt](AUTHORS.txt).
+This project is licensed under the MIT License.
+See LICENSE.
+
+Authors are listed in AUTHORS.txt.
