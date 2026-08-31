@@ -17,13 +17,13 @@ The domain term is **`Problem`**, never `Task`.
 
 | Area | State |
 |---|---|
-| API | **160 controller actions**, all under `/api/v1` (`UsePathBase`), plus what `MapIdentityApi` adds under `/identity` |
+| API | **187 controller actions** — 160 in `Controllers/`, 27 in the LTI module — plus what `MapIdentityApi` adds at `/identity`. **All of it under `/api/v1`** (`UsePathBase`), identity included: `/api/v1/identity/register`, never `/identity/register` |
 | WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
 | Authorization | a real permission model: **52 keys**, grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Identity | several OIDC providers registered at once from the database, first-sign-in provisioning, and a claim-to-permission mapping the installation configures |
-| LTI | grade synchronisation, roster and deep linking |
+| LTI | grade synchronisation, roster, deep linking, and **dynamic registration** — a platform registers itself against a single-use invitation |
 | Background work | **nine hosted services**: the maintenance drainer, the lease reaper, the series scheduler, the deletion sweeper, the merge sweeper, the address sweeper, the file collector, the storage migrator, and the LTI module's grade synchroniser |
 | Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage`, `/admin/keyring` and `/admin/config` behind loopback and a token |
 | Schema | **two migrations in the main context and one in the LTI one** |
@@ -38,7 +38,7 @@ The domain term is **`Problem`**, never `Task`.
 **Three of those numbers are commands**, so read them rather than trust them:
 
 ```sh
-grep -rhoE '^ +\[Http[A-Za-z]+' AlgoJudge.Server/Controllers | wc -l         # 160
+grep -rhoE '^ +\[Http[A-Za-z]+' AlgoJudge.Server/{Controllers,Lti/Controllers} | wc -l   # 187
 grep -cE '^ +Define\(' AlgoJudge.Server/Authorization/Permissions.cs         # 52
 grep -c 'public DbSet<' AlgoJudge.Server/Database/ApplicationDbContext.cs    # 32
 ```
@@ -216,6 +216,19 @@ AJ_Forwarded__KnownProxies=none                # or this, when nothing sits in f
 # word is taken for every visitor's address, so it is not guessed at. The
 # refusal names the network you would have got.
 
+# Where the Client is served from. Read at the end of a federated sign-in and of
+# an LTI launch, to send the browser to the application. Unset when both are one
+# origin.
+AJ_App__BaseUrl=https://algojudge.example
+
+# Which origins a browser may call this API from, with credentials. **An array**:
+# a comma-separated spelling reads as zero origins, silently. Setting none leaves
+# the development address committed in `appsettings.json` in force.
+AJ_Cors__AllowedOrigins__0=https://algojudge.example
+
+# How long one event may take to reach a socket before that client is dropped.
+AJ_Events__SendTimeoutSeconds=5                # optional; default 5
+
 # How long a session keeps the address and user agent it was made with.
 AJ_Retention__SessionOriginDays=30             # optional; the aj_session cookie's own life
 AJ_Retention__SubmissionOriginDays=365         # optional; a submission's address is evidence in a contest
@@ -223,6 +236,11 @@ AJ_Retention__SubmissionOriginDays=365         # optional; a submission's addres
 # Where the problem picker's credentials are minted, for a self-hosted archive.
 AJ_UvaExplorer__Origin=https://uvaexplorer.example   # optional; defaults to the hosted one
 ```
+
+**`Events__SendTimeoutSeconds` is for a slow link.** Nothing on the socket is
+durable — a screen that missed an event refetches — so a client that will not
+take a frame in time is dropped rather than waited for. Raise it where clients
+are distant; there is no reason to lower it.
 
 `TimeoutSeconds` is the one worth knowing about. **The SDK's own default is no
 deadline at all** — an unassigned `AmazonS3Config` carries a `Timeout` of
@@ -257,6 +275,10 @@ reads:
 ```nginx
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
+
+# Required. nginx defaults to 1 MB, which rejects almost every package long
+# before the Server's own 128 MiB ceiling. Both have to be set.
+client_max_body_size 128m;
 ```
 
 That directive *appends* the peer to whatever arrived, so a header a participant
@@ -642,12 +664,29 @@ registration.
 
 | Field | What it is |
 |---|---|
-| `issuer` | the provider's issuer URL, the one its discovery document is served under |
+| `slug` | required. The provider's name in every address it owns. **Chosen once** — see below |
+| `displayName` | required. What the sign-in button says |
+| `issuer` | required. The provider's issuer URL, the one its discovery document is served under |
+| `clientId` | required. What the provider calls this Server |
+| `clientSecret` | required, and **write-only**: no endpoint answers with it |
 | `claimPath` | where group membership sits in the token |
 | `scopes` | `openid profile email` |
 | `accountUrl` | where somebody manages the identity itself |
 | `deletionUrl` | where somebody ends the identity itself |
 | `deletionChannelEnabled` | `true` once the provider id and the secret it mints are configured at the provider |
+
+The redirect URI to register at the provider is built from the slug:
+
+```
+https://<this Server>/api/v1/identity/providers/<slug>/callback
+```
+
+**The slug is stamped on the challenge and checked when the provider sends the
+browser back**, so renaming one refuses every sign-in with
+`provider.ticket.mismatch` until the redirect URI is changed at the provider
+too. That check is what stops a ticket from one provider being redeemed at
+another's address: they share one external cookie, so otherwise the slug in the
+URL would decide whose claim mapping was applied to whose claims.
 
 **`claimPath` is a dotted path and nothing else** — never an expression, which
 would be code executed against the contents of a token. `ClaimMappingService`
@@ -672,6 +711,36 @@ answers first decides who your users are.
 
 The accepted record for the model is
 `AlgoJudge-Design/adr/IDENTITY_PHASE_2_DECISIONS_2026-08-09.md`.
+
+## Registering an LTI platform
+
+A platform can be written out by hand — `POST /api/v1/lti/platforms` with its
+issuer, client id, deployment id, key set and endpoints — or it can register
+itself, which is what Moodle's tool-registration screen expects.
+
+A manager holding `provider:manage` mints a single-use invitation:
+
+```
+POST   /api/v1/lti/registrations             # answers a registrationUrl
+GET    /api/v1/lti/registrations             # what is outstanding
+POST   /api/v1/lti/registrations/{id}/revoke
+```
+
+The `registrationUrl` is pasted into the platform's registration screen; the two
+ends then exchange configuration with nobody copying a field. **Thirty minutes,
+one platform** — claimed by a conditional update, so two arriving together
+cannot both be admitted.
+
+**It is the one anonymous endpoint in the LTI module**, so the invitation is the
+whole of its gate: mint one when somebody is at the other end, and revoke it if
+they are not.
+
+**What arrives is switched off** — `Enabled = false`, never an identity
+authority. The flow saves the typing, not the decision.
+
+**A refusal does not spend the invitation**, and this endpoint always answers a
+readable page rather than an error document: what reads it is an iframe in
+somebody's admin screen.
 
 ## Migrations
 
