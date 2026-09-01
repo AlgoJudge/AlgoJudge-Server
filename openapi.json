@@ -13898,6 +13898,10 @@
             "type": "string",
             "nullable": true
           },
+          "publishedAt": {
+            "type": "string",
+            "nullable": true
+          },
           "seriesCount": {
             "type": "integer",
             "format": "int32"

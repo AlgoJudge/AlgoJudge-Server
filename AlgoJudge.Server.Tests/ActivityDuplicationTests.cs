@@ -333,6 +333,50 @@ public class ActivityDuplicationTests(ServerFixture server)
     /// An account holding <c>activity:create</c> at system scope and nothing
     /// else, signed in.
     /// </summary>
+    /// <summary>
+    /// <b>The panel could not see publication at all.</b> <c>ManagedActivityDto</c>
+    /// carried no such field, so every activity wore the same "in preparation"
+    /// badge — including ones with graded submissions — and the button beside it
+    /// always offered to publish, sending <c>published: true</c> into something
+    /// published since the moment it was made.
+    /// </summary>
+    [Fact]
+    public async Task The_managed_activity_says_whether_it_is_published()
+    {
+        var manager = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var (slug, _) = await Build.ActivityAsync(server);
+        var source = await DatedAsync(slug);
+        var copy = await DuplicateAsync(manager, source.ActivityId, source.Start!.Value.AddDays(371));
+
+        // A copy is the only activity born unpublished. Everything made through
+        // `POST /activities` is published from birth, which is exactly why the
+        // button could send `published: true` for ever and change nothing.
+        var before = await manager.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/manager/activities/{copy}");
+        Assert.False(before.TryGetProperty("publishedAt", out _));
+
+        var published = await manager.PostAsJsonAsync(
+            $"/api/v1/activities/{copy}/published", new { published = true });
+        await Sign.Succeeded(published);
+
+        // **The response body, not a second request.** A 200 that cannot say what
+        // it did is the half of this the panel actually suffered from.
+        var body = await published.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.NotNull(body.GetProperty("publishedAt").GetString());
+
+        var after = await manager.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/manager/activities/{copy}");
+        Assert.NotNull(after.GetProperty("publishedAt").GetString());
+
+        // Unpublishing says so too, by the field going away rather than turning
+        // false — absent means never, and `WhenWritingNull` is what carries it.
+        var withdrawn = await manager.PostAsJsonAsync(
+            $"/api/v1/activities/{copy}/published", new { published = false });
+        await Sign.Succeeded(withdrawn);
+        Assert.False((await withdrawn.Content.ReadFromJsonAsync<JsonElement>())
+            .TryGetProperty("publishedAt", out _));
+    }
+
     private async Task<(string UserId, HttpClient Client)> AuthorAsync()
     {
         var login = "author-" + Guid.NewGuid().ToString("N")[..10];
