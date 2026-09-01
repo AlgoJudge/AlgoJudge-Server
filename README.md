@@ -13,6 +13,21 @@ type means.
 
 The domain term is **`Problem`**, never `Task`.
 
+## Documentation
+
+**[docs.algojudge.pl](https://docs.algojudge.pl/en/server/)** is written for
+somebody who does not have this source open. This README is the other half:
+what the repository is, and how to build, run and change it.
+
+| | |
+|---|---|
+| [`/en/server/`](https://docs.algojudge.pl/en/server/) | the domain model, permissions and grants, identity and LTI, the event catalogue, and every configuration key |
+| [`/en/server/rest/`](https://docs.algojudge.pl/en/server/rest/) | the REST reference, generated from the `openapi.json` committed here — pinned by commit and verified by checksum, so it describes one known version rather than whatever `main` says today |
+| [`/en/protocol/`](https://docs.algojudge.pl/en/protocol/) | the contract this Server and a Runner share |
+
+The site is English here. Polish covers `/client/` and `/install/` — the
+participant's and the administrator's paths.
+
 ## What it does
 
 | Area | |
@@ -315,8 +330,8 @@ string formatted `name@version`.
 - [AlgoJudge-Ops](https://github.com/AlgoJudge/AlgoJudge-Ops) — the self-hosted
   production Compose stack, and the update, backup and restore scripts around it.
   No application code, no build: every image is pulled from GHCR by tag
-- [AlgoJudge-Docs](https://github.com/AlgoJudge/AlgoJudge-Docs) — the public
-  documentation site, whose `/server/` and `/install/` sections describe this
+- [AlgoJudge-Docs](https://github.com/AlgoJudge/AlgoJudge-Docs) — the source of
+  the documentation site linked under *Documentation* above
 
 ## Contributing
 
