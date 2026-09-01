@@ -19,6 +19,45 @@ namespace AlgoJudge.Server.Tests;
 public class PanelTests(ServerFixture server)
 {
     /// <summary>
+    /// <b>A manager could not read the permission templates.</b> The check asked
+    /// for <c>template:read</c> at the installation scope while every path that
+    /// makes a manager writes an <i>activity</i> grant — the seeder,
+    /// <c>ActivityService.CreateAsync</c> for whoever created it, the panel and
+    /// LTI enrolment alike — so it could never pass for one. Both screens that
+    /// offer templates died on the 403, including the Participants tab, whose
+    /// roster the same account may read perfectly well.
+    /// </summary>
+    [Fact]
+    public async Task A_manager_may_read_the_permission_templates()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var activityId = await ActivityIdAsync("DEV-2026");
+
+        var manager = await Sign.NewAccountAsync(server, "template-reader");
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = await UserIdAsync("template-reader"),
+            activityId,
+            permissions = new[] { "activity:read", "grant:read:all", "grant:update" },
+        }));
+
+        var listed = await manager.GetAsync("/api/v1/permission-templates");
+        await Sign.Succeeded(listed);
+        var names = (await listed.Content.ReadFromJsonAsync<JsonElement>())
+            .EnumerateArray()
+            .Select(template => template.GetProperty("name").GetString())
+            .ToList();
+        Assert.Contains("participant", names);
+
+        // **Still refused where there is no reason to read one.** An account with
+        // no grant anywhere holds neither key, and nothing about this widened
+        // who may see the list — only where the holder's grant may live.
+        var stranger = await Sign.NewAccountAsync(server, "template-stranger");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await stranger.GetAsync("/api/v1/permission-templates")).StatusCode);
+    }
+
+    /// <summary>
     /// Nobody may grant a permission they do not themselves hold. Without this
     /// the model is decorative: anybody who could edit a grant could write
     /// `system:administrator` into it.
