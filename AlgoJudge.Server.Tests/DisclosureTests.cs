@@ -19,6 +19,58 @@ namespace AlgoJudge.Server.Tests;
 public class DisclosureTests(ServerFixture server)
 {
     /// <summary>
+    /// <b>Absent is not empty.</b> Rows in the attachment table came only from
+    /// the creation input, and a name with no row is managers-only — so an
+    /// activity made through the raw API withheld <c>source</c> from the author
+    /// of the submission, while one made in the panel did not. Every other door
+    /// fills the table in; this makes the raw one agree with them.
+    /// </summary>
+    [Fact]
+    public async Task An_activity_made_without_an_attachment_table_gets_the_conventional_one()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var made = await admin.PostAsJsonAsync("/api/v1/activities", new
+        {
+            slug = "CONV" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant(),
+            name = "No attachment table",
+            type = "contest@1",
+            rankingType = "icpc",
+            timeZone = "Europe/Warsaw",
+            joinPolicy = "open",
+        });
+        await Sign.Succeeded(made);
+
+        var rules = (await made.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("attachmentVisibility").EnumerateArray()
+            .ToDictionary(
+                rule => rule.GetProperty("name").GetString()!,
+                rule => rule.GetProperty("visibility").GetString());
+
+        Assert.Equal("participant", rules["source"]);
+        Assert.Equal("participant", rules["details"]);
+        // Stored although it equals the no-row default: the editor draws one
+        // switch per row, so an activity with no rows offers nothing to change.
+        Assert.Equal("managersOnly", rules["log"]);
+
+        // **An explicitly empty list still means none**, and this is the half a
+        // later simplification into `?? []` would quietly take away.
+        var bare = await admin.PostAsJsonAsync("/api/v1/activities", new
+        {
+            slug = "BARE" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant(),
+            name = "An empty attachment table",
+            type = "contest@1",
+            rankingType = "icpc",
+            timeZone = "Europe/Warsaw",
+            joinPolicy = "open",
+            attachmentVisibility = Array.Empty<object>(),
+        });
+        await Sign.Succeeded(bare);
+        Assert.Empty((await bare.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("attachmentVisibility").EnumerateArray());
+    }
+
+    /// <summary>
     /// <b>Holding <c>submission:create</c> is not being in the activity.</b> The
     /// effective set unions every system-scope grant into every activity and both
     /// shipped templates build on the participant's keys, so anybody staff could

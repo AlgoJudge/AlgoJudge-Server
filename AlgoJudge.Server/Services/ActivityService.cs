@@ -641,7 +641,7 @@ namespace AlgoJudge.Server.Services
                 RunnerTags = RunnerTags.Validated(input.RunnerTags, "The activity's Runner tags"),
             };
 
-            foreach (var rule in input.AttachmentVisibility ?? [])
+            foreach (var rule in input.AttachmentVisibility ?? ConventionalAttachments)
             {
                 activity.AttachmentRules.Add(new AttachmentRule
                 {
@@ -760,6 +760,33 @@ namespace AlgoJudge.Server.Services
                 ? null
                 : DateTime.Parse(value, null, System.Globalization.DateTimeStyles.AdjustToUniversal
                     | System.Globalization.DateTimeStyles.AssumeUniversal);
+
+        /// <summary>
+        /// What a submission's attachments say when the creator said nothing.
+        /// <para>
+        /// <b>Absent is not empty.</b> An activity made through the panel names
+        /// all three; one made through the raw API named none and got a table
+        /// with no rows — and a name with no row is managers-only, so its
+        /// authors could not read back their own source. Every other door that
+        /// makes an activity fills this in: the seeder, <c>ParityWorld</c>, and
+        /// the Client's own form, which is where these three values come from.
+        /// </para>
+        /// <para>
+        /// <b>An explicitly empty list still means none.</b> That is why this is
+        /// applied to the absent input rather than to an already-defaulted one.
+        /// </para>
+        /// <para>
+        /// <c>log</c> is stored even though it equals the no-row default: the
+        /// editor draws one switch per row, so an activity with no rows offers a
+        /// manager nothing to change.
+        /// </para>
+        /// </summary>
+        private static readonly IReadOnlyList<AttachmentRuleDto> ConventionalAttachments =
+        [
+            new() { Name = "source", Visibility = "participant" },
+            new() { Name = "details", Visibility = "participant" },
+            new() { Name = "log", Visibility = "managersOnly" },
+        ];
 
         private static JoinPolicy ParseJoinPolicy(string? value) => value switch
         {
