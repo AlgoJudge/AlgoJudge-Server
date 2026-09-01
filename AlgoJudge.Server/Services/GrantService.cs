@@ -160,6 +160,69 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
+        /// Whether somebody other than this grant still administers the
+        /// installation.
+        /// <para>
+        /// <b>Excluded by id, not by user</b>, so the question is "afterwards"
+        /// rather than "now" — and it stays right when the row being rewritten
+        /// belongs to somebody else.
+        /// </para>
+        /// <para>
+        /// Active system grants only, exactly as <see cref="PermissionService"/>
+        /// reads them: an invited grant confers nothing, and the key means
+        /// nothing in an activity grant. The source column is deliberately not
+        /// filtered — a managed contribution can never carry this key, and one
+        /// that somehow did would still be honoured by the resolver, so counting
+        /// it errs the safe way.
+        /// </para>
+        /// </summary>
+        private async Task<bool> AnotherAdministratorAsync(Guid excluding, CancellationToken ct)
+        {
+            var others = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.Id != excluding && g.ActivityId == null && g.State == GrantState.Active)
+                .Select(g => g.Permissions)
+                .ToListAsync(ct);
+
+            return others.Any(p => Parse(p).Contains(Permissions.SystemAdministrator));
+        }
+
+        /// <summary>
+        /// Refuses to take the installation's last administrator away.
+        /// <para>
+        /// <b>There is no way back.</b> <c>aj-admin</c> has no command for
+        /// grants, and the seeder restores one only where the installation has
+        /// none at all — so this is repaired through the database or not at all.
+        /// A revoke and a rewrite both reach here, because demoting the row to
+        /// <c>invited</c> takes the installation away just as completely as
+        /// deleting the key: the resolver loads active grants only.
+        /// </para>
+        /// </summary>
+        /// <param name="grant">The row about to be removed or rewritten.</param>
+        /// <param name="stillAdministers">Whether it administers afterwards.</param>
+        private async Task RefuseLosingTheLastAdministratorAsync(
+            Grant grant, bool stillAdministers, CancellationToken ct)
+        {
+            if (stillAdministers) return;
+
+            // Read the row before asking the database: almost nothing reaching
+            // here is an administrator's grant, and parsing beats a query.
+            if (grant.ActivityId is not null
+                || grant.State != GrantState.Active
+                || !Parse(grant.Permissions).Contains(Permissions.SystemAdministrator))
+            {
+                return;
+            }
+
+            if (await AnotherAdministratorAsync(grant.Id, ct)) return;
+
+            throw new ForbiddenActionException(
+                "This is the installation's last system:administrator grant. "
+                    + "Grant it to somebody else first",
+                "grant.administrator.last");
+        }
+
+        /// <summary>
         /// Which providers name this template — through a mapping rule or as
         /// their default. Both count: either way, deleting it leaves a provider
         /// pointing at nothing.
@@ -301,6 +364,15 @@ namespace AlgoJudge.Server.Services
             }
             grant.OverrideSystem = wantsOverride;
 
+            // **The state is half of the question.** `State` is written from the
+            // input two lines below, and demoting the last administrator's grant
+            // to `invited` takes the installation away as completely as dropping
+            // the key. A grant this method has just constructed carries `"[]"`,
+            // so creating one is never refused.
+            var stillAdministers = wanted.Contains(Permissions.SystemAdministrator)
+                && input.State != "invited";
+            await RefuseLosingTheLastAdministratorAsync(grant, stillAdministers, ct);
+
             grant.Permissions = JsonSerializer.Serialize(wanted);
             grant.CreatedFromTemplate = input.CreatedFromTemplate;
             grant.State = input.State == "invited" ? GrantState.Invited : GrantState.Active;
@@ -348,6 +420,10 @@ namespace AlgoJudge.Server.Services
                         + "Change the provider's mapping instead",
                     "grant.managed");
             }
+
+            // After the managed refusal above, which is cheaper and more
+            // specific when both apply.
+            await RefuseLosingTheLastAdministratorAsync(grant, stillAdministers: false, ct);
 
             // Read before the row goes: revoking a grant removes the very thing
             // an audience is resolved from, so afterwards the holder would not be

@@ -85,7 +85,11 @@ namespace AlgoJudge.Server.Database
         /// </summary>
         private async Task EnsureAdministratorAsync(CancellationToken ct)
         {
-            if (await users.FindByNameAsync(AdminLogin) is not null) return;
+            if (await users.FindByNameAsync(AdminLogin) is { } existing)
+            {
+                await RestoreAdministratorGrantAsync(existing, ct);
+                return;
+            }
 
             var admin = new User
             {
@@ -122,6 +126,78 @@ namespace AlgoJudge.Server.Database
                 "Created the {Login} account with a random password that has not been recorded anywhere. "
                 + "Set one with POST {Path} from inside the container before signing in; "
                 + "it needs AJ_Admin__Token to be configured.",
+                AdminLogin, "/api/v1/admin/password");
+        }
+
+        /// <summary>
+        /// Puts the grant back where the installation has lost every administrator.
+        /// <para>
+        /// <b>The account existing is not the same as somebody administering</b>,
+        /// and this returned on the account alone until 2026-09-01. A revoked
+        /// system grant left an installation nobody could administer and no way
+        /// back into it: <c>aj-admin</c> has no command for grants.
+        /// <c>GrantService</c> now refuses to create that state, but a database
+        /// already in it needed a door, and a restart is the one an operator
+        /// already knows how to open.
+        /// </para>
+        /// <para>
+        /// <b>It never rewrites a grant somebody made.</b>
+        /// <c>IX_Grants_UserId_Manual</c> allows one manual system row per user,
+        /// so a second insert would be refused by the database anyway — and an
+        /// operator who deliberately reshaped this account must not have it
+        /// undone at every start.
+        /// </para>
+        /// </summary>
+        private async Task RestoreAdministratorGrantAsync(User existing, CancellationToken ct)
+        {
+            static bool Administers(string permissions)
+            {
+                try
+                {
+                    return JsonSerializer.Deserialize<List<string>>(permissions)
+                        ?.Contains(Permissions.SystemAdministrator) == true;
+                }
+                catch (JsonException)
+                {
+                    return false;
+                }
+            }
+
+            // Anybody's, not this account's: an operator who moved the role onto
+            // a named person has an administrator, and this must leave them be.
+            var system = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.ActivityId == null && g.State == GrantState.Active)
+                .Select(g => g.Permissions)
+                .ToListAsync(ct);
+
+            if (system.Any(Administers)) return;
+
+            if (await context.Grants.AnyAsync(
+                    g => g.UserId == existing.Id
+                        && g.ActivityId == null
+                        && g.SourceProviderId == null, ct))
+            {
+                logger.LogWarning(
+                    "Nobody administers this installation, and {Login} already holds a system grant "
+                    + "that does not. It has been left alone; grant system:administrator by hand.",
+                    AdminLogin);
+                return;
+            }
+
+            context.Grants.Add(new Grant
+            {
+                UserId = existing.Id,
+                ActivityId = null,
+                Permissions = JsonSerializer.Serialize(Permissions.AdminTemplate),
+                CreatedFromTemplate = "admin",
+                IsSystem = true,
+            });
+            await context.SaveChangesAsync(ct);
+
+            logger.LogWarning(
+                "Nobody administered this installation, so {Login} has been granted system:administrator "
+                + "again. Its password is unchanged; set one with POST {Path} if it is not known.",
                 AdminLogin, "/api/v1/admin/password");
         }
 
