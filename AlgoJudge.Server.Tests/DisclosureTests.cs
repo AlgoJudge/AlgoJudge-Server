@@ -18,6 +18,89 @@ namespace AlgoJudge.Server.Tests;
 [Collection("server-1")]
 public class DisclosureTests(ServerFixture server)
 {
+    /// <summary>
+    /// <b>Holding <c>submission:create</c> is not being in the activity.</b> The
+    /// effective set unions every system-scope grant into every activity and both
+    /// shipped templates build on the participant's keys, so anybody staff could
+    /// submit anywhere — graded, listed among the manager's rows, and absent from
+    /// the ranking, which builds its contestants from activity grants.
+    /// </summary>
+    [Fact]
+    public async Task Only_somebody_enrolled_may_submit()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var stranger = await Sign.NewAccountAsync(server, "stranger-submitting");
+
+        string strangerId;
+        await using (var context = server.NewContext())
+        {
+            strangerId = (await context.Users.FirstAsync(u => u.UserName == "stranger-submitting")).Id;
+        }
+
+        // A system grant carrying the participant's own keys: enough to satisfy
+        // the permission check in every activity, which is the whole hole.
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = strangerId,
+            permissions = new[] { "activity:read", "submission:create" },
+        }));
+
+        var refused = await Sign.TrySubmitAsync(stranger, "python", "print(1)\n");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("enrolment.required",
+            (await refused.Content.ReadFromJsonAsync<JsonElement>())
+                .GetProperty("code").GetString());
+
+        // Joining is the whole of the difference.
+        await Sign.Succeeded(await stranger.PostAsJsonAsync(
+            "/api/v1/activities/DEV-2026/enrolment", new { }));
+        await Sign.SubmitAsync(stranger, "python", "print(1)\n");
+    }
+
+    /// <summary>
+    /// <b>The administrator's bypass is a bypass of permissions</b>, and being in
+    /// an activity is not one. Pinned rather than remembered: it is the decision
+    /// in this gate somebody will want to argue with, and the cost of it is one
+    /// request — an administrator holds <c>grant:update</c> everywhere.
+    /// </summary>
+    [Fact]
+    public async Task Not_even_an_administrator_submits_to_an_activity_they_are_not_in()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        // The seeder gives the administrator a manager grant on this activity,
+        // which is a membership like any other — and that is why `IsSystem` is
+        // not part of the predicate. Parked rather than deleted, so the rest of
+        // the suite gets it back.
+        Guid parked;
+        await using (var context = server.NewContext())
+        {
+            var activity = await context.Activities.FirstAsync(a => a.Slug == "DEV-2026");
+            var adminId = (await context.Users.FirstAsync(u => u.UserName == Seeder.DevAdminLogin)).Id;
+            var grant = await context.Grants.FirstAsync(
+                g => g.ActivityId == activity.Id && g.UserId == adminId);
+            grant.State = GrantState.Invited;
+            parked = grant.Id;
+            await context.SaveChangesAsync();
+        }
+
+        try
+        {
+            var refused = await Sign.TrySubmitAsync(admin, "python", "print(1)\n");
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+            Assert.Equal("enrolment.required",
+                (await refused.Content.ReadFromJsonAsync<JsonElement>())
+                    .GetProperty("code").GetString());
+        }
+        finally
+        {
+            await using var context = server.NewContext();
+            var grant = await context.Grants.FirstAsync(g => g.Id == parked);
+            grant.State = GrantState.Active;
+            await context.SaveChangesAsync();
+        }
+    }
+
     [Fact]
     public async Task The_results_feed_carries_rounds_contestants_and_one_entry_per_submission()
     {
