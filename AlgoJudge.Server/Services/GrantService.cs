@@ -439,7 +439,34 @@ namespace AlgoJudge.Server.Services
 
         public async Task<IReadOnlyList<PermissionTemplateDto>> ListTemplatesAsync(CancellationToken ct)
         {
-            await permissions.RequireAsync(Permissions.TemplateRead, null, ct);
+            // **Anywhere, not at the installation scope, and that is the fix.**
+            // This asked for `template:read` with a null activity while every
+            // path that makes a manager writes an *activity* grant — the seeder,
+            // `ActivityService.CreateAsync` for whoever created it, the panel and
+            // LTI enrolment alike. So the shipped Grants page and Participants
+            // tab both died on a 403 while `AnnounceTemplateAsync` below was
+            // resolving its audience with `AnywhereAsync` and pushing those same
+            // people every change to the list they could not fetch.
+            //
+            // Not fixed by adding the key to the manager template: `template:read`
+            // is `PermissionScope.Global`, and a global key in an activity grant
+            // confers nothing — pinned by
+            // `A_global_key_in_an_activity_grant_does_nothing`. It would also
+            // reach no installed database, because `Seeder` never updates a
+            // built-in template and `SetAsync` copies one into a grant.
+            //
+            // `grant:update` as the alternative because it is the reason to read
+            // one: a template is *applied* when somebody is enrolled by hand.
+            // Reading discloses nothing and confers nothing — a template is
+            // copied into a grant, never referenced, and the excess rule still
+            // refuses to hand on a permission the caller does not hold.
+            var mine = await permissions.AnywhereAsync(ct);
+            if (!mine.Contains(Permissions.TemplateRead) && !mine.Contains(Permissions.GrantUpdate))
+            {
+                // The same refusal as before for anybody still refused: only who
+                // is refused has moved.
+                throw new AccessDeniedException(Permissions.TemplateRead);
+            }
 
             var templates = await context.PermissionTemplates
                 .AsNoTracking()
