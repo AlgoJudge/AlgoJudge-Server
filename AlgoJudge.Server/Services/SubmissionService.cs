@@ -217,6 +217,46 @@ namespace AlgoJudge.Server.Services
             await permissions.RequireAsync(Permissions.SubmissionCreate, activity.Id, ct);
             var user = await currentUser.RequireAsync(ct);
 
+            // **Holding the permission is not being in the activity**, and until
+            // 2026-09-01 this method asked only the first question. The effective
+            // set unions every system-scope grant into every activity, and both
+            // shipped templates build on `ParticipantKeys` — so anybody staff
+            // could submit anywhere, was graded, and appeared in the manager's
+            // list as an ordinary row while the ranking, which builds its
+            // contestants from activity grants, left them out of the board
+            // entirely. A submission belonging to nobody on the standings.
+            //
+            // **`active`, and `IsSystem` deliberately does not matter.** A grant
+            // *is* the membership, whether or not its holder competes; requiring
+            // a contestant's grant would lock out the seeded manager, every
+            // activity's own creator and every teacher enrolled over LTI. An
+            // `invited` grant is an offer nobody has taken up — the resolver
+            // discards those too.
+            //
+            // **`system:administrator` is not exempt**, and that is the one
+            // decision here worth arguing with. The bypass is a bypass of
+            // *permissions*, and this is not a permission question; the model
+            // already says the bypass is not absolute, since an administrator who
+            // wants to compete takes an activity grant with the override. The
+            // cost is one request: they hold `grant:update` everywhere.
+            var enrolled = await context.Grants
+                .AsNoTracking()
+                .AnyAsync(g => g.ActivityId == activity.Id
+                    && g.UserId == user.Id
+                    && g.State == GrantState.Active, ct);
+
+            if (!enrolled)
+            {
+                // `ForbiddenActionException` rather than `AccessDeniedException`
+                // because the caller **does** hold `submission:create`; what they
+                // lack is membership, which is not a permission. `enrolment.*` is
+                // the family `ActivityService.EnrolAsync` already refuses in, and
+                // the Client needs a code it can turn into "join first".
+                throw new ForbiddenActionException(
+                    "Only somebody enrolled in this activity may submit to it",
+                    "enrolment.required");
+            }
+
             if (activity.ArchivedAt is not null)
             {
                 throw new ConflictException("An archived activity accepts no submissions", "activity.archived");

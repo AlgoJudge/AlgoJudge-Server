@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    **The one place this repository's version is written.** Both projects pick
+    it up, so a release changes this file and nothing else; without it the
+    assembly is 1.0.0, which is what MSBuild uses when nobody says otherwise and
+    is not a version anybody chose.
+
+    It does not reach `openapi.json`. That document's `info.version` is
+    Swashbuckle's own default for a document nothing configures, and it is the
+    **API** version rather than the product's — the API is v1, served at
+    `/api/v1`, and it does not move because the product released.
+  -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+</Project>

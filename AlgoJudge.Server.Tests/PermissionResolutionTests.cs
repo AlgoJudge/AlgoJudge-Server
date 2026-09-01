@@ -492,6 +492,114 @@ public class PermissionResolutionTests(ServerFixture server)
         }
     }
 
+    /// <summary>
+    /// <b>An installation with no administrator cannot be repaired from inside
+    /// it.</b> <c>aj-admin</c> has no command for grants and the panel offered
+    /// "Revoke" on the only <c>system:administrator</c> row, so the product was
+    /// one click from being unadministrable. Both doors are shut: the delete,
+    /// and the rewrite — whether it drops the key or parks the row on
+    /// <c>invited</c>, which costs the installation exactly as much.
+    /// </summary>
+    [Fact]
+    public async Task The_last_administrator_grant_cannot_be_taken_away()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var adminId = await UserIdAsync(Seeder.DevAdminLogin);
+
+        // `Only_an_administrator_may_set_the_override_on_their_own_grant` leaves a
+        // second administrator behind and the order within a collection is not
+        // fixed, so this parks whatever it finds rather than depending on it.
+        var parked = await ParkOtherAdministratorsAsync(adminId);
+        try
+        {
+            // **Not a blanket refusal**, and this half is the one worth having:
+            // while a second administrator exists, revoking one is ordinary work.
+            var spare = "spare-administrator-" + Guid.NewGuid().ToString("N")[..8];
+            await Sign.NewAccountAsync(server, spare);
+            await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+            {
+                userId = await UserIdAsync(spare),
+                permissions = new[] { "system:administrator" },
+            }));
+            await Sign.Succeeded(
+                await admin.DeleteAsync($"/api/v1/grants/{await SystemGrantIdAsync(spare)}"));
+
+            // From here the development administrator holds the only one left.
+            var revoked = await admin.DeleteAsync(
+                $"/api/v1/grants/{await SystemGrantIdAsync(Seeder.DevAdminLogin)}");
+            Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+            Assert.Equal("grant.administrator.last", await Code(revoked));
+
+            var trimmed = await admin.PostAsJsonAsync("/api/v1/grants", new
+            {
+                userId = adminId,
+                permissions = new[] { "activity:create" },
+            });
+            Assert.Equal(HttpStatusCode.Forbidden, trimmed.StatusCode);
+            Assert.Equal("grant.administrator.last", await Code(trimmed));
+
+            // Keeping the key and parking the row is the same loss: the resolver
+            // reads active grants only.
+            var demoted = await admin.PostAsJsonAsync("/api/v1/grants", new
+            {
+                userId = adminId,
+                permissions = new[] { "system:administrator" },
+                state = "invited",
+            });
+            Assert.Equal(HttpStatusCode.Forbidden, demoted.StatusCode);
+            Assert.Equal("grant.administrator.last", await Code(demoted));
+
+            await using var context = server.NewContext();
+            var still = await context.Grants.FirstAsync(
+                g => g.UserId == adminId && g.ActivityId == null);
+            Assert.Equal(GrantState.Active, still.State);
+            Assert.Contains("system:administrator", still.Permissions);
+        }
+        finally
+        {
+            await UnparkAsync(parked);
+        }
+    }
+
+    /// <summary>
+    /// Parks every administrator grant but this account's and hands back the ids.
+    /// The suite shares one Server, so "the last administrator" is a state this
+    /// test has to make rather than assume.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> ParkOtherAdministratorsAsync(string keep)
+    {
+        await using var context = server.NewContext();
+        var others = await context.Grants
+            .Where(g => g.ActivityId == null && g.State == GrantState.Active && g.UserId != keep)
+            .ToListAsync();
+
+        var parked = others
+            .Where(g => g.Permissions.Contains("system:administrator", StringComparison.Ordinal))
+            .ToList();
+        foreach (var grant in parked) grant.State = GrantState.Invited;
+        await context.SaveChangesAsync();
+
+        return parked.Select(g => g.Id).ToList();
+    }
+
+    private async Task UnparkAsync(IReadOnlyList<Guid> parked)
+    {
+        if (parked.Count == 0) return;
+
+        await using var context = server.NewContext();
+        var rows = await context.Grants.Where(g => parked.Contains(g.Id)).ToListAsync();
+        foreach (var grant in rows) grant.State = GrantState.Active;
+        await context.SaveChangesAsync();
+    }
+
+    private async Task<Guid> SystemGrantIdAsync(string login)
+    {
+        await using var context = server.NewContext();
+        var user = await context.Users.FirstAsync(u => u.UserName == login);
+        return (await context.Grants.FirstAsync(
+            g => g.UserId == user.Id && g.ActivityId == null)).Id;
+    }
+
     private static async Task<string?> Code(HttpResponseMessage response) =>
         (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString();
 

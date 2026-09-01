@@ -85,6 +85,25 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int MaxAttachments { get; init; }
         public int? MaxSubmissionsPerProblem { get; init; }
         public string? ArchivedAt { get; init; }
+
+        /// <summary>
+        /// When somebody decided this exists for the people taking part. Absent
+        /// means never: it is still being prepared.
+        /// <para>
+        /// <b>The panel could not see this at all until 2026-09-01</b>, so every
+        /// activity wore the same "in preparation" badge — including ones with
+        /// graded submissions — and the button beside it always offered to
+        /// publish, sending <c>published: true</c> into an activity that had been
+        /// published since the moment it was made. A 200 that changed nothing and
+        /// said nothing about it.
+        /// </para>
+        /// <para>
+        /// A timestamp rather than a flag, like <see cref="ArchivedAt"/> beside
+        /// it: "since when could people see this" is a question that gets asked,
+        /// and a boolean cannot answer it.
+        /// </para>
+        /// </summary>
+        public string? PublishedAt { get; init; }
         public required int SeriesCount { get; init; }
         public required int ProblemCount { get; init; }
         /// <summary>Read from the grants, never stored, and staff are excluded.</summary>

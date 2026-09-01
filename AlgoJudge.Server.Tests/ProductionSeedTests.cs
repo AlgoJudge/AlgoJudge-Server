@@ -167,4 +167,46 @@ public class ProductionSeedTests : IAsyncLifetime
         Assert.True(await users.CheckPasswordAsync(after!, chosen));
         Assert.Equal(1, await context.Users.CountAsync(u => u.NormalizedUserName == "ADMIN"));
     }
+
+    /// <summary>
+    /// <b>The account existing is not the same as somebody administering.</b>
+    /// This returned on the account alone until 2026-09-01, so an installation
+    /// whose only <c>system:administrator</c> grant had been revoked stayed
+    /// unadministrable across every restart — and there is no command to put one
+    /// back. <c>GrantService</c> now refuses to create that state; this is the
+    /// door for a database already in it.
+    /// </summary>
+    [Fact]
+    public async Task Seeding_restores_an_administrator_grant_that_was_revoked()
+    {
+        using var scope = services.CreateScope();
+        var seeder = scope.ServiceProvider.GetRequiredService<Seeder>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await seeder.EnsureAsync(development: false);
+
+        var admin = await users.FindByNameAsync(Seeder.AdminLogin);
+        var adminId = admin!.Id;
+        const string chosen = "what-the-operator-set";
+        var token = await users.GeneratePasswordResetTokenAsync(admin);
+        Assert.True((await users.ResetPasswordAsync(admin, token, chosen)).Succeeded);
+
+        await context.Grants.Where(g => g.UserId == adminId).ExecuteDeleteAsync();
+        Assert.False(await context.Grants.AnyAsync(g => g.UserId == adminId));
+
+        await seeder.EnsureAsync(development: false);
+
+        var restored = await context.Grants
+            .SingleAsync(g => g.UserId == adminId && g.ActivityId == null);
+        Assert.Contains(Permissions.SystemAdministrator, restored.Permissions);
+        Assert.Equal(GrantState.Active, restored.State);
+        Assert.True(restored.IsSystem);
+
+        // **The password is untouched.** Restoring a grant must not become a
+        // second way of resetting an account somebody already owns.
+        Assert.True(await users.CheckPasswordAsync(
+            (await users.FindByNameAsync(Seeder.AdminLogin))!, chosen));
+        Assert.Equal(1, await context.Users.CountAsync(u => u.NormalizedUserName == "ADMIN"));
+    }
 }

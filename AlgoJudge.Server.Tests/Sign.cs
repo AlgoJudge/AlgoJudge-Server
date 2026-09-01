@@ -91,6 +91,15 @@ public static class Sign
 
     public static async Task<JsonElement> SubmitAsync(HttpClient client, string language, string source)
     {
+        var response = await TrySubmitAsync(client, language, source);
+        await Succeeded(response);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    /// <summary>The same submission, unchecked, for the tests that expect a refusal.</summary>
+    public static async Task<HttpResponseMessage> TrySubmitAsync(
+        HttpClient client, string language, string source)
+    {
         var bytes = Encoding.UTF8.GetBytes(source);
         var checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
@@ -102,10 +111,8 @@ public static class Sign
             { new StringContent(checksum), "sha256" },
         };
 
-        var response = await client.PostAsync(
+        return await client.PostAsync(
             "/api/v1/activities/DEV-2026/problems/A/submissions", content);
-        await Succeeded(response);
-        return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
     /// <summary>

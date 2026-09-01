@@ -18,8 +18,8 @@ The domain term is **`Problem`**, never `Task`.
 | Area | |
 |---|---|
 | API | REST, **all of it under `/api/v1`** (`UsePathBase`), identity included: `/api/v1/identity/register`, never `/identity/register` |
-| WebSocket | served at `/ws`; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
-| Authorization | a real permission model: grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass — **honoured only in a system-scoped grant**, so a manager of one course never becomes an administrator of the installation |
+| WebSocket | served at `/api/v1/ws` — it is mapped as `/ws` under the same path base as everything else; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
+| Authorization | a real permission model: grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass — **refused outright in an activity grant**, so a manager of one course never becomes an administrator of the installation |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials. `EvaluationJob` is an entity of its own and `Result` hangs off it, because something has to name a Runner while an evaluation is still running |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Accounts | local accounts, and several OIDC providers registered at once from the database, with first-sign-in provisioning and a claim-to-permission mapping the installation configures |
@@ -227,13 +227,15 @@ Released images are pushed to GitHub's container registry when a `v*` tag is
 pushed:
 
 ```bash
-docker pull ghcr.io/algojudge/algojudge-server:1.2.3
+docker pull ghcr.io/algojudge/algojudge-server:0.1.0
 ```
 
-`1.2.3`, `1.2`, `1` and `latest` all point at the same image. **A prerelease
-(`v1.2.3-rc.1`) publishes only its own tag** — nothing moving follows it, so
+`0.1.0`, `0.1`, `0` and `latest` all point at the same image. **A prerelease
+(`v0.1.0-rc.1`) publishes only its own tag** — nothing moving follows it, so
 `latest` is never a release candidate. `linux/amd64` only, which is what the
 Runner requires anyway.
+
+[docs/RELEASE.md](docs/RELEASE.md) is what to do before pushing that tag.
 
 ## Migrations
 

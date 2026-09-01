@@ -293,6 +293,7 @@ namespace AlgoJudge.Server.Api
                 MaxAttachments = activity.MaxAttachments,
                 MaxSubmissionsPerProblem = activity.MaxSubmissionsPerProblem,
                 ArchivedAt = Contracts.Wire.At(activity.ArchivedAt),
+                PublishedAt = Contracts.Wire.At(activity.PublishedAt),
                 SeriesCount = seriesCount,
                 ProblemCount = problemCount,
                 ParticipantCount = participantCount,
