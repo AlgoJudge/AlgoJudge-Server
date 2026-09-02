@@ -260,7 +260,7 @@ public class LtiSessionTests(ServerFixture server)
             await core.SaveChangesAsync();
         }
 
-        var user = new User { UserName = "sess-" + Guid.NewGuid().ToString("N")[..10] };
+        var user = new User { UserName = "sess-" + Guid.NewGuid().ToString("N")[..10], ApprovedAt = DateTime.UtcNow };
         Assert.True((await users.CreateAsync(user)).Succeeded);
 
         core.UserIdentities.Add(new UserIdentity

@@ -343,7 +343,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
         }
 
         var name = "roster-" + Guid.NewGuid().ToString("N")[..8];
-        var user = new User { UserName = name, Email = name + "@roster.invalid" };
+        var user = new User { UserName = name, Email = name + "@roster.invalid", ApprovedAt = DateTime.UtcNow };
         (await users.CreateAsync(user, "Roster-development-only-1!")).Succeeded.Should();
 
         core.UserIdentities.Add(new UserIdentity
@@ -363,7 +363,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
         var users = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
 
         var name = "local-" + Guid.NewGuid().ToString("N")[..8];
-        var user = new User { UserName = name, Email = name + "@local.invalid" };
+        var user = new User { UserName = name, Email = name + "@local.invalid", ApprovedAt = DateTime.UtcNow };
         (await users.CreateAsync(user, "Local-development-only-1!")).Succeeded.Should();
         return user;
     }

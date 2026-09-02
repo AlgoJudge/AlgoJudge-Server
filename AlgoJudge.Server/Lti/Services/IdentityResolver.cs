@@ -250,7 +250,16 @@ namespace AlgoJudge.Server.Lti.Services
         /// </summary>
         private async Task<User?> CreateAsync(string username, CancellationToken ct)
         {
-            var user = new User { UserName = username };
+            // **Approved by the launch, the same way a provider's first sign-in
+            // approves.** A platform vouching for somebody is the decision, and
+            // provisioning ships off precisely because turning it on *is* the
+            // trust decision — asking a manager to approve each one as well
+            // would make the setting do nothing anybody wanted.
+            var user = new User
+            {
+                UserName = username,
+                ApprovedAt = clock.GetUtcNow().UtcDateTime,
+            };
             var created = await users.CreateAsync(user);
             return created.Succeeded ? user : null;
         }

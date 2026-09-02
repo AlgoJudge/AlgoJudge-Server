@@ -53,7 +53,9 @@ namespace AlgoJudge.Server.Authorization
                 // row is gone is the deletion path's business, and saying
                 // "blocked" about it would be a guess.
                 var now = DateTimeOffset.UtcNow;
-                if (user is null || (!user.IsBlocked(now) && !user.HasExpired(now)))
+                if (user is null
+                    || (!user.IsBlocked(now) && !user.HasExpired(now)
+                        && user.ApprovedAt is not null))
                 {
                     await next();
                     return;
@@ -61,14 +63,31 @@ namespace AlgoJudge.Server.Authorization
 
                 // Blocked first: somebody stopped this account on purpose, and
                 // that is the more useful thing to be told.
-                throw user.IsBlocked(now)
-                    ? new ForbiddenActionException(
+                if (user.IsBlocked(now))
+                {
+                    throw new ForbiddenActionException(
                         user.BlockedReason is { Length: > 0 } reason
                             ? $"This account is blocked: {reason}"
                             : "This account is blocked",
-                        "account.blocked")
-                    : new ForbiddenActionException(
+                        "account.blocked");
+                }
+
+                if (user.HasExpired(now))
+                {
+                    throw new ForbiddenActionException(
                         "This account has expired", "account.expired");
+                }
+
+                // **The half a sign-in check cannot do**, same as expiry: an
+                // account that registered itself before this rule existed still
+                // holds a cookie.
+                //
+                // Approval only. Whether the instance requires a confirmed
+                // address is asked at sign-in and not here: it is a second row
+                // to read on every authenticated request, and unlike blocking
+                // and expiry nothing changes it behind somebody's back.
+                throw new ForbiddenActionException(
+                    "This account is waiting for approval", "account.pendingApproval");
             });
     }
 }
