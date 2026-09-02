@@ -38,7 +38,7 @@ services:
   # exact tag for the same reason postgres is: an unpinned object store that
   # moves under a stack is a morning nobody planned.
   #
-  # `1.0.0-rc.1` is a release candidate, which is the newest thing this image
+  # `1.0.0-rc.4` is a release candidate, which is the newest thing this image
   # publishes as a version. That is acceptable here and is one more reason this
   # service is development-only.
   #
