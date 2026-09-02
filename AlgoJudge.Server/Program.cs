@@ -118,8 +118,16 @@ namespace AlgoJudge.Server
                 // and the first half makes a temporary account impossible.
                 options.User.RequireUniqueEmail = false;
                 // No mail sender in v1, so requiring confirmation here would lock
-                // everybody out. Whether an instance demands it is a setting on
-                // Instance, applied at sign-in.
+                // everybody out.
+                //
+                // **`Instance.RequireConfirmedEmail` is stored and not applied.**
+                // This comment said it was "applied at sign-in", and no code has
+                // ever read it: the column, the panel write, the preconfiguration
+                // flag and the wire contract are all there, and not one
+                // comparison. An operator can turn it on, see it saved, see it in
+                // `/api/v1`, and admit exactly the same people. Making it real is
+                // a decision rather than a repair — it has to answer the sentence
+                // above.
                 options.SignIn.RequireConfirmedEmail = false;
             })
                 .AddEntityFrameworkStores<ApplicationDbContext>()

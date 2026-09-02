@@ -32,6 +32,13 @@ namespace AlgoJudge.Server.Database.Models
         /// account is a decision a person made. One state holding both would make
         /// an instance that confirms no addresses unable to approve anybody.
         /// </para>
+        /// <para>
+        /// <b>Recorded, and read by nothing.</b> It is written on federated
+        /// sign-in and on both local paths, and no code compares it — so an
+        /// instance that opens local registration admits a fresh account at once,
+        /// and approving one changes this timestamp and what the panel shows.
+        /// Gating on it is a decision rather than a repair.
+        /// </para>
         /// </summary>
         public DateTime? ApprovedAt { get; set; }
 

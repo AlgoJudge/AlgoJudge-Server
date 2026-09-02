@@ -40,8 +40,14 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// Whether an address must be confirmed before the account can sign in.
-        /// Off by default, and it has to be: there is no mail sender in v1, so an
+        /// <para>
+        /// <b>Stored, and read by nothing.</b> No sign-in path compares it, so
+        /// turning it on changes who gets in by not at all. Kept rather than
+        /// dropped because the column, the panel field and the wire contract all
+        /// ship; making it real is its own decision, and that decision has to
+        /// answer why it is off by default — there is no mail sender in v1, so an
         /// instance that required confirmation could admit nobody.
+        /// </para>
         /// </summary>
         public bool RequireConfirmedEmail { get; set; }
 
