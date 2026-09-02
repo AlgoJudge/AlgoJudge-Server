@@ -390,7 +390,7 @@ public class LtiIdentityTests(ServerFixture server)
             await core.SaveChangesAsync();
         }
 
-        var user = new User { UserName = "dir-" + Guid.NewGuid().ToString("N")[..10] };
+        var user = new User { UserName = "dir-" + Guid.NewGuid().ToString("N")[..10], ApprovedAt = DateTime.UtcNow };
         Assert.True((await users.CreateAsync(user)).Succeeded);
 
         core.UserIdentities.Add(new UserIdentity
@@ -409,7 +409,7 @@ public class LtiIdentityTests(ServerFixture server)
     {
         using var scope = server.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
-        var user = new User { UserName = "local-" + Guid.NewGuid().ToString("N")[..10] };
+        var user = new User { UserName = "local-" + Guid.NewGuid().ToString("N")[..10], ApprovedAt = DateTime.UtcNow };
         Assert.True((await users.CreateAsync(user)).Succeeded);
         return user;
     }

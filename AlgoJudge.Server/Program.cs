@@ -117,17 +117,11 @@ namespace AlgoJudge.Server
                 // reads it as "every account has an address AND it is unique",
                 // and the first half makes a temporary account impossible.
                 options.User.RequireUniqueEmail = false;
-                // No mail sender in v1, so requiring confirmation here would lock
-                // everybody out.
-                //
-                // **`Instance.RequireConfirmedEmail` is stored and not applied.**
-                // This comment said it was "applied at sign-in", and no code has
-                // ever read it: the column, the panel write, the preconfiguration
-                // flag and the wire contract are all there, and not one
-                // comparison. An operator can turn it on, see it saved, see it in
-                // `/api/v1`, and admit exactly the same people. Making it real is
-                // a decision rather than a repair — it has to answer the sentence
-                // above.
+                // No mail sender in v1, so requiring confirmation *here* would
+                // lock everybody out of every installation. Whether one demands
+                // it is `Instance.RequireConfirmedEmail`, asked by
+                // `ExpiringSignInManager` where a temporary login can be skipped
+                // and a federated sign-in never arrives.
                 options.SignIn.RequireConfirmedEmail = false;
             })
                 .AddEntityFrameworkStores<ApplicationDbContext>()

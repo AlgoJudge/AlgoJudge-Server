@@ -41,12 +41,18 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>
         /// Whether an address must be confirmed before the account can sign in.
         /// <para>
-        /// <b>Stored, and read by nothing.</b> No sign-in path compares it, so
-        /// turning it on changes who gets in by not at all. Kept rather than
-        /// dropped because the column, the panel field and the wire contract all
-        /// ship; making it real is its own decision, and that decision has to
-        /// answer why it is off by default — there is no mail sender in v1, so an
-        /// instance that required confirmation could admit nobody.
+        /// <b>Off by default, and it has to be: there is no mail sender in v1.</b>
+        /// Nothing can confirm an address, so an instance that turns this on
+        /// admits only the accounts something else already confirmed — a
+        /// provider asserting a verified address does that, and nothing local
+        /// does. Turning it on with local registration open closes that door
+        /// completely, which is a reasonable thing to want and a terrible thing
+        /// to do by accident.
+        /// </para>
+        /// <para>
+        /// Asked by <see cref="Authorization.ExpiringSignInManager"/>, which is
+        /// the password path. A temporary login has no address and is skipped;
+        /// a federated sign-in does not pass through there at all, deliberately.
         /// </para>
         /// </summary>
         public bool RequireConfirmedEmail { get; set; }
