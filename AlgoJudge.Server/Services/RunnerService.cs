@@ -66,6 +66,58 @@ namespace AlgoJudge.Server.Services
         private const int MaxDeliveries = 5;
 
         /// <summary>
+        /// How stale <see cref="DbRunner.LastSeenAt"/> is allowed to get.
+        /// <para>
+        /// **The field is written on eight paths and read by one**, and that
+        /// reader — the manager panel's <c>IsConnected</c> — rounds it to two
+        /// minutes. Every renewal, every progress note, every claim and every
+        /// report was rewriting the same row: an External Runner holding twenty
+        /// jobs renews all twenty on one cycle, so nineteen of every twenty
+        /// writes landed on one row inside one second, each leaving a dead
+        /// tuple for autovacuum on a table with a dozen rows in it.
+        /// </para>
+        /// <para>
+        /// Thirty seconds is comfortably inside the reader's two minutes and
+        /// suppresses only the amplified paths: a heartbeat is a minute apart
+        /// and is never blocked by this.
+        /// </para>
+        /// <para>
+        /// The same reasoning, and the same shape, as
+        /// <see cref="Realtime.SessionTrackingMiddleware"/>'s throttle on a
+        /// session's <c>LastRequestAt</c>.
+        /// </para>
+        /// </summary>
+        private static readonly TimeSpan SeenThrottle = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// When each Runner's row was last touched. **In memory on purpose**:
+        /// losing it on a restart costs one extra write per Runner.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, DateTime> Touched = new();
+
+        /// <summary>
+        /// Records that this Runner is alive, at most once per
+        /// <see cref="SeenThrottle"/>.
+        /// <para>
+        /// Assigning nothing is the whole of the suppression: EF writes the
+        /// columns it tracked as modified, so a call that changes nothing here
+        /// simply leaves <c>LastSeenAt</c> out of the statement it was going to
+        /// send anyway. Nothing extra is saved and nothing extra is skipped.
+        /// </para>
+        /// </summary>
+        internal static void Seen(DbRunner runner, DateTime now)
+        {
+            if (Touched.TryGetValue(runner.Id, out var written)
+                && now - written < SeenThrottle)
+            {
+                return;
+            }
+
+            Touched[runner.Id] = now;
+            runner.LastSeenAt = now;
+        }
+
+        /// <summary>
         /// How many times a job may be handed back by a Runner that is stopping
         /// before it starts costing a delivery like everything else.
         /// <para>
@@ -330,7 +382,7 @@ namespace AlgoJudge.Server.Services
             // `204` is exactly what a Runner already does the right thing with,
             // and a 503 here would be a second thing to teach for no gain. The
             // work stays queued and goes out when the window ends.
-            if (await maintenance.StateAsync(ct) is { Level: not MaintenanceLevel.Open })
+            if (await maintenance.LevelAsync(ct) is not MaintenanceLevel.Open)
             {
                 return null;
             }
@@ -423,7 +475,7 @@ namespace AlgoJudge.Server.Services
             job.LeaseSeconds = (int)lease.TotalSeconds;
             job.Deliveries += 1;
 
-            runner.LastSeenAt = now;
+            Seen(runner, now);
 
             await context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -642,7 +694,7 @@ namespace AlgoJudge.Server.Services
             }
 
             if (!report.InfrastructureFailure) runner.CompletedJobs += 1;
-            runner.LastSeenAt = now;
+            Seen(runner, now);
 
             await context.SaveChangesAsync(ct);
             // Only when it went back: a job that finished is not work for
@@ -661,6 +713,11 @@ namespace AlgoJudge.Server.Services
 
         public async Task HeartbeatAsync(DbRunner runner, string? address, CancellationToken ct)
         {
+            // **Not throttled, and it is the one that must not be.** A heartbeat
+            // is a Runner saying it is alive and nothing else, so suppressing it
+            // would skip the write for the only caller whose entire purpose is
+            // this field. A minute apart it would clear the throttle anyway;
+            // saying so here means a shorter interval keeps working.
             runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
             // Read from the connection every time, not only at registration: a
             // Runner that moved is at a new address, and it is still a bad
@@ -742,7 +799,7 @@ namespace AlgoJudge.Server.Services
                 job.Deliveries = Math.Max(0, job.Deliveries - 1);
             }
 
-            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+            Seen(runner, clock.GetUtcNow().UtcDateTime);
             await context.SaveChangesAsync(ct);
             // **The whole point of the release.** A Runner stopping hands its
             // job back so somebody else takes it *at once*; without this the
@@ -836,7 +893,8 @@ namespace AlgoJudge.Server.Services
 
                 var expires = Later(job.LeaseExpiresAt, clock.GetUtcNow().UtcDateTime.Add(by));
                 job.LeaseExpiresAt = expires;
-                runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+                // The amplified one: every renewal and every progress note.
+                Seen(runner, clock.GetUtcNow().UtcDateTime);
 
                 try
                 {

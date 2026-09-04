@@ -23,6 +23,24 @@ namespace AlgoJudge.Server.Services
         Task<MaintenanceState> StateAsync(CancellationToken ct);
 
         /// <summary>
+        /// The level alone, untracked, and creating nothing.
+        /// <para>
+        /// For the claim path, which asks on every look and needs one enum
+        /// rather than a row it will not write. <see cref="StateAsync"/> selects
+        /// and tracks the whole singleton, which on a loop that re-enters per
+        /// nudge is a round trip and a tracked entity per attempt for a table
+        /// with one row in it.
+        /// </para>
+        /// <para>
+        /// **An absent row is <see cref="MaintenanceLevel.Open"/>**, the same
+        /// answer <see cref="StateAsync"/> gives by creating one — and the same
+        /// reason: the absence means nobody has ever asked for maintenance.
+        /// Creating it is left to whoever actually throws the switch.
+        /// </para>
+        /// </summary>
+        Task<MaintenanceLevel> LevelAsync(CancellationToken ct);
+
+        /// <summary>
         /// Throws the switch. **On means <see cref="MaintenanceLevel.Draining"/>,
         /// never straight to closed** — work in flight is given its chance to
         /// finish, and the drainer decides when that is over. Off means open,
@@ -57,6 +75,12 @@ namespace AlgoJudge.Server.Services
             await context.SaveChangesAsync(ct);
             return state;
         }
+
+        public async Task<MaintenanceLevel> LevelAsync(CancellationToken ct) =>
+            await context.Maintenance
+                .AsNoTracking()
+                .Select(m => (MaintenanceLevel?)m.Level)
+                .FirstOrDefaultAsync(ct) ?? MaintenanceLevel.Open;
 
         public async Task<MaintenanceState> SetAsync(bool on, string? reason, CancellationToken ct)
         {

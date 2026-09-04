@@ -446,7 +446,24 @@ namespace AlgoJudge.Server.Database
                 e.HasIndex(j => new { j.SubmissionId, j.Attempt }).IsUnique();
                 // The claim query orders queued jobs by age; without this index it
                 // is a sequential scan under exactly the contention it must not be.
-                e.HasIndex(j => new { j.State, j.CreatedAt });
+                //
+                // **Filtered to work that is not finished.** Unfiltered, this
+                // index carried every job the installation had ever run, for
+                // ever, while the part of it anybody reads is the handful of
+                // rows at the queued end — so its size tracked history rather
+                // than the queue, and every insert and every reclaim paid to
+                // maintain the rest. Correct at ten thousand rows; a real cost
+                // at a million.
+                //
+                // `< 2` rather than `= 0`, because two readers want it and both
+                // want live work: the claim seeks Queued, and
+                // `MaintenanceDrainer` counts Running on a poll while a drain
+                // settles. Filtering to the queue alone would have left that
+                // drain scanning the whole table on every look — trading one
+                // unbounded cost for another, on the path an operator is
+                // actually waiting on.
+                e.HasIndex(j => new { j.State, j.CreatedAt })
+                    .HasFilter("\"State\" < 2");
                 // The reaper's query: leases that have run out.
                 e.HasIndex(j => j.LeaseExpiresAt);
                 // Reporting a result is idempotent on the lease token, and this

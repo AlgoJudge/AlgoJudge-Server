@@ -54,6 +54,29 @@ namespace AlgoJudge.Server.Controllers
         /// </para>
         /// </summary>
         private const int JitterDivisor = 16;
+
+        /// <summary>
+        /// How far to spread the looks a single nudge provokes.
+        /// <para>
+        /// **A nudge is a broadcast.** One submission completes the task every
+        /// waiting Runner is holding, so all of them resume at the same instant
+        /// and each runs a full claim — a transaction, a locking select and a
+        /// rollback. One wins and the rest did the work for nothing.
+        /// </para>
+        /// <para>
+        /// At four or twelve Runners that is noise. At a hundred it is a hundred
+        /// simultaneous transactions per submission against a connection pool of
+        /// exactly a hundred, and the first thing to break would be ordinary web
+        /// traffic rather than the claims themselves. A few tens of milliseconds
+        /// drawn per waiter turns the spike into a queue, and costs a latency
+        /// nobody can perceive.
+        /// </para>
+        /// <para>
+        /// The deadline's jitter above does not do this: it spreads the *204s*,
+        /// and a nudge is simultaneous by construction.
+        /// </para>
+        /// </summary>
+        private static readonly TimeSpan NudgeSpread = TimeSpan.FromMilliseconds(50);
         /// <summary>
         /// Presents a public key. Registration is not approval: an administrator
         /// approves the fingerprint, and nothing is evaluated before that.
@@ -122,7 +145,15 @@ namespace AlgoJudge.Server.Controllers
                 // A nudge says something became claimable; it does not say it
                 // was claimable by *this* Runner, whose types and tags may not
                 // match. So the answer is another look, not a job.
-                await queue.WaitAsync(left, ct);
+                if (await queue.WaitAsync(left, ct))
+                {
+                    // Woken rather than timed out, so this look is one of many
+                    // starting together — see `NudgeSpread`.
+                    await Task.Delay(
+                        TimeSpan.FromMilliseconds(
+                            Random.Shared.NextDouble() * NudgeSpread.TotalMilliseconds),
+                        ct);
+                }
 
                 // **A scope of its own for every later look, and this is not
                 // tidiness.** A request scope carries one `DbContext`, and a

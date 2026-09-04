@@ -226,7 +226,7 @@ namespace AlgoJudge.Server.Services
             trial.LeaseExpiresAt = now.Add(lease);
             trial.Deliveries += 1;
 
-            runner.LastSeenAt = now;
+            RunnerService.Seen(runner, now);
 
             await context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -297,7 +297,7 @@ namespace AlgoJudge.Server.Services
             var packageId = trial.PackageFileId;
             trial.PackageFileId = null;
 
-            runner.LastSeenAt = now;
+            RunnerService.Seen(runner, now);
             await context.SaveChangesAsync(ct);
 
             if (packageId is { } id) await files.DeleteUnreferencedAsync(id, ct);
@@ -341,7 +341,7 @@ namespace AlgoJudge.Server.Services
             // same defect that was found and fixed on the job queue.
             var wanted = now.Add(lease);
             trial.LeaseExpiresAt = trial.LeaseExpiresAt is { } held && held > wanted ? held : wanted;
-            runner.LastSeenAt = now;
+            RunnerService.Seen(runner, now);
             await context.SaveChangesAsync(ct);
 
             return new TrialLeaseDto
