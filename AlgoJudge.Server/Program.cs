@@ -259,6 +259,10 @@ namespace AlgoJudge.Server
             // A singleton because it is one queue: every Runner holding a claim
             // open in this process waits on the same nudge.
             builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
+            // The maintenance level, so the claim path does not ask the database
+            // for one enum on every look. The row behind it is the backup that
+            // survives a restart.
+            builder.Services.AddSingleton<MaintenanceLevelCache>();
             // Who hears about a thing, resolved by the same rule that answers a
             // fetch for it. Scoped, because it reads the grants.
             builder.Services.AddScoped<Realtime.IEventAudience, Realtime.EventAudience>();

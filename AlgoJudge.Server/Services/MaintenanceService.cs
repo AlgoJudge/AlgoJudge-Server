@@ -55,9 +55,43 @@ namespace AlgoJudge.Server.Services
         Task<MaintenanceState> CloseAsync(CancellationToken ct);
     }
 
+    /// <summary>
+    /// The level in force, in this process.
+    /// <para>
+    /// **The row is the backup, not the source.** An operator throws the switch
+    /// a handful of times a year; the claim path asks on every look, and since
+    /// a claim may be held open and re-entered on every nudge, that was a round
+    /// trip per waiting Runner per submission for a table with one row in it.
+    /// The answer belongs in memory, and the row exists so that a restart
+    /// remembers a drain that was in progress.
+    /// </para>
+    /// <para>
+    /// **Single instance, and that is a real assumption.** A second Server
+    /// would not see this one's switch until its own copy expired, and there is
+    /// no expiry — so this is correct exactly as far as the 0.1.0 deployment
+    /// goes, which is one Compose stack. The decision of 2026-08-27 already
+    /// names what replaces it when there are two: PostgreSQL
+    /// <c>LISTEN</c>/<c>NOTIFY</c>, the same backplane the queue's nudge will
+    /// need, and this is one more caller for it rather than a new problem.
+    /// </para>
+    /// </summary>
+    public sealed class MaintenanceLevelCache
+    {
+        /// <summary>
+        /// Boxed because <c>volatile</c> cannot be applied to a nullable enum,
+        /// and a torn read of the level is exactly what this must not allow.
+        /// </summary>
+        private volatile object? known;
+
+        public MaintenanceLevel? Known => (MaintenanceLevel?)known;
+
+        public void Remember(MaintenanceLevel level) => known = level;
+    }
+
     public class MaintenanceService(
         ApplicationDbContext context,
         IEventHub events,
+        MaintenanceLevelCache cache,
         TimeProvider clock
     ) : IMaintenanceService
     {
@@ -76,11 +110,18 @@ namespace AlgoJudge.Server.Services
             return state;
         }
 
-        public async Task<MaintenanceLevel> LevelAsync(CancellationToken ct) =>
-            await context.Maintenance
+        public async Task<MaintenanceLevel> LevelAsync(CancellationToken ct)
+        {
+            if (cache.Known is { } known) return known;
+
+            // Once per process, or once after a restart while a drain was on.
+            var level = await context.Maintenance
                 .AsNoTracking()
                 .Select(m => (MaintenanceLevel?)m.Level)
                 .FirstOrDefaultAsync(ct) ?? MaintenanceLevel.Open;
+            cache.Remember(level);
+            return level;
+        }
 
         public async Task<MaintenanceState> SetAsync(bool on, string? reason, CancellationToken ct)
         {
@@ -98,6 +139,7 @@ namespace AlgoJudge.Server.Services
                     state.Level = MaintenanceLevel.Draining;
                     state.RequestedAt = now;
                     state.Reason = reason;
+                    cache.Remember(state.Level);
                 }
             }
             else
@@ -105,6 +147,7 @@ namespace AlgoJudge.Server.Services
                 state.Level = MaintenanceLevel.Open;
                 state.RequestedAt = null;
                 state.Reason = null;
+                cache.Remember(state.Level);
             }
 
             await context.SaveChangesAsync(ct);
@@ -120,6 +163,7 @@ namespace AlgoJudge.Server.Services
             if (state.Level == MaintenanceLevel.Draining)
             {
                 state.Level = MaintenanceLevel.Closed;
+                cache.Remember(state.Level);
                 await context.SaveChangesAsync(ct);
                 await AnnounceAsync(state, ct);
             }
