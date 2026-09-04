@@ -30,13 +30,48 @@ namespace AlgoJudge.Server.Services
     /// <summary>
     /// Stored bytes: one way in, one way out, and one rule about who may read.
     /// </summary>
+    /// <summary>
+    /// Who is uploading, as the file table records it.
+    /// <para>
+    /// **A parameter rather than something read from the ambient request**,
+    /// because that is exactly how the defect arrived: the Runner surface
+    /// authenticated a Runner, threw the answer away, and let the commit ask a
+    /// session service that answers null for one — so every Runner's uploads
+    /// landed in the same anonymous pool and one Runner could attach another's.
+    /// A required argument makes the compiler put the question to every writer,
+    /// and there are six.
+    /// </para>
+    /// <para>
+    /// <see cref="Session"/> still resolves through <c>ICurrentUserService</c>,
+    /// so no controller grows a dependency to say the ordinary thing — but
+    /// saying it is now a word at the call site rather than a default nobody
+    /// chose.
+    /// </para>
+    /// </summary>
+    public readonly record struct Uploader
+    {
+        internal Guid? RunnerId { get; private init; }
+        internal bool FromSession { get; private init; }
+
+        /// <summary>Whoever is signed in, or nobody if that is the truth.</summary>
+        public static Uploader Session => new() { FromSession = true };
+
+        /// <summary>An approved Runner, which carries a token and not a session.</summary>
+        public static Uploader Runner(Guid runnerId) => new() { RunnerId = runnerId };
+
+        /// <summary>A seed, a preconfiguration, a fetch — no principal at all.</summary>
+        public static Uploader Nobody => new();
+    }
+
     public interface IFileService
     {
         /// <summary>
         /// Writes bytes and commits the row, for a caller that already holds
         /// everything. Staging and committing in one call.
         /// </summary>
-        Task<DbFile> StoreAsync(Stream content, string name, string mimeType, string declaredSha256, CancellationToken ct);
+        Task<DbFile> StoreAsync(
+            Stream content, string name, string mimeType, string declaredSha256,
+            Uploader uploader, CancellationToken ct);
 
         /// <summary>
         /// Puts the bytes down and answers what they turned out to be.
@@ -65,7 +100,8 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         Task<DbFile> CommitAsync(
-            StagedBytes staged, string name, string mimeType, string declaredSha256, CancellationToken ct);
+            StagedBytes staged, string name, string mimeType, string declaredSha256,
+            Uploader uploader, CancellationToken ct);
 
         /// <summary>Throws staged bytes away. Idempotent, and safe to call twice.</summary>
         Task DiscardAsync(StagedBytes staged, CancellationToken ct);
@@ -145,10 +181,11 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         public async Task<DbFile> StoreAsync(
-            Stream content, string name, string mimeType, string declaredSha256, CancellationToken ct)
+            Stream content, string name, string mimeType, string declaredSha256,
+            Uploader uploader, CancellationToken ct)
         {
             var staged = await StageAsync(content, ct);
-            return await CommitAsync(staged, name, mimeType, declaredSha256, ct);
+            return await CommitAsync(staged, name, mimeType, declaredSha256, uploader, ct);
         }
 
         public async Task<StagedBytes> StageAsync(Stream content, CancellationToken ct)
@@ -169,7 +206,8 @@ namespace AlgoJudge.Server.Services
         }
 
         public async Task<DbFile> CommitAsync(
-            StagedBytes staged, string name, string mimeType, string declaredSha256, CancellationToken ct)
+            StagedBytes staged, string name, string mimeType, string declaredSha256,
+            Uploader uploader, CancellationToken ct)
         {
             var declared = Normalized(declaredSha256, name);
 
@@ -194,7 +232,8 @@ namespace AlgoJudge.Server.Services
                 SizeBytes = staged.SizeBytes,
                 Sha256 = staged.Key.Sha256,
                 StorageId = staged.StoreId,
-                UploadedByUserId = currentUser.UserId,
+                UploadedByUserId = uploader.FromSession ? currentUser.UserId : null,
+                UploadedByRunnerId = uploader.RunnerId,
             };
             context.Files.Add(file);
             await context.SaveChangesAsync(ct);

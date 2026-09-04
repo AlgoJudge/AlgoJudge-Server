@@ -451,7 +451,13 @@ namespace AlgoJudge.Server.Controllers
         {
             // Before a byte is read: a Runner that cannot prove who it is does
             // not get to write into the store.
-            await runners.AuthenticateAsync(Token(), ct);
+            //
+            // **And it is kept.** Throwing this answer away was the whole of a
+            // defect: the commit then asked a session service that answers null
+            // for a Runner, so every Runner's uploads landed in one anonymous
+            // pool and one Runner could attach another's fresh bytes as its own
+            // log.
+            var runner = await runners.AuthenticateAsync(Token(), ct);
 
             var upload = await MultipartUpload.ReadAsync(
                 Request, UploadLimits.Package,
@@ -464,7 +470,8 @@ namespace AlgoJudge.Server.Controllers
             }
 
             var stored = await files.CommitAsync(
-                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"), ct);
+                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"),
+                Services.Uploader.Runner(runner.Id), ct);
             return Created($"/api/v1/runner/files/{Api.Contracts.Wire.Id(stored.Id)}", Api.Projections.Uploaded(stored));
         }
 

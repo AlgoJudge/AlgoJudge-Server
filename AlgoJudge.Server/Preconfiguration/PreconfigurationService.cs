@@ -265,7 +265,7 @@ namespace AlgoJudge.Server.Preconfiguration
                 foreach (var (_, file) in group)
                 {
                     var stored = await files.StoreAsync(
-                        new MemoryStream(file.Bytes), file.FileName, file.MimeType, file.Sha256, ct);
+                        new MemoryStream(file.Bytes), file.FileName, file.MimeType, file.Sha256, Services.Uploader.Nobody, ct);
 
                     statements.Add(new NewStatementDto
                     {

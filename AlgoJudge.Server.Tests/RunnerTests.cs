@@ -433,6 +433,66 @@ public class RunnerTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **A Runner cannot attach another Runner's upload either**, which the
+    /// predicate could not tell apart until 2026-09-04.
+    /// <para>
+    /// The test above catches a *person's* file, and it passed for a reason that
+    /// does not generalise: a person's upload carries a user id, and the check
+    /// asked whether the file had been uploaded by nobody. Two Runners are both
+    /// nobody — a Runner holds a token and not a session — so every Runner's
+    /// scratch uploads were one pool, and B could name A's fresh bytes and
+    /// publish them under its own name as an operator-visible log.
+    /// </para>
+    /// <para>
+    /// Both attach paths are asserted. They are separate methods with separate
+    /// checks, and a fix applied to one of them would leave the other open.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_runner_cannot_attach_another_runners_upload()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(18)\n");
+
+        var thief = await Build.RunnerAsync(server);
+        var job = await thief.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        // Another Runner's, still in the window where nothing points at it.
+        var owner = await Build.RunnerAsync(server);
+        var theirs = await owner.UploadAsync("their-stderr.txt", "another Runner's output" + "\n");
+
+        var toJob = await thief.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/files",
+            new { leaseToken, fileId = theirs, name = "stolen" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, toJob.StatusCode);
+        Assert.Equal("file.missing",
+            (await toJob.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+
+        var toSelf = await thief.Client.PostAsJsonAsync(
+            "/api/v1/runner/files/attach",
+            new { fileId = theirs, name = "stolen" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, toSelf.StatusCode);
+
+        // Nothing was written under the thief's name, on either path.
+        await using (var context = server.NewContext())
+        {
+            Assert.False(await context.FileReferences.AnyAsync(
+                r => r.FileId == Guid.Parse(theirs)));
+        }
+
+        // And the Runner that did upload it still may.
+        var mine = await owner.Client.PostAsJsonAsync(
+            "/api/v1/runner/files/attach",
+            new { fileId = theirs, name = "stderr" });
+        Assert.Equal(HttpStatusCode.NoContent, mine.StatusCode);
+
+        await thief.ReportAsync(jobId, leaseToken);
+    }
+
+    /// <summary>
     /// The regression guard for the same predicate: a Runner's own upload must
     /// still attach, or the fix has closed the path it exists to protect.
     /// </summary>

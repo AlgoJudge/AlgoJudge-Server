@@ -659,7 +659,7 @@ namespace AlgoJudge.Server.Controllers
                 var bytes = System.Text.Encoding.UTF8.GetBytes(canonical);
                 var stored = await files.StoreAsync(
                     new MemoryStream(bytes), "theme.yml", "application/yaml",
-                    IFileService.Checksum(bytes), ct);
+                    IFileService.Checksum(bytes), Uploader.Session, ct);
                 fileId = Wire.Id(stored.Id);
             }
 

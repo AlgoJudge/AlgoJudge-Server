@@ -79,7 +79,7 @@ namespace AlgoJudge.Server.Controllers
             }
 
             var stored = await files.CommitAsync(
-                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"), ct);
+                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"), Uploader.Session, ct);
 
             var dto = Projections.Uploaded(stored);
             return Created($"/api/v1/files/{dto.Id}", dto);

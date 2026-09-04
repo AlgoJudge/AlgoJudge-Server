@@ -756,7 +756,7 @@ namespace AlgoJudge.Server.Services
             foreach (var attachment in report.Files ?? [])
             {
                 if (!Guid.TryParse(attachment.FileId, out var fileId)) continue;
-                if (!await IsRunnerOutputAsync(fileId, ct)) continue;
+                if (!await IsOwnUploadAsync(runner, fileId, ct)) continue;
 
                 context.FileReferences.Add(new FileReference
                 {
@@ -1098,8 +1098,8 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// Whether this file is something a Runner uploaded and nothing owns yet
-        /// — the only kind of file a Runner may name in an attachment.
+        /// Whether this file is one <b>this</b> Runner uploaded and nothing owns
+        /// yet — the only kind of file a Runner may name in an attachment.
         /// <para>
         /// <b>The three attach paths checked that the file existed, and nothing
         /// else.</b> Since this answers by reference and an attachment
@@ -1108,17 +1108,25 @@ namespace AlgoJudge.Server.Services
         /// problem package, another participant's <c>source</c>.
         /// </para>
         /// <para>
-        /// <b>Both halves are load-bearing.</b> A Runner uploads with no
-        /// principal, so <see cref="DbFile.UploadedByUserId"/> is null — but so
-        /// is a seeder's or a pre-configuration's, which is why the absence of a
-        /// reference is asked for too. And a reference test on its own would let
-        /// a Runner mint the <i>first</i> reference on a trial package, which is
-        /// uploaded by a person and deliberately carries none; that reference
-        /// would then stop the package ever being collected.
+        /// <b>It then asked the wrong question for a year: "uploaded by
+        /// nobody".</b> A Runner uploads with no session, so its files carried a
+        /// null user — and so did every other Runner's. Absence is not identity,
+        /// so one Runner could name another's fresh bytes and attach them as its
+        /// own log. <see cref="DbFile.UploadedByRunnerId"/> exists to make the
+        /// question answerable, and this is the only reader that needs it.
+        /// </para>
+        /// <para>
+        /// <b>The second half stays, on its own reasoning.</b> One upload, one
+        /// reference: without it a Runner could hang one blob off two attempts,
+        /// or off an attempt and off itself at two scopes, and the collector's
+        /// accounting is per name and per reference —
+        /// <c>FileCollector</c> groups superseded references by
+        /// <c>(RunnerId, Name)</c> and sweeps what nothing points at.
         /// </para>
         /// </summary>
-        private async Task<bool> IsRunnerOutputAsync(Guid fileId, CancellationToken ct) =>
-            await context.Files.AnyAsync(f => f.Id == fileId && f.UploadedByUserId == null, ct)
+        private async Task<bool> IsOwnUploadAsync(DbRunner runner, Guid fileId, CancellationToken ct) =>
+            await context.Files.AnyAsync(
+                f => f.Id == fileId && f.UploadedByRunnerId == runner.Id, ct)
             && !await context.FileReferences.AnyAsync(r => r.FileId == fileId, ct);
 
         /// <summary>
@@ -1132,7 +1140,7 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// <para>
         /// It answers by <see cref="FileReference"/>, so what a Runner may attach
-        /// decides what it may read. See <see cref="IsRunnerOutputAsync"/>.
+        /// decides what it may read. See <see cref="IsOwnUploadAsync"/>.
         /// </para>
         /// </summary>
         public async Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct)
@@ -1172,7 +1180,7 @@ namespace AlgoJudge.Server.Services
         public async Task AttachToSelfAsync(
             DbRunner runner, Guid fileId, string name, CancellationToken ct)
         {
-            if (!await IsRunnerOutputAsync(fileId, ct))
+            if (!await IsOwnUploadAsync(runner, fileId, ct))
             {
                 throw new ValidationException("That file is not stored", "file.missing");
             }
@@ -1223,7 +1231,7 @@ namespace AlgoJudge.Server.Services
                     $"This attempt already has a file called {name}", "attempt.file.duplicate");
             }
 
-            if (!await IsRunnerOutputAsync(fileId, ct))
+            if (!await IsOwnUploadAsync(runner, fileId, ct))
             {
                 throw new ValidationException("That file is not stored", "file.missing");
             }

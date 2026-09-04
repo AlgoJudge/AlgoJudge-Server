@@ -106,6 +106,26 @@ namespace AlgoJudge.Server.Database.Models
         public string? UploadedByUserId { get; set; }
         public User? UploadedBy { get; set; }
 
+        /// <summary>
+        /// Which Runner uploaded it, when a Runner did.
+        /// <para>
+        /// <b>The sibling of <see cref="UploadedByUserId"/>, because a Runner is
+        /// a principal this Server holds a row for and not a session.</b>
+        /// Without it the only thing separating one Runner's output from
+        /// another's was that neither had a user — so every Runner's uploads
+        /// were one pool, and a Runner could name somebody else's fresh bytes
+        /// and attach them as its own log.
+        /// </para>
+        /// <para>
+        /// At most one of the two is set. Two columns rather than one
+        /// polymorphic pair, for the reason the owner columns on
+        /// <see cref="FileReference"/> are written out: a bare
+        /// <c>(kind, id)</c> cannot be a foreign key.
+        /// </para>
+        /// </summary>
+        public Guid? UploadedByRunnerId { get; set; }
+        public Runner? UploadedByRunner { get; set; }
+
         public ICollection<FileReference> References { get; set; } = new List<FileReference>();
     }
 
