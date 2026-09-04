@@ -908,6 +908,56 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **A caller that claims and goes away cannot refund for ever.**
+    /// <para>
+    /// Undoing a handout whose answer was never delivered is right — the
+    /// delivery demonstrably did not happen. But it decrements the count the
+    /// delivery cap reads, and a caller that claims and aborts in a loop has
+    /// exactly the shape the cap exists to stop: a job that poisons every
+    /// Runner it reaches would be refunded back below the cap for ever and
+    /// never fail.
+    /// </para>
+    /// <para>
+    /// Three are free, as three releases are and three unacknowledged reclaims
+    /// are, and they share one counter — so the three paths cannot each spend
+    /// three.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_undone_handout_is_refunded_three_times_and_then_charged()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(19)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var first = await Build.RunnerAsync(server);
+        var held = await first.ClaimUntilAsync(submissionId);
+        var jobId = Guid.Parse(held.GetProperty("jobId").GetString()!);
+        Assert.Equal(1, await DeliveriesAsync(jobId));
+
+        var taker = await Build.RunnerAsync(server);
+
+        // Four rounds of claim-and-abandon, each one a fresh handout the caller
+        // never received.
+        for (var round = 0; round < 4; round++)
+        {
+            await UnclaimAsync(jobId);
+            Assert.Equal(EvaluationJobState.Queued, await StateAsync(jobId));
+            await taker.ClaimUntilAsync(submissionId);
+        }
+
+        await UnclaimAsync(jobId);
+
+        var (deliveries, refunds) = await AccountingAsync(jobId);
+        Assert.Equal(AlgoJudge.Server.Services.RunnerService.FreeRefunds, refunds);
+        Assert.True(
+            deliveries >= 2,
+            $"after four abandonments the job had {deliveries} deliveries, so the bound "
+                + "on the refund is not holding and the cap can never be reached");
+    }
+
+    /// <summary>
     /// Empties the queue of whatever the rest of the collection left behind, so
     /// a test that counts what one submission produces is counting that.
     /// </summary>
@@ -1422,4 +1472,20 @@ public class RunnerConformanceTests(ServerFixture server)
     /// </summary>
     private Task<int> SweepAsync() =>
         server.Services.GetRequiredService<LeaseReaper>().SweepAsync(default);
+
+    private async Task UnclaimAsync(Guid jobId)
+    {
+        using var scope = server.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AlgoJudge.Server.Services.IRunnerService>()
+            .UnclaimAsync(jobId, default);
+    }
+
+    private async Task<(int Deliveries, int Refunds)> AccountingAsync(Guid jobId)
+    {
+        using var scope = server.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var row = await context.EvaluationJobs.Where(j => j.Id == jobId)
+            .Select(j => new { j.Deliveries, j.Refunds }).FirstAsync();
+        return (row.Deliveries, row.Refunds);
+    }
 }

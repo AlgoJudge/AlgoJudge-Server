@@ -885,7 +885,20 @@ namespace AlgoJudge.Server.Services
             job.RunnerId = null;
             job.ClaimedAt = null;
             job.State = EvaluationJobState.Queued;
-            if (job.Deliveries > 0) job.Deliveries -= 1;
+
+            // **Bounded, and counted, exactly as the reaper's refund is.** The
+            // delivery is given back because the handover demonstrably did not
+            // happen — but a caller that claims and aborts in a loop has the
+            // same shape as a row that throws after every commit, and that is
+            // what `FreeRefunds` exists to stop. Without the bound this path
+            // resets the count for ever and `DeliveryCap` never fires; without
+            // the counter, nothing downstream can tell how often work was
+            // really handed out, because `Deliveries` alone no longer says.
+            if (job.Refunds < FreeRefunds && job.Deliveries > 0)
+            {
+                job.Deliveries -= 1;
+                job.Refunds += 1;
+            }
 
             await context.SaveChangesAsync(ct);
             queue.Wake();
