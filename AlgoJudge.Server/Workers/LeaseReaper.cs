@@ -24,6 +24,7 @@ namespace AlgoJudge.Server.Workers
     /// </summary>
     public class LeaseReaper(
         IServiceScopeFactory scopes,
+        IQueueSignal queue,
         TimeProvider clock,
         ILogger<LeaseReaper> logger
     ) : BackgroundService
@@ -125,6 +126,9 @@ namespace AlgoJudge.Server.Workers
             }
 
             await context.SaveChangesAsync(ct);
+            // These went back to the queue, and a Runner waiting for work is
+            // the one thing that can act on it.
+            queue.Wake();
 
             // Announced after the save, so a screen that refetches on the event
             // reads the state this sweep has already committed.

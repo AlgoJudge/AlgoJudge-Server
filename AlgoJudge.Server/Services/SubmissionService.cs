@@ -35,6 +35,7 @@ namespace AlgoJudge.Server.Services
         IEventHub events,
         IEventAudience audience,
         IRequestOrigin origin,
+        IQueueSignal queue,
         ILogger<SubmissionService> log
     ) : ISubmissionService
     {
@@ -420,6 +421,11 @@ namespace AlgoJudge.Server.Services
 
             await context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
+
+            // **After the commit**, so a Runner woken by it finds the row. Before
+            // it, the nudge would race its own transaction and the Runner would
+            // look, see an empty queue and go back to waiting.
+            queue.Wake();
 
             // **After the commit, and it may not throw.** The controller
             // compensates a throw out of here by discarding the staged bytes — of

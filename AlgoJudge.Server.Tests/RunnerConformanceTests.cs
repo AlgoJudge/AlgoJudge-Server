@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -458,6 +459,117 @@ public class RunnerConformanceTests(ServerFixture server)
         Assert.NotNull(stored.Result);
         Assert.Null(stored.Result!.Score);
         Assert.Null(stored.Result.MaxScore);
+    }
+
+    /// <summary>
+    /// **A Runner may ask to be told rather than to ask again.** With
+    /// <c>waitSeconds</c> the Server holds the request open, and a submission
+    /// arriving while it waits is handed over without another round trip.
+    /// <para>
+    /// The assertion is the *latency*, not the answer: without the nudge this
+    /// would still pass, five seconds later, when the wait ran out. So the job
+    /// has to arrive in a fraction of the wait for the test to mean anything.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_waiting_runner_is_handed_a_job_the_moment_one_exists()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var runner = await Build.RunnerAsync(server);
+
+        // Empty the queue first, so what this waits for is the submission below
+        // and not something another test left behind.
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var drained = await runner.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+            if (drained.StatusCode == HttpStatusCode.NoContent) break;
+            await Sign.Succeeded(drained);
+        }
+
+        var started = Stopwatch.StartNew();
+        var waiting = runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 30 });
+
+        // Long enough that the request is certainly parked in the wait rather
+        // than still being routed, and short enough to leave the assertion room.
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        await Build.SubmitAsync(participant, slug, "print(4)\n");
+
+        var answer = await waiting;
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(10),
+            $"it took {started.Elapsed} to be handed a job that existed after half a "
+                + "second, so it waited the wait out rather than being told");
+    }
+
+    /// <summary>
+    /// **And an empty queue still answers 204, at the deadline and not before.**
+    /// A Runner that asked to wait and was given nothing must not be told so
+    /// immediately — that would turn the wait into a busy loop — nor held past
+    /// what it asked for, which is what its own request timeout is set against.
+    /// </summary>
+    [Fact]
+    public async Task A_waiting_runner_is_told_nothing_matched_when_the_wait_runs_out()
+    {
+        var runner = await Build.RunnerAsync(server);
+
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var drained = await runner.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+            if (drained.StatusCode == HttpStatusCode.NoContent) break;
+            await Sign.Succeeded(drained);
+        }
+
+        var started = Stopwatch.StartNew();
+        var answer = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 2 });
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.NoContent, answer.StatusCode);
+        // The jitter takes a sixteenth off the top, so the floor is below two
+        // seconds by that much and a little more for the clock.
+        Assert.True(
+            started.Elapsed > TimeSpan.FromMilliseconds(1500),
+            $"it answered after {started.Elapsed}, which is not waiting");
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(10),
+            $"it answered after {started.Elapsed}, which is past what it asked for");
+    }
+
+    /// <summary>
+    /// **Asking for nothing is what every Runner did before this existed**, and
+    /// it must still answer at once. The conformance sequence in §11 depends on
+    /// it: every other case here claims without a wait and expects an immediate
+    /// 204 on an empty queue.
+    /// </summary>
+    [Fact]
+    public async Task A_claim_that_asks_for_no_wait_still_answers_at_once()
+    {
+        var runner = await Build.RunnerAsync(server);
+
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var drained = await runner.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+            if (drained.StatusCode == HttpStatusCode.NoContent) break;
+            await Sign.Succeeded(drained);
+        }
+
+        var started = Stopwatch.StartNew();
+        var answer = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.NoContent, answer.StatusCode);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(5),
+            $"an unasked-for wait of {started.Elapsed} appeared from somewhere");
     }
 
     /// <summary>
