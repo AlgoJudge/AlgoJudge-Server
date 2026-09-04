@@ -3,6 +3,7 @@ using AlgoJudge.Server.Services;
 using AlgoJudge.Server.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AlgoJudge.Server.Controllers
 {
@@ -28,7 +29,8 @@ namespace AlgoJudge.Server.Controllers
         IRunnerService runners,
         IFileService files,
         ITrialService trials,
-        IQueueSignal queue
+        IQueueSignal queue,
+        IServiceScopeFactory scopes
     ) : ControllerBase
     {
         /// <summary>
@@ -52,6 +54,29 @@ namespace AlgoJudge.Server.Controllers
         /// </para>
         /// </summary>
         private const int JitterDivisor = 16;
+
+        /// <summary>
+        /// How far to spread the looks a single nudge provokes.
+        /// <para>
+        /// **A nudge is a broadcast.** One submission completes the task every
+        /// waiting Runner is holding, so all of them resume at the same instant
+        /// and each runs a full claim — a transaction, a locking select and a
+        /// rollback. One wins and the rest did the work for nothing.
+        /// </para>
+        /// <para>
+        /// At four or twelve Runners that is noise. At a hundred it is a hundred
+        /// simultaneous transactions per submission against a connection pool of
+        /// exactly a hundred, and the first thing to break would be ordinary web
+        /// traffic rather than the claims themselves. A few tens of milliseconds
+        /// drawn per waiter turns the spike into a queue, and costs a latency
+        /// nobody can perceive.
+        /// </para>
+        /// <para>
+        /// The deadline's jitter above does not do this: it spreads the *204s*,
+        /// and a nudge is simultaneous by construction.
+        /// </para>
+        /// </summary>
+        private static readonly TimeSpan NudgeSpread = TimeSpan.FromMilliseconds(50);
         /// <summary>
         /// Presents a public key. Registration is not approval: an administrator
         /// approves the fingerprint, and nothing is evaluated before that.
@@ -90,7 +115,7 @@ namespace AlgoJudge.Server.Controllers
         public async Task<ActionResult<ClaimedJobDto>> Claim(
             [FromBody] ClaimRequestDto? input, CancellationToken ct)
         {
-            var runner = await runners.AuthenticateAsync(Token(), ct);
+            var token = Token();
 
             // **Nothing is held while waiting.** The transaction, the lock and
             // the connection all live inside `ClaimAsync` and are gone before
@@ -99,14 +124,16 @@ namespace AlgoJudge.Server.Controllers
             var waiting = Waiting(input?.WaitSeconds);
             var started = Environment.TickCount64;
 
+            // The first look is this request's own, which is the whole of the
+            // work when no wait was asked for.
+            var runner = await runners.AuthenticateAsync(token, ct);
+            if (await runners.ClaimAsync(runner, input?.LeaseSeconds, ct) is { } first)
+            {
+                return Ok(first);
+            }
+
             for (; ; )
             {
-                var job = await runners.ClaimAsync(runner, input?.LeaseSeconds, ct);
-                if (job is not null)
-                {
-                    return Ok(job);
-                }
-
                 var left = waiting - TimeSpan.FromMilliseconds(Environment.TickCount64 - started);
                 if (left <= TimeSpan.Zero)
                 {
@@ -118,7 +145,43 @@ namespace AlgoJudge.Server.Controllers
                 // A nudge says something became claimable; it does not say it
                 // was claimable by *this* Runner, whose types and tags may not
                 // match. So the answer is another look, not a job.
-                await queue.WaitAsync(left, ct);
+                if (await queue.WaitAsync(left, ct))
+                {
+                    // Woken rather than timed out, so this look is one of many
+                    // starting together — see `NudgeSpread`.
+                    await Task.Delay(
+                        TimeSpan.FromMilliseconds(
+                            Random.Shared.NextDouble() * NudgeSpread.TotalMilliseconds),
+                        ct);
+                }
+
+                // **A scope of its own for every later look, and this is not
+                // tidiness.** A request scope carries one `DbContext`, and a
+                // tracking query returns the instance already in its change
+                // tracker rather than the row as it now stands. Holding one
+                // request open for the length of a wait therefore froze two
+                // things that are checked precisely because they change:
+                //
+                //   - the maintenance level, so a drain begun mid-hold was
+                //     invisible and this claim could hand out a job *after*
+                //     the drainer had seen the queue go quiet and closed the
+                //     door — defeating the one guarantee a drain offers;
+                //   - the Runner's own row, so revoking a Runner or retagging
+                //     an activity away from it did not take effect until the
+                //     hold ended, against a comment on `AuthenticateAsync`
+                //     saying it is checked on every call for exactly that
+                //     reason.
+                //
+                // Both were true only because a claim became long. A fresh
+                // scope reads both from the database again, and costs one
+                // lookup per nudge.
+                using var scope = scopes.CreateScope();
+                var again = scope.ServiceProvider.GetRequiredService<IRunnerService>();
+                var current = await again.AuthenticateAsync(token, ct);
+                if (await again.ClaimAsync(current, input?.LeaseSeconds, ct) is { } job)
+                {
+                    return Ok(job);
+                }
             }
         }
 
