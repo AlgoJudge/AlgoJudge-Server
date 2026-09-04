@@ -54,6 +54,36 @@ namespace AlgoJudge.Server.Api.Contracts
         public IReadOnlyList<string>? Tags { get; init; }
         /// <summary>Host facts, stored opaquely and shown in the panel.</summary>
         public object? Machine { get; init; }
+
+        /// <summary>
+        /// A nonce from <c>auth/challenge</c>, and this key's signature over it.
+        /// <para>
+        /// <b>Absent on a first registration, required on every one after.</b>
+        /// This endpoint is anonymous because a Runner nobody has approved has
+        /// no session to present — but for a fingerprint the Server already
+        /// knows, "anonymous" meant that whoever could read a public key could
+        /// rewrite the row it names: the problem types and the external flag the
+        /// claim pairs work on, and the name, product, version and host facts a
+        /// manager reads when deciding whether to approve it. A public key is
+        /// public by construction, and the panel hands it to anyone who may list
+        /// Runners.
+        /// </para>
+        /// <para>
+        /// <b>The nonce is signed, not the body.</b> The property wanted is only
+        /// that the private key was present; signing the request would need a
+        /// canonical serialization that a C# record and a serde struct agree on
+        /// for ever, and the first day they disagreed no Runner could restart.
+        /// </para>
+        /// <para>
+        /// The challenge endpoint deliberately does not require approval, so a
+        /// Runner waiting to be approved can still re-register — which is what
+        /// it does on every restart.
+        /// </para>
+        /// </summary>
+        public string? Nonce { get; init; }
+
+        /// <inheritdoc cref="Nonce"/>
+        public string? Signature { get; init; }
     }
 
     public record RunnerRegisteredDto

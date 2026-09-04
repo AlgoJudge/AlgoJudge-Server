@@ -5,6 +5,7 @@ using System.Net;
 using AlgoJudge.Server.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Database.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904134856_OneSubmissionOneRunner")]
+    partial class OneSubmissionOneRunner
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -467,9 +470,6 @@ namespace AlgoJudge.Server.Database.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<Guid?>("UploadedByRunnerId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("UploadedByUserId")
                         .HasColumnType("text");
 
@@ -484,8 +484,6 @@ namespace AlgoJudge.Server.Database.Migrations
                     b.HasIndex("Sha256");
 
                     b.HasIndex("StorageId");
-
-                    b.HasIndex("UploadedByRunnerId");
 
                     b.HasIndex("UploadedByUserId");
 
@@ -1934,19 +1932,12 @@ namespace AlgoJudge.Server.Database.Migrations
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.File", b =>
                 {
-                    b.HasOne("AlgoJudge.Server.Database.Models.Runner", "UploadedByRunner")
-                        .WithMany()
-                        .HasForeignKey("UploadedByRunnerId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("AlgoJudge.Server.Database.Models.User", "UploadedBy")
                         .WithMany()
                         .HasForeignKey("UploadedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("UploadedBy");
-
-                    b.Navigation("UploadedByRunner");
                 });
 
             modelBuilder.Entity("AlgoJudge.Server.Database.Models.FileReference", b =>

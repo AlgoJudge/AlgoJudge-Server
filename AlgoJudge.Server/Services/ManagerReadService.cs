@@ -303,6 +303,10 @@ namespace AlgoJudge.Server.Services
 
             await QueueRejudgeAsync(submission, ct);
             await context.SaveChangesAsync(ct);
+            // The same nudge `RejudgeManyAsync` sends, and it was missing here
+            // alone — on the path a manager actually uses, since a corrected
+            // package is retried on one entry before the round.
+            queue.Wake();
             await submissions.AnnounceAsync(submissionId, ct);
 
             return Project(await LoadSubmissionAsync(submissionId, ct));
@@ -330,6 +334,40 @@ namespace AlgoJudge.Server.Services
                     .Where(j => j.SubmissionId == submission.Id)
                     .Select(j => (int?)j.Attempt)
                     .MaxAsync(ct) ?? 0;
+
+            // **The attempt this one replaces leaves the queue with it.**
+            // Nothing stopped a second claimable row from existing, so a
+            // rejudge issued before the first attempt was picked up left two —
+            // and `SKIP LOCKED` correctly handed them to two Runners, which
+            // judged the same source twice. On the External Runner that is the
+            // same solution submitted twice to somebody else's site.
+            //
+            // Only `Queued` is touched, and that is the whole reason this is
+            // safe: `ClaimAsync` sets `Running` inside the transaction that
+            // takes the row, so a queued job is by construction one nobody
+            // holds. Nothing in flight is interrupted — an attempt a Runner is
+            // already evaluating finishes, stores its result and keeps its
+            // attachments, and the new one waits behind it on the claim's own
+            // filter.
+            var superseded = clock.GetUtcNow().UtcDateTime;
+            var queued = submission.Jobs.Count > 0
+                ? submission.Jobs.Where(j => j.State == EvaluationJobState.Queued)
+                : await context.EvaluationJobs
+                    .Where(j => j.SubmissionId == submission.Id
+                        && j.State == EvaluationJobState.Queued)
+                    .ToListAsync(ct);
+
+            foreach (var overtaken in queued)
+            {
+                overtaken.State = EvaluationJobState.Superseded;
+                overtaken.FinishedAt = superseded;
+                // Nulled for the reason a cancellation nulls them, even though a
+                // queued job holds neither: the row leaves the live range, and
+                // one leaving it with a token would collide with the unique
+                // index on `LeaseToken` if it were ever set.
+                overtaken.LeaseToken = null;
+                overtaken.LeaseExpiresAt = null;
+            }
 
             context.EvaluationJobs.Add(new EvaluationJob
             {
@@ -394,7 +432,7 @@ namespace AlgoJudge.Server.Services
                 Permissions.SubmissionCancel, job.Submission!.SeriesProblem!.ActivityId, ct);
 
             if (job.State is EvaluationJobState.Completed or EvaluationJobState.Failed
-                or EvaluationJobState.Cancelled)
+                or EvaluationJobState.Cancelled or EvaluationJobState.Superseded)
             {
                 throw new ConflictException(
                     "This attempt has already finished and cannot be cancelled", "attempt.finished");
@@ -934,6 +972,13 @@ namespace AlgoJudge.Server.Services
             // `lab-a` on an activity cannot be two pools that read as one.
             runner.Tags = RunnerTags.Validated(tags, "The Runner's tags");
             await context.SaveChangesAsync(ct);
+            // **Retagging is a delivery, not just a setting.** The claim reads
+            // both sides of the comparison at claim time, so this Runner now
+            // matches work that was already queued — but it is holding a claim
+            // open and will not look again until something tells it to. The
+            // specification promises that retagging redirects work already
+            // waiting; without this it does so only once a deadline expires.
+            queue.Wake();
             var projectedRunner = await ProjectRunnerAsync(runner, ct);
             await AnnounceRunnerAsync(projectedRunner, null, ct);
             return projectedRunner;

@@ -53,6 +53,21 @@ namespace AlgoJudge.Server.Database.Models
         Completed = 2,
         Failed = 3,
         Cancelled = 4,
+
+        /// <summary>
+        /// **Queued, and then overtaken by a rejudge.** Not the same fact as
+        /// `Cancelled`, which a manager does on purpose and which
+        /// `MANAGER_PANEL.md` states as an action of theirs — telling somebody
+        /// reading an attempt list that a person cancelled an attempt nobody
+        /// cancelled is an audit lie for the sake of not adding a value.
+        /// <para>
+        /// Only ever reached from `Queued`, so nothing running is ever
+        /// superseded and no Runner meets one: leaving `Queued` is what takes
+        /// the row out of `ClaimSql`'s reach, for free, rather than by a fourth
+        /// filter on the hot path.
+        /// </para>
+        /// </summary>
+        Superseded = 5,
     }
 
     /// <summary>

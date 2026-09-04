@@ -123,6 +123,49 @@ public class TrialRunTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **A trial's package stops being readable the moment its lease runs out**,
+    /// not when a sweeper next gets round to noticing.
+    /// <para>
+    /// The check's own comment said <i>"a Runner that has finished or lost the
+    /// lease can no longer read the bytes"</i> and the query asked only whether
+    /// the trial was still <c>Running</c> — which it is until the reaper's next
+    /// pass. So an expired lease kept the package open for up to a tick, while
+    /// the job half of the same test in the controller had been comparing the
+    /// deadline all along. Nothing here is swept: the lease is moved into the
+    /// past and the file asked for straight away, which is the window itself.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_trial_package_is_unreadable_once_its_lease_has_run_out()
+    {
+        await ClearTrialsAsync();
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var fileId = await UploadAsync(admin, "package.zip", "bytes behind a lease");
+        var created = await RequestTrialAsync(admin, fileId);
+        var trialId = Guid.Parse((await created.Content.ReadFromJsonAsync<JsonElement>(Json))
+            .GetProperty("id").GetString()!);
+
+        var runner = await Build.RunnerAsync(server);
+        var claimed = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/trials/claim", new { }, Json);
+        Assert.Equal(HttpStatusCode.OK, claimed.StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await runner.Client.GetAsync($"/api/v1/runner/files/{fileId:D}")).StatusCode);
+
+        await using (var context = server.NewContext())
+        {
+            await context.Trials.Where(t => t.Id == trialId)
+                .ExecuteUpdateAsync(u => u.SetProperty(
+                    t => t.LeaseExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
+        }
+
+        // Still `Running` — nothing has reaped it — and that is the point.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await runner.Client.GetAsync($"/api/v1/runner/files/{fileId:D}")).StatusCode);
+    }
+
+    /// <summary>
     /// Reporting twice is not an error, and does not produce a second record —
     /// a Runner that missed the acknowledgement is still telling the truth.
     /// </summary>

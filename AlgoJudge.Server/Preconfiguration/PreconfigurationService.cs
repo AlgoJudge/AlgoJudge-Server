@@ -59,6 +59,7 @@ namespace AlgoJudge.Server.Preconfiguration
         IDocumentService documents,
         IFileService files,
         IEventHub events,
+        Services.IQueueSignal queue,
         ILogger<PreconfigurationService> logger
     ) : IPreconfiguration
     {
@@ -97,6 +98,14 @@ namespace AlgoJudge.Server.Preconfiguration
             // writes nothing and says so, rather than putting the file's answer
             // over a manager's — and running it again is free.
             if (apply && changes.Count > 0) await Concurrency.SaveAsync(context, ct);
+
+            // **`aj-admin config apply` is not only a start-up path.** It writes
+            // the same row the panel does, at any moment, so switching external
+            // judging on from a file has to release the queue exactly as
+            // switching it on from the panel does. Sent for any applied change,
+            // because a nudge costs one look and enumerating which settings the
+            // claim reads would be a list to keep in step.
+            if (apply && changes.Count > 0) queue.Wake();
 
             await FilesAsync(source, instance, changes, apply, ct);
 
@@ -256,7 +265,7 @@ namespace AlgoJudge.Server.Preconfiguration
                 foreach (var (_, file) in group)
                 {
                     var stored = await files.StoreAsync(
-                        new MemoryStream(file.Bytes), file.FileName, file.MimeType, file.Sha256, ct);
+                        new MemoryStream(file.Bytes), file.FileName, file.MimeType, file.Sha256, Services.Uploader.Nobody, ct);
 
                     statements.Add(new NewStatementDto
                     {

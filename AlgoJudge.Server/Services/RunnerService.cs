@@ -29,6 +29,11 @@ namespace AlgoJudge.Server.Services
         Task ReleaseAsync(DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct);
 
         /// <summary>
+        /// Undoes a handout whose answer never reached the Runner.
+        /// </summary>
+        Task UnclaimAsync(Guid jobId, CancellationToken ct);
+
+        /// <summary>
         /// Whether this Runner may read these bytes <b>through a job it is
         /// holding</b>. The whole authorization question for a Runner's reads.
         /// </summary>
@@ -130,6 +135,14 @@ namespace AlgoJudge.Server.Services
         private const int FreeReleases = 3;
 
         /// <summary>
+        /// How many unheard-of deliveries are given back before the cap is
+        /// allowed to do its work. Three, for the same reason as above: an
+        /// operator restarting a fleet and a job that poisons every Runner it
+        /// reaches look identical from here, and only the count separates them.
+        /// </summary>
+        internal const int FreeRefunds = 3;
+
+        /// <summary>
         /// Nonces and tokens, in memory.
         /// <para>
         /// Deliberately not in the database: both are short-lived, and a Server
@@ -174,6 +187,21 @@ namespace AlgoJudge.Server.Services
                     throw new ConflictException(
                         "That key has been revoked; register a new one", "runner.revoked");
                 }
+
+                // **Proof of the private key, before anything is written.** A
+                // first registration cannot have one — the challenge endpoint
+                // has no row to issue a nonce against — but every later one can,
+                // and until 2026-09-04 none was asked for: anyone who could read
+                // this Runner's public key could rewrite the fields the claim
+                // pairs work on and the fields a manager reads when approving
+                // it, while its approval stayed exactly where it was.
+                Spend(input.Nonce, fingerprint);
+                if (!VerifySignature(existing.PublicKey, input.Nonce!, input.Signature ?? ""))
+                {
+                    throw new ForbiddenActionException(
+                        "The signature does not verify", "runner.signature");
+                }
+
                 // Registering again is how a Runner reports a restart. Its
                 // capabilities may have changed; its identity may not.
                 existing.Name = input.Name;
@@ -245,12 +273,21 @@ namespace AlgoJudge.Server.Services
             return new RunnerChallengeDto { Nonce = nonce, ExpiresAt = expires.UtcDateTime.ToString("O") };
         }
 
-        public async Task<RunnerTokenDto> TokenAsync(
-            RunnerTokenRequestDto input, string? address, CancellationToken ct)
+        /// <summary>
+        /// Takes a nonce out of the table and says whether it was this key's.
+        /// <para>
+        /// <b>Single use, and removed before it is checked</b>, so a signature
+        /// cannot be replayed even by the Runner that made it. Shared by the two
+        /// anonymous calls that accept one — the handshake and a re-registration
+        /// — because a fingerprint check that lived in one of them would be a
+        /// check the other could be written without: <c>auth/challenge</c> hands
+        /// a nonce to anyone who names a fingerprint, so "the nonce exists" is
+        /// not evidence about who is presenting it.
+        /// </para>
+        /// </summary>
+        private void Spend(string? nonce, string fingerprint)
         {
-            // Single use: taken out of the table before it is checked, so a
-            // signature cannot be replayed even by the Runner that made it.
-            if (!Nonces.TryRemove(input.Nonce ?? "", out var issued))
+            if (!Nonces.TryRemove(nonce ?? "", out var issued))
             {
                 throw new ForbiddenActionException("Unknown or spent nonce", "runner.nonce.unknown");
             }
@@ -258,10 +295,17 @@ namespace AlgoJudge.Server.Services
             {
                 throw new ForbiddenActionException("The nonce has expired", "runner.nonce.expired");
             }
-            if (issued.Fingerprint != input.Fingerprint)
+            if (issued.Fingerprint != fingerprint)
             {
-                throw new ForbiddenActionException("The nonce was issued to another key", "runner.nonce.mismatch");
+                throw new ForbiddenActionException(
+                    "The nonce was issued to another key", "runner.nonce.mismatch");
             }
+        }
+
+        public async Task<RunnerTokenDto> TokenAsync(
+            RunnerTokenRequestDto input, string? address, CancellationToken ct)
+        {
+            Spend(input.Nonce, input.Fingerprint);
 
             var runner = await context.Runners.FirstOrDefaultAsync(r => r.Fingerprint == input.Fingerprint, ct)
                 ?? throw new NotFoundException("Runner");
@@ -360,6 +404,9 @@ namespace AlgoJudge.Server.Services
               AND p."Type" = ANY({0})
               AND p."External" = {1}
               AND ({{RunnerTags.WorkTagsSql}}) && {2}::text[]
+              AND NOT EXISTS (
+                SELECT 1 FROM "EvaluationJobs" live
+                WHERE live."SubmissionId" = j."SubmissionId" AND live."State" = 1)
             ORDER BY j."CreatedAt"
             FOR UPDATE OF j SKIP LOCKED
             LIMIT 1
@@ -373,6 +420,16 @@ namespace AlgoJudge.Server.Services
         /// over one, and neither waits. This is raw SQL because EF has no way to
         /// express it, and it is why the integration tests may not use an
         /// in-memory provider — the guarantee being relied on is PostgreSQL's.
+        /// </para>
+        /// <para>
+        /// **One submission is judged by one Runner at a time**, which the row
+        /// lock alone never said: a rejudge issued while an attempt was running
+        /// left two live jobs on one submission, and two Runners took them.
+        /// A rejudge now supersedes a *queued* sibling outright, so the only
+        /// case left is a sibling that is already <c>Running</c> — and the
+        /// fourth filter holds the new attempt behind it rather than taking the
+        /// job away from a Runner that is part-way through it. The wait ends
+        /// when that attempt reports, which nudges the queue.
         /// </para>
         /// </summary>
         public async Task<ClaimedJobDto?> ClaimAsync(DbRunner runner, int? leaseSeconds, CancellationToken ct)
@@ -469,6 +526,12 @@ namespace AlgoJudge.Server.Services
             job.RunnerId = runner.Id;
             job.LeaseToken = Uuid.New();
             job.ClaimedAt = now;
+            // **Cleared here, so every requeue path gets it for free.** A job
+            // that comes back from a release, a report or the reaper is claimed
+            // again by this line, and each claim has to earn its own
+            // acknowledgement — the previous holder's is not evidence about
+            // this one.
+            job.AcknowledgedAt = null;
             job.LeaseExpiresAt = now.Add(lease);
             // Kept as well as applied: a heartbeat has to renew by the lease this
             // job was granted, and the deadline alone cannot say what that was.
@@ -567,7 +630,22 @@ namespace AlgoJudge.Server.Services
             // The repeat. Checked before the lease, because a Runner resending
             // after its lease expired is still telling the truth about what it
             // computed — and the stored result is what it computed.
-            if (job.Result is not null)
+            //
+            // **But only for the Runner whose result it is.** The ownership term
+            // is not a second lease check; it is what stops this branch being an
+            // oracle. Without it any approved Runner naming a finished job and
+            // any well-formed GUID was handed that job's result id and state,
+            // having held nothing. A completed report leaves `RunnerId` where it
+            // was — only the requeue on an infrastructure failure clears it — so
+            // a genuine resend still lands here.
+            //
+            // **Guarding the branch rather than reordering the refusals**, which
+            // was the first attempt and was wrong: a job the reaper had already
+            // reclaimed has `RunnerId` of *nobody*, so an owner check in front
+            // answered "that job belongs to another Runner" to the Runner whose
+            // lease had simply run out — misleading, and against what §6 says
+            // that case answers. The refusals below keep their order.
+            if (job.Result is not null && job.RunnerId == runner.Id)
             {
                 return new ReportAcceptedDto
                 {
@@ -678,7 +756,7 @@ namespace AlgoJudge.Server.Services
             foreach (var attachment in report.Files ?? [])
             {
                 if (!Guid.TryParse(attachment.FileId, out var fileId)) continue;
-                if (!await IsRunnerOutputAsync(fileId, ct)) continue;
+                if (!await IsOwnUploadAsync(runner, fileId, ct)) continue;
 
                 context.FileReferences.Add(new FileReference
                 {
@@ -697,10 +775,22 @@ namespace AlgoJudge.Server.Services
             Seen(runner, now);
 
             await context.SaveChangesAsync(ct);
-            // Only when it went back: a job that finished is not work for
-            // anybody, and waking twelve Runners to tell them so is a hundred
-            // and fifty pointless looks over a contest.
-            if (again) queue.Wake();
+            // **Finishing releases a sibling now, which it never used to.** The
+            // rule was "only when it went back", because a job that finished is
+            // not work for anybody and waking twelve Runners to say so is a
+            // hundred and fifty pointless looks over a contest. That still
+            // holds for the queue at large — but since a claim refuses a
+            // submission whose sibling is `Running`, a rejudge queued behind
+            // this attempt became claimable at exactly this moment, and nothing
+            // else will say so. Sent only when there is such a sibling, so the
+            // original reasoning survives for every ordinary report.
+            if (again
+                || await context.EvaluationJobs.AnyAsync(
+                    other => other.SubmissionId == job.SubmissionId
+                        && other.State == EvaluationJobState.Queued, ct))
+            {
+                queue.Wake();
+            }
             await submissions.AnnounceAsync(job.SubmissionId, ct);
 
             return new ReportAcceptedDto
@@ -759,6 +849,47 @@ namespace AlgoJudge.Server.Services
                 LeaseToken = leaseToken,
                 LeaseExpiresAt = Wire.At(expires),
             };
+        }
+
+        /// <summary>
+        /// Undoes a handout whose answer never reached the Runner.
+        /// <para>
+        /// **Not a release, and deliberately not routed through one.** A release
+        /// is a Runner saying it is stopping, and it spends one of three free
+        /// ones; this is the Server noticing that the caller it committed a job
+        /// to has gone before the answer could reach it. Nobody was stopped,
+        /// nothing was tried, and the delivery is given back without counting —
+        /// the same rule the reaper applies to a claim nobody was ever heard
+        /// from about, arriving sooner because here the going was observed.
+        /// </para>
+        /// <para>
+        /// **Refuses to touch a job anybody was heard from.** The check is not
+        /// belt and braces: this runs after the request was seen to abort, and
+        /// an abort is not proof the answer failed to arrive.
+        /// </para>
+        /// </summary>
+        public async Task UnclaimAsync(Guid jobId, CancellationToken ct)
+        {
+            var job = await context.EvaluationJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct);
+            if (job is null
+                || job.State != EvaluationJobState.Running
+                || job.AcknowledgedAt is not null)
+            {
+                return;
+            }
+
+            // The token goes first, for the reason `LeaseReaper` gives.
+            job.LeaseToken = null;
+            job.LeaseExpiresAt = null;
+            job.LeaseSeconds = null;
+            job.RunnerId = null;
+            job.ClaimedAt = null;
+            job.State = EvaluationJobState.Queued;
+            if (job.Deliveries > 0) job.Deliveries -= 1;
+
+            await context.SaveChangesAsync(ct);
+            queue.Wake();
+            await submissions.AnnounceAsync(job.SubmissionId, ct);
         }
 
         /// <summary>
@@ -955,12 +1086,20 @@ namespace AlgoJudge.Server.Services
                     $"A job in state {Projections.Wire(job.State)} is not being worked on", "job.state");
             }
 
+            // **Here rather than at the claim, which is the whole point.** Every
+            // lease-bearing call arrives through this method — report, release,
+            // renew and progress — so this is the one place that can say a
+            // Runner was heard from about a job, and it can only be reached by
+            // one that received the lease token the claim's answer carried.
+            // Written once and never moved, so it dates the first contact.
+            job.AcknowledgedAt ??= clock.GetUtcNow().UtcDateTime;
+
             return job;
         }
 
         /// <summary>
-        /// Whether this file is something a Runner uploaded and nothing owns yet
-        /// — the only kind of file a Runner may name in an attachment.
+        /// Whether this file is one <b>this</b> Runner uploaded and nothing owns
+        /// yet — the only kind of file a Runner may name in an attachment.
         /// <para>
         /// <b>The three attach paths checked that the file existed, and nothing
         /// else.</b> Since this answers by reference and an attachment
@@ -969,17 +1108,25 @@ namespace AlgoJudge.Server.Services
         /// problem package, another participant's <c>source</c>.
         /// </para>
         /// <para>
-        /// <b>Both halves are load-bearing.</b> A Runner uploads with no
-        /// principal, so <see cref="DbFile.UploadedByUserId"/> is null — but so
-        /// is a seeder's or a pre-configuration's, which is why the absence of a
-        /// reference is asked for too. And a reference test on its own would let
-        /// a Runner mint the <i>first</i> reference on a trial package, which is
-        /// uploaded by a person and deliberately carries none; that reference
-        /// would then stop the package ever being collected.
+        /// <b>It then asked the wrong question for a year: "uploaded by
+        /// nobody".</b> A Runner uploads with no session, so its files carried a
+        /// null user — and so did every other Runner's. Absence is not identity,
+        /// so one Runner could name another's fresh bytes and attach them as its
+        /// own log. <see cref="DbFile.UploadedByRunnerId"/> exists to make the
+        /// question answerable, and this is the only reader that needs it.
+        /// </para>
+        /// <para>
+        /// <b>The second half stays, on its own reasoning.</b> One upload, one
+        /// reference: without it a Runner could hang one blob off two attempts,
+        /// or off an attempt and off itself at two scopes, and the collector's
+        /// accounting is per name and per reference —
+        /// <c>FileCollector</c> groups superseded references by
+        /// <c>(RunnerId, Name)</c> and sweeps what nothing points at.
         /// </para>
         /// </summary>
-        private async Task<bool> IsRunnerOutputAsync(Guid fileId, CancellationToken ct) =>
-            await context.Files.AnyAsync(f => f.Id == fileId && f.UploadedByUserId == null, ct)
+        private async Task<bool> IsOwnUploadAsync(DbRunner runner, Guid fileId, CancellationToken ct) =>
+            await context.Files.AnyAsync(
+                f => f.Id == fileId && f.UploadedByRunnerId == runner.Id, ct)
             && !await context.FileReferences.AnyAsync(r => r.FileId == fileId, ct);
 
         /// <summary>
@@ -993,7 +1140,7 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// <para>
         /// It answers by <see cref="FileReference"/>, so what a Runner may attach
-        /// decides what it may read. See <see cref="IsRunnerOutputAsync"/>.
+        /// decides what it may read. See <see cref="IsOwnUploadAsync"/>.
         /// </para>
         /// </summary>
         public async Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct)
@@ -1033,7 +1180,7 @@ namespace AlgoJudge.Server.Services
         public async Task AttachToSelfAsync(
             DbRunner runner, Guid fileId, string name, CancellationToken ct)
         {
-            if (!await IsRunnerOutputAsync(fileId, ct))
+            if (!await IsOwnUploadAsync(runner, fileId, ct))
             {
                 throw new ValidationException("That file is not stored", "file.missing");
             }
@@ -1084,7 +1231,7 @@ namespace AlgoJudge.Server.Services
                     $"This attempt already has a file called {name}", "attempt.file.duplicate");
             }
 
-            if (!await IsRunnerOutputAsync(fileId, ct))
+            if (!await IsOwnUploadAsync(runner, fileId, ct))
             {
                 throw new ValidationException("That file is not stored", "file.missing");
             }

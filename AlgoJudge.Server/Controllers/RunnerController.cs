@@ -30,6 +30,7 @@ namespace AlgoJudge.Server.Controllers
         IFileService files,
         ITrialService trials,
         IQueueSignal queue,
+        IHostApplicationLifetime lifetime,
         IServiceScopeFactory scopes
     ) : ControllerBase
     {
@@ -117,6 +118,20 @@ namespace AlgoJudge.Server.Controllers
         {
             var token = Token();
 
+            // **The handout itself is not the client's to interrupt.** A claim
+            // commits before its answer exists — `Running`, a lease token, a
+            // delivery spent — and only then is the response built, so a request
+            // torn down in between leaves a job nobody holds, that nobody else
+            // may take, and that cost a participant an attempt. The Runner
+            // cannot give it back: it never learned the lease token.
+            //
+            // So the look runs on the process's own lifetime and the *wait*
+            // keeps the request's, which is the half where interrupting costs
+            // nothing. What this cannot close is an answer lost with no abort
+            // ever observed — a black-holed connection — and that is what the
+            // reaper's refund is for.
+            var handing = lifetime.ApplicationStopping;
+
             // **Nothing is held while waiting.** The transaction, the lock and
             // the connection all live inside `ClaimAsync` and are gone before
             // the wait begins — otherwise a fleet holding claims open would be
@@ -124,12 +139,28 @@ namespace AlgoJudge.Server.Controllers
             var waiting = Waiting(input?.WaitSeconds);
             var started = Environment.TickCount64;
 
+            // **Captured before the look, never after it.** The obvious order —
+            // look, find nothing, then start listening — leaves this request
+            // deaf for as long as the look takes to unwind: the rollback round
+            // trip, the transaction's disposal, the return. A submission
+            // committed in that window fires its nudge into an empty room,
+            // because the waiter it was meant for is not holding anything yet,
+            // and the cost is a full wait of latency for work that was already
+            // there. Holding the signal first turns the same window into a
+            // nudge already delivered.
+            //
+            // Both halves of that window widen under exactly the load
+            // `NudgeSpread` exists for: the continuations after `CommitAsync`
+            // and `RollbackAsync` are thread-pool work, and a fleet resuming
+            // together is what starves the pool.
+            var nudge = queue.Capture();
+
             // The first look is this request's own, which is the whole of the
             // work when no wait was asked for.
-            var runner = await runners.AuthenticateAsync(token, ct);
-            if (await runners.ClaimAsync(runner, input?.LeaseSeconds, ct) is { } first)
+            var runner = await runners.AuthenticateAsync(token, handing);
+            if (await runners.ClaimAsync(runner, input?.LeaseSeconds, handing) is { } first)
             {
-                return Ok(first);
+                return await HandedOverAsync(runners, first, handing);
             }
 
             for (; ; )
@@ -145,7 +176,7 @@ namespace AlgoJudge.Server.Controllers
                 // A nudge says something became claimable; it does not say it
                 // was claimable by *this* Runner, whose types and tags may not
                 // match. So the answer is another look, not a job.
-                if (await queue.WaitAsync(left, ct))
+                if (await nudge.WaitAsync(left, ct))
                 {
                     // Woken rather than timed out, so this look is one of many
                     // starting together — see `NudgeSpread`.
@@ -175,14 +206,38 @@ namespace AlgoJudge.Server.Controllers
                 // Both were true only because a claim became long. A fresh
                 // scope reads both from the database again, and costs one
                 // lookup per nudge.
+                // Captured before the look it protects, for the reason given
+                // where the first one is taken.
+                nudge = queue.Capture();
+
                 using var scope = scopes.CreateScope();
                 var again = scope.ServiceProvider.GetRequiredService<IRunnerService>();
-                var current = await again.AuthenticateAsync(token, ct);
-                if (await again.ClaimAsync(current, input?.LeaseSeconds, ct) is { } job)
+                var current = await again.AuthenticateAsync(token, handing);
+                if (await again.ClaimAsync(current, input?.LeaseSeconds, handing) is { } job)
                 {
-                    return Ok(job);
+                    return await HandedOverAsync(again, job, handing);
                 }
             }
+        }
+
+        /// <summary>
+        /// Answers with the job, unless the caller has already gone — in which
+        /// case the handout is undone rather than left leased to nobody.
+        /// <para>
+        /// **A best effort, and it says so.** `RequestAborted` is set when the
+        /// going was noticed, which is not every way a client goes; the
+        /// remaining cases are the reaper's, and cost the participant nothing
+        /// because the delivery is refunded there too. What this buys over the
+        /// reaper alone is the ten minutes in between.
+        /// </para>
+        /// </summary>
+        private async Task<ActionResult<ClaimedJobDto>> HandedOverAsync(
+            IRunnerService service, ClaimedJobDto job, CancellationToken handing)
+        {
+            if (!HttpContext.RequestAborted.IsCancellationRequested) return Ok(job);
+
+            await service.UnclaimAsync(Guid.Parse(job.JobId), handing);
+            return NoContent();
         }
 
         /// <summary>
@@ -396,7 +451,13 @@ namespace AlgoJudge.Server.Controllers
         {
             // Before a byte is read: a Runner that cannot prove who it is does
             // not get to write into the store.
-            await runners.AuthenticateAsync(Token(), ct);
+            //
+            // **And it is kept.** Throwing this answer away was the whole of a
+            // defect: the commit then asked a session service that answers null
+            // for a Runner, so every Runner's uploads landed in one anonymous
+            // pool and one Runner could attach another's fresh bytes as its own
+            // log.
+            var runner = await runners.AuthenticateAsync(Token(), ct);
 
             var upload = await MultipartUpload.ReadAsync(
                 Request, UploadLimits.Package,
@@ -409,7 +470,8 @@ namespace AlgoJudge.Server.Controllers
             }
 
             var stored = await files.CommitAsync(
-                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"), ct);
+                staged, upload.FileName ?? "", upload.ContentType ?? "", upload.Field("sha256"),
+                Services.Uploader.Runner(runner.Id), ct);
             return Created($"/api/v1/runner/files/{Api.Contracts.Wire.Id(stored.Id)}", Api.Projections.Uploaded(stored));
         }
 

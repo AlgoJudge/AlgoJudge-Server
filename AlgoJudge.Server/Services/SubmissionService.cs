@@ -373,7 +373,8 @@ namespace AlgoJudge.Server.Services
             var version = await ((ProblemService)problems).ResolveVersionAsync(assignment, ct)
                 ?? throw new ConflictException("This problem has no published version", "problem.noVersion");
 
-            var file = await files.CommitAsync(staged, fileName, "text/plain", declaredSha256, ct);
+            var file = await files.CommitAsync(
+                staged, fileName, "text/plain", declaredSha256, Uploader.Session, ct);
 
             var submission = new Submission
             {

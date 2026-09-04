@@ -88,7 +88,7 @@ namespace AlgoJudge.Server.Services
             // is the same commit an upload makes — there is no second path for
             // bytes that arrived this way.
             return await files.CommitAsync(
-                staged, NameOf(decision.Target!), MediaTypeOf(response), staged.Key.Sha256, ct);
+                staged, NameOf(decision.Target!), MediaTypeOf(response), staged.Key.Sha256, Uploader.Nobody, ct);
         }
 
         /// <summary>

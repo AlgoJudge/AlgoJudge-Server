@@ -219,6 +219,16 @@ public class RunnerTests(ServerFixture server)
         var jobId = Guid.Parse(job.GetProperty("jobId").GetString()!);
         var staleToken = job.GetProperty("leaseToken").GetString()!;
 
+        // **Heard from before it dies**, which is what the story here says: the
+        // Runner took the job and then stopped. Since 2026-09-04 the Server
+        // tells that apart from a handout whose answer never arrived — it
+        // commits a claim before writing the response to it — and refunds the
+        // second. Without this renewal the delivery below is correctly given
+        // back and the count is one, which is a different test.
+        await Sign.Succeeded(await first.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/lease",
+            new { leaseToken = staleToken, leaseSeconds = 60 }));
+
         // The Runner dies. Its lease runs out.
         await using (var context = server.NewContext())
         {
@@ -278,6 +288,16 @@ public class RunnerTests(ServerFixture server)
     /// <summary>
     /// A job that keeps being reclaimed is a job that keeps killing Runners.
     /// Retrying it for ever is how one bad package stops an installation.
+    /// <para>
+    /// **Each round renews the lease, and that is load-bearing.** Since
+    /// 2026-09-04 a claim nobody was ever heard from about is refunded rather
+    /// than charged — because the Server commits a handout before writing the
+    /// answer to it, and an answer lost that way spends a participant's attempt
+    /// on a delivery that never happened. Without the renewal this loop is that
+    /// case six times over and the job is correctly never failed. What the cap
+    /// is for is the other one: a Runner that *received* the job, started on it,
+    /// and died. One renewal is what says so.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task A_job_nobody_can_finish_is_given_up_on_rather_than_retried_for_ever()
@@ -297,6 +317,17 @@ public class RunnerTests(ServerFixture server)
             if (job is null) break;
 
             jobId = Guid.Parse(job.Value.GetProperty("jobId").GetString()!);
+
+            // Heard from once, which is what tells this apart from a handout
+            // whose answer never arrived.
+            await Sign.Succeeded(await runner.Client.PostAsJsonAsync(
+                $"/api/v1/runner/jobs/{jobId}/lease",
+                new
+                {
+                    leaseToken = job.Value.GetProperty("leaseToken").GetString(),
+                    leaseSeconds = 60,
+                }));
+
             await using var context = server.NewContext();
             var stored = await context.EvaluationJobs.FirstAsync(j => j.Id == jobId);
             stored.LeaseExpiresAt = DateTime.UtcNow.AddMinutes(-1);
@@ -399,6 +430,66 @@ public class RunnerTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.NotFound, fetched.StatusCode);
 
         await runner.ReportAsync(jobId, leaseToken);
+    }
+
+    /// <summary>
+    /// **A Runner cannot attach another Runner's upload either**, which the
+    /// predicate could not tell apart until 2026-09-04.
+    /// <para>
+    /// The test above catches a *person's* file, and it passed for a reason that
+    /// does not generalise: a person's upload carries a user id, and the check
+    /// asked whether the file had been uploaded by nobody. Two Runners are both
+    /// nobody — a Runner holds a token and not a session — so every Runner's
+    /// scratch uploads were one pool, and B could name A's fresh bytes and
+    /// publish them under its own name as an operator-visible log.
+    /// </para>
+    /// <para>
+    /// Both attach paths are asserted. They are separate methods with separate
+    /// checks, and a fix applied to one of them would leave the other open.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_runner_cannot_attach_another_runners_upload()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(18)\n");
+
+        var thief = await Build.RunnerAsync(server);
+        var job = await thief.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        // Another Runner's, still in the window where nothing points at it.
+        var owner = await Build.RunnerAsync(server);
+        var theirs = await owner.UploadAsync("their-stderr.txt", "another Runner's output" + "\n");
+
+        var toJob = await thief.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/files",
+            new { leaseToken, fileId = theirs, name = "stolen" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, toJob.StatusCode);
+        Assert.Equal("file.missing",
+            (await toJob.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+
+        var toSelf = await thief.Client.PostAsJsonAsync(
+            "/api/v1/runner/files/attach",
+            new { fileId = theirs, name = "stolen" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, toSelf.StatusCode);
+
+        // Nothing was written under the thief's name, on either path.
+        await using (var context = server.NewContext())
+        {
+            Assert.False(await context.FileReferences.AnyAsync(
+                r => r.FileId == Guid.Parse(theirs)));
+        }
+
+        // And the Runner that did upload it still may.
+        var mine = await owner.Client.PostAsJsonAsync(
+            "/api/v1/runner/files/attach",
+            new { fileId = theirs, name = "stderr" });
+        Assert.Equal(HttpStatusCode.NoContent, mine.StatusCode);
+
+        await thief.ReportAsync(jobId, leaseToken);
     }
 
     /// <summary>

@@ -509,6 +509,632 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **A nudge is a broadcast; a job is not.** The only Runner waiting cannot
+    /// judge the type, so it is woken and handed nothing — and the job is still
+    /// there afterwards for one that can.
+    /// <para>
+    /// This is the property the whole arrangement rests on and the one a
+    /// broadcast could plausibly have broken: <c>Wake</c> carries no information
+    /// about *which* job became claimable, so every waiter looks, and what keeps
+    /// a job away from a Runner that cannot judge it is the claim's own filter
+    /// rather than anything the signal knows.
+    /// </para>
+    /// <para>
+    /// **Written so there is no race to win.** The obvious shape — both Runners
+    /// waiting, assert the capable one gets it — passes against a Server with no
+    /// type filter at all, because the capable Runner takes the job first
+    /// anyway and the other one then finds an empty queue. Measured: with
+    /// <c>p."Type" = ANY(...)</c> defeated it still went green. Only one Runner
+    /// waits here, and it is the wrong one.
+    /// </para>
+    /// <para>
+    /// The second half matters as much as the first. A <c>204</c> alone is also
+    /// what a Server that lost the submission would return; the capable
+    /// Runner's <c>200</c> afterwards is what says the job was withheld rather
+    /// than dropped.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_waiting_runner_is_not_handed_a_type_it_did_not_declare()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var capable = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+        var other = await Build.RunnerAsync(server, problemTypes: ["output-only@1"]);
+        await DrainAsync(capable, other);
+
+        // The wrong Runner, and nobody else, is listening.
+        var waiting = other.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 5 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        // `standard-io@1`, which is what `Build.ActivityAsync` publishes.
+        await Build.SubmitAsync(participant, slug, "print(6)\n");
+
+        var began = Stopwatch.StartNew();
+        var refused = await waiting;
+        Assert.Equal(HttpStatusCode.NoContent, refused.StatusCode);
+
+        // It held the claim open to its deadline rather than answering at once,
+        // so the empty answer is one the wait path produced.
+        Assert.True(
+            began.Elapsed >= TimeSpan.FromSeconds(3),
+            $"the claim came back after {began.Elapsed.TotalSeconds:0.0}s, so it never waited");
+
+        // Withheld, not lost.
+        var taken = await capable.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.OK, taken.StatusCode);
+    }
+
+    /// <summary>
+    /// **A rejudge takes the attempt it replaces out of the queue.**
+    /// <para>
+    /// Nothing stopped a submission from having two claimable jobs, and
+    /// <c>SKIP LOCKED</c> then correctly handed them to two Runners — the same
+    /// source judged twice, and on an External Runner the same solution
+    /// submitted twice to somebody else's site. The verdict survived it, because
+    /// scoring reads the highest attempt, which is why this was invisible.
+    /// </para>
+    /// <para>
+    /// The second claim's <c>204</c> is the assertion that matters. Checking the
+    /// stored state alone would pass against a Server that marked the row and
+    /// still handed it out.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_rejudge_supersedes_an_attempt_nobody_has_taken()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var runner = await Build.RunnerAsync(server);
+        await DrainAsync(runner);
+
+        var submitted = await Build.SubmitAsync(participant, slug, "print(11)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(
+            await admin.PostAsync($"/api/v1/submissions/{submissionId}/rejudge", null));
+
+        var detail = await admin.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/submissions/{submissionId}");
+        var attempts = detail.GetProperty("attemptList").EnumerateArray().ToList();
+        Assert.Equal(2, attempts.Count);
+        Assert.Equal("queued", attempts[0].GetProperty("state").GetString());
+        Assert.Equal("superseded", attempts[1].GetProperty("state").GetString());
+
+        var taken = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.OK, taken.StatusCode);
+
+        var second = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
+    }
+
+    /// <summary>
+    /// **A rejudge does not take a job away from a Runner that is judging it —
+    /// it waits behind.**
+    /// <para>
+    /// The other half, and the reason the fix is in two parts. A queued sibling
+    /// can simply be superseded, because a queued job is by construction one
+    /// nobody holds. A running one cannot: the sandboxing Runner's keeper never
+    /// aborts an evaluation, so cancelling it would mean a sandbox finishing and
+    /// discarding its work, and on an External Runner a real submission already
+    /// spent on somebody else's account. So the *new* attempt waits, on the
+    /// claim's own filter.
+    /// </para>
+    /// <para>
+    /// And it must not wait for ever, which is the last clause: finishing the
+    /// running attempt is what releases it, and that nudge had to be added —
+    /// a completion used not to be work for anybody.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_rejudge_waits_behind_the_attempt_a_runner_is_judging()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(12)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        var jobId = job.GetProperty("jobId").GetString()!;
+
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(
+            await admin.PostAsync($"/api/v1/submissions/{submissionId}/rejudge", null));
+
+        var detail = await admin.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/submissions/{submissionId}");
+        var attempts = detail.GetProperty("attemptList").EnumerateArray().ToList();
+        Assert.Equal("queued", attempts[0].GetProperty("state").GetString());
+        // Untouched: it is being judged, and nothing here may discard that.
+        Assert.Equal("running", attempts[1].GetProperty("state").GetString());
+
+        var waited = await waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.NoContent, waited.StatusCode);
+
+        await Sign.Succeeded(await holder.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new
+            {
+                leaseToken = job.GetProperty("leaseToken").GetString(),
+                verdict = "accepted",
+                score = 100,
+                maxScore = 100,
+            }));
+
+        var released = await waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.OK, released.StatusCode);
+    }
+
+    /// <summary>
+    /// **A delivery nobody was ever heard about is given back.**
+    /// <para>
+    /// The claim is committed — running, leased, one of five attempts spent —
+    /// before the answer to it is written, so an answer lost in between leaves a
+    /// job the Runner cannot release because it never learned the lease token.
+    /// The reaper is what recovers it, and until now it charged the participant
+    /// for a handover that demonstrably did not happen. Five of those over a
+    /// contest end with the submission failed and a message blaming the package.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_claim_the_runner_never_acknowledged_costs_no_delivery()
+    {
+        var (jobId, _, _) = await ClaimedAsync("print(13)\n");
+
+        Assert.Equal(1, await DeliveriesAsync(jobId));
+        await ExpireLeaseAsync(jobId);
+        await SweepAsync();
+
+        Assert.Equal(EvaluationJobState.Queued, await StateAsync(jobId));
+        Assert.Equal(0, await DeliveriesAsync(jobId));
+    }
+
+    /// <summary>
+    /// **And one that was acknowledged still costs its delivery.**
+    /// <para>
+    /// The twin, and it is not the same test twice: without it the refund could
+    /// swallow every reclaim, which is exactly the case the delivery cap exists
+    /// for — a job that kills every Runner it reaches would then be retried for
+    /// ever. One renewal is enough to have been heard from.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_claim_that_was_acknowledged_still_costs_its_delivery()
+    {
+        var (jobId, runner, leaseToken) = await ClaimedAsync("print(14)\n");
+
+        await Sign.Succeeded(await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/lease", new { leaseToken, leaseSeconds = 60 }));
+
+        await ExpireLeaseAsync(jobId);
+        await SweepAsync();
+
+        Assert.Equal(EvaluationJobState.Queued, await StateAsync(jobId));
+        Assert.Equal(1, await DeliveriesAsync(jobId));
+    }
+
+    /// <summary>
+    /// **A key the Server already knows may not be re-declared by whoever can
+    /// read it.**
+    /// <para>
+    /// Registration is anonymous because a Runner nobody has approved has no
+    /// session to present. For a fingerprint the Server already has, that meant
+    /// anyone could rewrite the row: the problem types and the external flag the
+    /// claim pairs work on, and the name, product, version and host facts a
+    /// manager reads when deciding whether to approve it — with the approval
+    /// left exactly where it was. A public key is public by construction, and
+    /// the panel hands it to anyone who may list Runners.
+    /// </para>
+    /// <para>
+    /// **The claim is where this is checked, not the stored row.** A Server that
+    /// answered the refusal and wrote the fields anyway would pass a row
+    /// assertion written the other way round; what has to still be true is which
+    /// work this Runner is handed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_unsigned_re_registration_is_refused_and_the_queue_does_not_follow_it()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var runner = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+        await DrainAsync(runner);
+
+        var refused = await server.CreateClient().PostAsJsonAsync("/api/v1/runner/register", new
+        {
+            name = "impostor",
+            product = "AlgoJudge-Runner-Stub",
+            version = "6.6.6",
+            publicKey = runner.PublicKey,
+            // Both halves of the claim's pairing, rewritten.
+            problemTypes = new[] { "output-only@1" },
+            external = true,
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("runner.nonce.unknown", problem.GetProperty("code").GetString());
+
+        // The row stands, and this is the assertion that means it.
+        await Build.SubmitAsync(participant, slug, "print(15)\n");
+        var taken = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.OK, taken.StatusCode);
+    }
+
+    /// <summary>
+    /// **And a signed one still moves the queue**, because a restart reporting a
+    /// changed configuration is what this endpoint is for.
+    /// <para>
+    /// The half that keeps the refusal above from being a fleet that cannot
+    /// restart: an operator who edits <c>AJ_Runner__ProblemTypes</c> and
+    /// restarts still gets what they asked for, having proved the private key is
+    /// on the machine that is asking.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_signed_re_registration_changes_what_the_queue_hands_over()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        // Cannot judge what this activity publishes, to begin with.
+        var runner = await Build.RunnerAsync(server, problemTypes: ["output-only@1"]);
+        await Build.SubmitAsync(participant, slug, "print(16)\n");
+
+        var nothing = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.NoContent, nothing.StatusCode);
+
+        var (nonce, signature) = await runner.ProofAsync();
+        await Build.PostAsync(server.CreateClient(), "/api/v1/runner/register", new
+        {
+            name = "stub",
+            product = "AlgoJudge-Runner-Stub",
+            version = "0.0.1",
+            publicKey = runner.PublicKey,
+            problemTypes = new[] { "standard-io@1" },
+            nonce,
+            signature,
+        });
+
+        var taken = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.OK, taken.StatusCode);
+    }
+
+    /// <summary>
+    /// **A nonce issued to another key does not travel.**
+    /// <para>
+    /// <c>auth/challenge</c> is anonymous and hands a nonce to anyone who names
+    /// a fingerprint, so "the nonce exists" says nothing about who is presenting
+    /// it. The check that makes it evidence lived only on the handshake until
+    /// this endpoint started accepting one too.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_nonce_issued_to_another_key_is_refused()
+    {
+        var runner = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+        var other = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+
+        // Somebody else's nonce, and this key's signature over it.
+        var (nonce, _) = await other.ProofAsync();
+        var (_, signature) = await runner.ProofAsync();
+
+        var refused = await server.CreateClient().PostAsJsonAsync("/api/v1/runner/register", new
+        {
+            name = "stub",
+            product = "AlgoJudge-Runner-Stub",
+            version = "0.0.1",
+            publicKey = runner.PublicKey,
+            problemTypes = new[] { "output-only@1" },
+            nonce,
+            signature,
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("runner.nonce.mismatch", problem.GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// **Reporting is not an oracle for jobs a Runner never held.**
+    /// <para>
+    /// The repeat is answered before the lease is compared, and that is
+    /// deliberate — a Runner resending after its lease expired is still telling
+    /// the truth about what it computed. It was answered before the *owner* was
+    /// compared too, which nothing argued for: any approved Runner naming a
+    /// finished job and any well-formed GUID was handed that job's result id and
+    /// state, holding nothing.
+    /// </para>
+    /// <para>
+    /// Both halves are asserted, because a fix that simply moved the repeat
+    /// below the lease would pass the first and break the second.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_runner_is_told_nothing_about_a_job_it_never_held()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(17)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        await Sign.Succeeded(await holder.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new { leaseToken, verdict = "accepted", score = 100, maxScore = 100 }));
+
+        // Somebody else's job, and a lease token that is merely well-formed.
+        var other = await Build.RunnerAsync(server);
+        var probed = await other.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new { leaseToken = Guid.NewGuid().ToString(), verdict = "accepted" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, probed.StatusCode);
+        var problem = await probed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("runner.lease.stale", problem.GetProperty("code").GetString());
+        // The refusal is not the point; the absence is. Nothing about the job
+        // came back.
+        Assert.False(problem.TryGetProperty("resultId", out _));
+        Assert.False(problem.TryGetProperty("duplicate", out _));
+
+        // And the half the fix must not break: the Runner that *did* hold it
+        // still gets its repeat, with a lease token that is now stale.
+        var resent = await holder.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new { leaseToken, verdict = "accepted", score = 100, maxScore = 100 });
+
+        Assert.Equal(HttpStatusCode.OK, resent.StatusCode);
+        Assert.True((await resent.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("duplicate").GetBoolean());
+    }
+
+    /// <summary>
+    /// Empties the queue of whatever the rest of the collection left behind, so
+    /// a test that counts what one submission produces is counting that.
+    /// </summary>
+    private static async Task DrainAsync(params StubRunner[] runners)
+    {
+        foreach (var runner in runners)
+        {
+            for (var attempt = 0; attempt < 50; attempt++)
+            {
+                var drained = await runner.Client.PostAsJsonAsync(
+                    "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+                if (drained.StatusCode == HttpStatusCode.NoContent) break;
+                await Sign.Succeeded(drained);
+            }
+        }
+    }
+
+    /// <summary>
+    /// **One job, two Runners that both want it, and exactly one gets it.**
+    /// <para>
+    /// <c>FOR UPDATE OF j SKIP LOCKED LIMIT 1</c> is the whole mechanism, and it
+    /// was true before a nudge existed. What is new is that both Runners now
+    /// look at the *same instant* rather than whenever their own backoff
+    /// happened to expire — so the two claims race in a way they previously
+    /// could only do by coincidence.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task One_submission_reaches_exactly_one_of_two_identical_runners()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var first = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+        var second = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+
+        await DrainAsync(first, second);
+
+        var waiting = new[]
+        {
+            first.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 6 }),
+            second.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 6 }),
+        };
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        await Build.SubmitAsync(participant, slug, "print(7)\n");
+
+        var answers = await Task.WhenAll(waiting);
+        var handed = answers.Count(a => a.StatusCode == HttpStatusCode.OK);
+        var empty = answers.Count(a => a.StatusCode == HttpStatusCode.NoContent);
+
+        // Reported together, because which of the two is wrong is the whole
+        // diagnosis: two `200`s is a job judged twice, two `204`s is a job
+        // nobody was given, and anything else is a claim that failed outright.
+        var seen = string.Join(", ", answers.Select(a => a.StatusCode.ToString()));
+        Assert.True(handed == 1 && empty == 1, $"the two claims answered {seen}");
+    }
+
+    /// <summary>
+    /// **Rejudging one submission ends a held claim, as rejudging many always
+    /// did.** Of the six places that queue work, this was the only one that
+    /// queued it silently — and it is the one a manager uses, since a corrected
+    /// package is tried on a single entry before a whole round.
+    /// <para>
+    /// The assertion is latency, like its neighbours: without the nudge the job
+    /// is still handed over, twenty seconds later, when the wait runs out. A
+    /// test that only checked the <c>200</c> would pass against the defect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_rejudge_of_one_submission_ends_a_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(8)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        // Taken by one Runner **and finished**, so the queue is empty when the
+        // other waits and nothing of this submission is still running — a
+        // rejudge queued behind a running attempt waits for it by design, and
+        // this test is about the nudge rather than about that rule.
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        await Sign.Succeeded(await holder.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{job.GetProperty("jobId").GetString()}/report",
+            new
+            {
+                leaseToken = job.GetProperty("leaseToken").GetString(),
+                verdict = "accepted",
+                score = 100,
+                maxScore = 100,
+            }));
+
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        var started = Stopwatch.StartNew();
+        var waiting = waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 20 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(
+            await admin.PostAsync($"/api/v1/submissions/{submissionId}/rejudge", null));
+
+        var answer = await waiting;
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(10),
+            $"the rejudge took {started.Elapsed} to reach a held claim, so it waited the "
+                + "wait out rather than being told");
+    }
+
+    /// <summary>
+    /// **Reopening after a drain releases the backlog to Runners that are
+    /// already listening.**
+    /// <para>
+    /// A drain is the one state where work reliably piles up: <c>ClaimAsync</c>
+    /// answers everybody with nothing while report and release keep handing jobs
+    /// back, so the queue grows behind a door every Runner has already found
+    /// shut. They are all inside held claims. Without a nudge on the way out,
+    /// the whole backlog waits out a deadline after the Server is open again —
+    /// on the path an operator is watching, having just reopened it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Reopening_after_a_drain_ends_a_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(9)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        var jobId = job.GetProperty("jobId").GetString()!;
+
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        var operators = server.CreateClient();
+        operators.DefaultRequestHeaders.Add(AdminSurface.TokenHeader, ServerFixture.AdminToken);
+        var switched = await operators.PostAsJsonAsync(
+            "/api/v1/admin/maintenance", new { on = true, reason = "a backup" });
+        Assert.True(switched.IsSuccessStatusCode, await switched.Content.ReadAsStringAsync());
+
+        try
+        {
+            // The backlog: handed back while the door is shut, so it stays
+            // queued and nobody may take it. Submitting instead would not work —
+            // the gate refuses that during a drain, which is the point of one.
+            var released = await holder.Client.PostAsJsonAsync(
+                $"/api/v1/runner/jobs/{jobId}/release",
+                new { leaseToken = job.GetProperty("leaseToken").GetString() });
+            Assert.Equal(HttpStatusCode.NoContent, released.StatusCode);
+
+            var started = Stopwatch.StartNew();
+            var waiting = waiter.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 20 });
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+            await Sign.Succeeded(await operators.PostAsJsonAsync(
+                "/api/v1/admin/maintenance", new { on = false, reason = (string?)null }));
+
+            var answer = await waiting;
+            started.Stop();
+
+            Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+            Assert.True(
+                started.Elapsed < TimeSpan.FromSeconds(10),
+                $"reopening took {started.Elapsed} to reach a held claim, so the backlog "
+                    + "waited a deadline out after the Server was open again");
+        }
+        finally
+        {
+            await operators.PostAsJsonAsync(
+                "/api/v1/admin/maintenance", new { on = false, reason = (string?)null });
+        }
+    }
+
+    /// <summary>
+    /// **Retagging a Runner into a pool that has work is a delivery.**
+    /// <para>
+    /// Both sides of the tag comparison are read at claim time rather than
+    /// stamped on the job, so this Runner matches the queued work the instant
+    /// the row is written — and would still have sat there until its own
+    /// deadline, because a held claim looks again only when something tells it
+    /// to. The specification advertises that retagging redirects work already
+    /// waiting; without the nudge that is true only eventually.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Retagging_a_runner_into_a_pool_ends_its_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server, runnerTags: ["lab-a"]);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        // Untagged, so it is in the general pool and this work is not its.
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        await Build.SubmitAsync(participant, slug, "print(10)\n");
+
+        var started = Stopwatch.StartNew();
+        var waiting = waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 20 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/runners/{waiter.Id}/tags", new { tags = new[] { "lab-a" } }));
+
+        var answer = await waiting;
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(10),
+            $"the retag took {started.Elapsed} to reach a held claim, so the Runner waited "
+                + "its deadline out on a queue it already matched");
+    }
+
+    /// <summary>
     /// **A drain begun while a claim is held is seen by that claim.**
     /// <para>
     /// A request scope carries one <c>DbContext</c>, and a tracking query hands
@@ -743,4 +1369,57 @@ public class RunnerConformanceTests(ServerFixture server)
         Assert.Equal(50, mine.GetProperty("bestScore").GetDouble());
     }
 
+    /// <summary>Claims one job and answers what a Runner would then hold.</summary>
+    private async Task<(Guid JobId, StubRunner Runner, string LeaseToken)> ClaimedAsync(string source)
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, source);
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+        return (
+            Guid.Parse(job.GetProperty("jobId").GetString()!),
+            runner,
+            job.GetProperty("leaseToken").GetString()!);
+    }
+
+    private async Task<int> DeliveriesAsync(Guid jobId)
+    {
+        using var scope = server.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await context.EvaluationJobs.Where(j => j.Id == jobId)
+            .Select(j => j.Deliveries).FirstAsync();
+    }
+
+    /// <summary>Moves the lease into the past, which is the reaper's only input.</summary>
+    private async Task ExpireLeaseAsync(Guid jobId)
+    {
+        using var scope = server.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await context.EvaluationJobs.Where(j => j.Id == jobId)
+            .ExecuteUpdateAsync(s => s.SetProperty(
+                j => j.LeaseExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
+    }
+
+    private async Task<EvaluationJobState> StateAsync(Guid jobId)
+    {
+        using var scope = server.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await context.EvaluationJobs.Where(j => j.Id == jobId)
+            .Select(j => j.State).FirstAsync();
+    }
+
+    /// <summary>
+    /// One pass of the reaper.
+    /// <para>
+    /// **What it answers is deliberately not asserted.** The reaper reclaims
+    /// every expired lease in the installation, and the collections in this
+    /// suite run against one database at the same time — so the count is
+    /// whatever the rest of the suite happened to leave, and a test that
+    /// insisted on one passed alone and failed in the run that matters.
+    /// </para>
+    /// </summary>
+    private Task<int> SweepAsync() =>
+        server.Services.GetRequiredService<LeaseReaper>().SweepAsync(default);
 }

@@ -44,6 +44,7 @@ namespace AlgoJudge.Server.Services
         ISeriesService series,
         IEventHub events,
         IEventAudience audience,
+        IQueueSignal queue,
         TimeProvider clock
     ) : IManagerWriteService
     {
@@ -203,6 +204,13 @@ namespace AlgoJudge.Server.Services
             }
 
             await context.SaveChangesAsync(ct);
+            // **The other half of the tag comparison.** A claim reads the
+            // activity's pool at claim time rather than stamping it on the job,
+            // so moving an activity to a pool redirects work that is already
+            // queued — to Runners that are holding claims open and will not look
+            // again unless told. Sent whenever the field was written, because
+            // "the same tags again" is not worth a comparison for one nudge.
+            if (input.RunnerTags is not null) queue.Wake();
             // The dates moving is its own event: a participant's countdown reads
             // them, and a round list has to be rebuilt when they shift.
             await AnnounceActivityAsync(activity.Id, ct);
@@ -349,6 +357,8 @@ namespace AlgoJudge.Server.Services
 
             Reconcile(round);
             await context.SaveChangesAsync(ct);
+            // A round's pool overrides its activity's, so the same holds here.
+            if (input.RunnerTags is not null) queue.Wake();
             await AnnounceSeriesAsync(round.ActivityId, round, ct);
             return await OneAsync(round, ct);
         }

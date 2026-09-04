@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using AlgoJudge.Server.Utils;
 using Microsoft.AspNetCore.Diagnostics;
@@ -105,6 +106,27 @@ namespace AlgoJudge.Server.Utils
                 null),
 
             JsonException => (StatusCodes.Status400BadRequest, "Bad Request", "malformed_json", null),
+
+            // **A unique index doing its job is a conflict, not a fault.** Every
+            // one of them in this schema encodes a rule the code also checks —
+            // one attempt number per submission, one live lease token — and the
+            // index is there because a check between a read and a write is not
+            // a guarantee under two callers. Two managers rejudging the same
+            // submission in the same instant answered 500 until 2026-09-04,
+            // which says the Server is broken when the second caller simply
+            // lost a race and can repeat it.
+            //
+            // `DbUpdateConcurrencyException` is a subclass and a different
+            // fact — nothing matched, rather than something already exists —
+            // and `Concurrency.SaveAsync` turns it into a `ConflictException`
+            // where the guard that lost can be re-run, which the first arm
+            // catches. One that reaches here raw is a lost race too, and 409 is
+            // the honest answer to it as well.
+            DbUpdateException => (
+                StatusCodes.Status409Conflict,
+                "Conflict",
+                "concurrency.conflict",
+                null),
 
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error", null, null),
         };

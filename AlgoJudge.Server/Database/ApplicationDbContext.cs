@@ -293,6 +293,22 @@ namespace AlgoJudge.Server.Database
                     .WithMany()
                     .HasForeignKey(f => f.UploadedByUserId)
                     .OnDelete(DeleteBehavior.SetNull);
+
+                // The Runner that produced the bytes, when one did. Its own
+                // column beside the user's, because a Runner is a principal with
+                // a row and not a session — and because "uploaded by nobody" is
+                // what one Runner used to be able to say about another's file.
+                //
+                // `SetNull` rather than `Restrict`: forgetting a revoked Runner
+                // removes the row, and a log it left behind must not hold that
+                // up. EF's own convention indexes the foreign key, which is
+                // accepted rather than argued away — the alternative is a bare
+                // `Guid?` with no referential integrity at all.
+                e.HasOne(f => f.UploadedByRunner)
+                    .WithMany()
+                    .HasForeignKey(f => f.UploadedByRunnerId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
                 // The garbage collector asks "what was uploaded before X and is
                 // referenced by nothing" on every run.
                 e.HasIndex(f => f.CreatedAt);
@@ -464,6 +480,15 @@ namespace AlgoJudge.Server.Database
                 // actually waiting on.
                 e.HasIndex(j => new { j.State, j.CreatedAt })
                     .HasFilter("\"State\" < 2");
+                // The claim's fourth filter: is a sibling of this submission
+                // already being judged.
+                //
+                // **Filtered to `Running` alone, so it is the size of the fleet
+                // rather than of history.** Every claim runs this subquery, and
+                // an unfiltered index on `SubmissionId` would carry a row per
+                // attempt ever made to answer a question only about the handful
+                // in flight.
+                e.HasIndex(j => j.SubmissionId).HasFilter("\"State\" = 1");
                 // The reaper's query: leases that have run out.
                 e.HasIndex(j => j.LeaseExpiresAt);
                 // Reporting a result is idempotent on the lease token, and this
