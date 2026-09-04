@@ -630,7 +630,22 @@ namespace AlgoJudge.Server.Services
             // The repeat. Checked before the lease, because a Runner resending
             // after its lease expired is still telling the truth about what it
             // computed — and the stored result is what it computed.
-            if (job.Result is not null)
+            //
+            // **But only for the Runner whose result it is.** The ownership term
+            // is not a second lease check; it is what stops this branch being an
+            // oracle. Without it any approved Runner naming a finished job and
+            // any well-formed GUID was handed that job's result id and state,
+            // having held nothing. A completed report leaves `RunnerId` where it
+            // was — only the requeue on an infrastructure failure clears it — so
+            // a genuine resend still lands here.
+            //
+            // **Guarding the branch rather than reordering the refusals**, which
+            // was the first attempt and was wrong: a job the reaper had already
+            // reclaimed has `RunnerId` of *nobody*, so an owner check in front
+            // answered "that job belongs to another Runner" to the Runner whose
+            // lease had simply run out — misleading, and against what §6 says
+            // that case answers. The refusals below keep their order.
+            if (job.Result is not null && job.RunnerId == runner.Id)
             {
                 return new ReportAcceptedDto
                 {

@@ -254,8 +254,10 @@ namespace AlgoJudge.Server.Services
             }
 
             // The repeat, checked before the lease: a Runner resending after its
-            // lease expired is still telling the truth about what it measured.
-            if (trial.FinishedAt is not null)
+            // lease expired is still telling the truth about what it measured —
+            // and only for the Runner whose measurement it is, for the reason
+            // written where the job report carries the same term.
+            if (trial.FinishedAt is not null && trial.RunnerId == runner.Id)
             {
                 return new TrialReportAcceptedDto
                 {
@@ -352,15 +354,26 @@ namespace AlgoJudge.Server.Services
             };
         }
 
-        public Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct) =>
+        public Task<bool> MayReadAsync(DbRunner runner, Guid fileId, CancellationToken ct)
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+
             // Only the package of a trial this Runner is holding right now.
             // Nothing else, and never by probing ids: a Runner that has finished
             // or lost the lease can no longer read the bytes.
-            context.Trials.AnyAsync(
+            //
+            // **The lease term is the half this used to say and not do.** `State`
+            // alone is `Running` until the reaper's next pass, so an expired
+            // lease still opened the package for up to a tick — while the job
+            // side of the same `if` in the controller had been checking the
+            // deadline all along.
+            return context.Trials.AnyAsync(
                 t => t.RunnerId == runner.Id
                      && t.State == EvaluationJobState.Running
+                     && t.LeaseExpiresAt != null && t.LeaseExpiresAt > now
                      && t.PackageFileId == fileId,
                 ct);
+        }
 
         /// <summary>
         /// Returns trials whose lease has run out, and gives up on the ones that

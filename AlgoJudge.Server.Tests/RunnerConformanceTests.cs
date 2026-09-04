@@ -851,6 +851,63 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **Reporting is not an oracle for jobs a Runner never held.**
+    /// <para>
+    /// The repeat is answered before the lease is compared, and that is
+    /// deliberate — a Runner resending after its lease expired is still telling
+    /// the truth about what it computed. It was answered before the *owner* was
+    /// compared too, which nothing argued for: any approved Runner naming a
+    /// finished job and any well-formed GUID was handed that job's result id and
+    /// state, holding nothing.
+    /// </para>
+    /// <para>
+    /// Both halves are asserted, because a fix that simply moved the repeat
+    /// below the lease would pass the first and break the second.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_runner_is_told_nothing_about_a_job_it_never_held()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(17)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        var jobId = job.GetProperty("jobId").GetString()!;
+        var leaseToken = job.GetProperty("leaseToken").GetString()!;
+
+        await Sign.Succeeded(await holder.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new { leaseToken, verdict = "accepted", score = 100, maxScore = 100 }));
+
+        // Somebody else's job, and a lease token that is merely well-formed.
+        var other = await Build.RunnerAsync(server);
+        var probed = await other.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new { leaseToken = Guid.NewGuid().ToString(), verdict = "accepted" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, probed.StatusCode);
+        var problem = await probed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("runner.lease.stale", problem.GetProperty("code").GetString());
+        // The refusal is not the point; the absence is. Nothing about the job
+        // came back.
+        Assert.False(problem.TryGetProperty("resultId", out _));
+        Assert.False(problem.TryGetProperty("duplicate", out _));
+
+        // And the half the fix must not break: the Runner that *did* hold it
+        // still gets its repeat, with a lease token that is now stale.
+        var resent = await holder.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/report",
+            new { leaseToken, verdict = "accepted", score = 100, maxScore = 100 });
+
+        Assert.Equal(HttpStatusCode.OK, resent.StatusCode);
+        Assert.True((await resent.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("duplicate").GetBoolean());
+    }
+
+    /// <summary>
     /// Empties the queue of whatever the rest of the collection left behind, so
     /// a test that counts what one submission produces is counting that.
     /// </summary>
