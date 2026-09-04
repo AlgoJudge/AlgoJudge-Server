@@ -630,6 +630,160 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **Rejudging one submission ends a held claim, as rejudging many always
+    /// did.** Of the six places that queue work, this was the only one that
+    /// queued it silently — and it is the one a manager uses, since a corrected
+    /// package is tried on a single entry before a whole round.
+    /// <para>
+    /// The assertion is latency, like its neighbours: without the nudge the job
+    /// is still handed over, twenty seconds later, when the wait runs out. A
+    /// test that only checked the <c>200</c> would pass against the defect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_rejudge_of_one_submission_ends_a_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(8)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        // Taken by one Runner so the queue is empty when the other waits.
+        var holder = await Build.RunnerAsync(server);
+        await holder.ClaimUntilAsync(submissionId);
+
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        var started = Stopwatch.StartNew();
+        var waiting = waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 20 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(
+            await admin.PostAsync($"/api/v1/submissions/{submissionId}/rejudge", null));
+
+        var answer = await waiting;
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(10),
+            $"the rejudge took {started.Elapsed} to reach a held claim, so it waited the "
+                + "wait out rather than being told");
+    }
+
+    /// <summary>
+    /// **Reopening after a drain releases the backlog to Runners that are
+    /// already listening.**
+    /// <para>
+    /// A drain is the one state where work reliably piles up: <c>ClaimAsync</c>
+    /// answers everybody with nothing while report and release keep handing jobs
+    /// back, so the queue grows behind a door every Runner has already found
+    /// shut. They are all inside held claims. Without a nudge on the way out,
+    /// the whole backlog waits out a deadline after the Server is open again —
+    /// on the path an operator is watching, having just reopened it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Reopening_after_a_drain_ends_a_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(9)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        var jobId = job.GetProperty("jobId").GetString()!;
+
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        var operators = server.CreateClient();
+        operators.DefaultRequestHeaders.Add(AdminSurface.TokenHeader, ServerFixture.AdminToken);
+        var switched = await operators.PostAsJsonAsync(
+            "/api/v1/admin/maintenance", new { on = true, reason = "a backup" });
+        Assert.True(switched.IsSuccessStatusCode, await switched.Content.ReadAsStringAsync());
+
+        try
+        {
+            // The backlog: handed back while the door is shut, so it stays
+            // queued and nobody may take it. Submitting instead would not work —
+            // the gate refuses that during a drain, which is the point of one.
+            var released = await holder.Client.PostAsJsonAsync(
+                $"/api/v1/runner/jobs/{jobId}/release",
+                new { leaseToken = job.GetProperty("leaseToken").GetString() });
+            Assert.Equal(HttpStatusCode.NoContent, released.StatusCode);
+
+            var started = Stopwatch.StartNew();
+            var waiting = waiter.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 20 });
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+            await Sign.Succeeded(await operators.PostAsJsonAsync(
+                "/api/v1/admin/maintenance", new { on = false, reason = (string?)null }));
+
+            var answer = await waiting;
+            started.Stop();
+
+            Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+            Assert.True(
+                started.Elapsed < TimeSpan.FromSeconds(10),
+                $"reopening took {started.Elapsed} to reach a held claim, so the backlog "
+                    + "waited a deadline out after the Server was open again");
+        }
+        finally
+        {
+            await operators.PostAsJsonAsync(
+                "/api/v1/admin/maintenance", new { on = false, reason = (string?)null });
+        }
+    }
+
+    /// <summary>
+    /// **Retagging a Runner into a pool that has work is a delivery.**
+    /// <para>
+    /// Both sides of the tag comparison are read at claim time rather than
+    /// stamped on the job, so this Runner matches the queued work the instant
+    /// the row is written — and would still have sat there until its own
+    /// deadline, because a held claim looks again only when something tells it
+    /// to. The specification advertises that retagging redirects work already
+    /// waiting; without the nudge that is true only eventually.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Retagging_a_runner_into_a_pool_ends_its_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server, runnerTags: ["lab-a"]);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        // Untagged, so it is in the general pool and this work is not its.
+        var waiter = await Build.RunnerAsync(server);
+        await DrainAsync(waiter);
+
+        await Build.SubmitAsync(participant, slug, "print(10)\n");
+
+        var started = Stopwatch.StartNew();
+        var waiting = waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 20 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/runners/{waiter.Id}/tags", new { tags = new[] { "lab-a" } }));
+
+        var answer = await waiting;
+        started.Stop();
+
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(10),
+            $"the retag took {started.Elapsed} to reach a held claim, so the Runner waited "
+                + "its deadline out on a queue it already matched");
+    }
+
+    /// <summary>
     /// **A drain begun while a claim is held is seen by that claim.**
     /// <para>
     /// A request scope carries one <c>DbContext</c>, and a tracking query hands

@@ -30,9 +30,26 @@ namespace AlgoJudge.Server.Services
         void Wake();
 
         /// <summary>
-        /// Waits for a nudge, for at most <paramref name="within"/>. Answers
-        /// whether a nudge came rather than the time running out.
+        /// The signal as it stands **now**, to be awaited after a look.
+        /// <para>
+        /// Separate from the waiting because the order is what makes the wait
+        /// safe: a look that finds an empty queue, and only then starts
+        /// listening, is deaf for exactly as long as it takes to roll back a
+        /// transaction and unwind — and a submission committed in that window
+        /// nudges nobody. Taking the signal first turns that window into a
+        /// nudge already delivered, so the wait ends at once and looks again.
+        /// </para>
         /// </summary>
+        IQueueNudge Capture();
+    }
+
+    /// <summary>
+    /// One captured signal. Waiting on it answers whether a nudge came rather
+    /// than the time running out — and a nudge that landed **after the capture
+    /// and before the wait** counts, which is the entire point of holding one.
+    /// </summary>
+    public interface IQueueNudge
+    {
         Task<bool> WaitAsync(TimeSpan within, CancellationToken ct);
     }
 
@@ -41,8 +58,8 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// **Replaced rather than reset.** A completed source stays completed,
         /// so the one every waiter is holding is swapped for a fresh one at the
-        /// moment it is completed. A Runner that starts waiting afterwards takes
-        /// the new one and is not handed a nudge that has already been and gone.
+        /// moment it is completed. A Runner that captures afterwards takes the
+        /// new one and is not handed a nudge that has already been and gone.
         /// </summary>
         private TaskCompletionSource waiting = Fresh();
 
@@ -52,27 +69,27 @@ namespace AlgoJudge.Server.Services
         public void Wake() =>
             Interlocked.Exchange(ref waiting, Fresh()).TrySetResult();
 
-        public async Task<bool> WaitAsync(TimeSpan within, CancellationToken ct)
-        {
-            // Read once, before the wait: a nudge that lands between here and
-            // the await completes *this* task, and swapping in a fresh one does
-            // not take it away.
-            var nudged = Volatile.Read(ref waiting).Task;
+        public IQueueNudge Capture() => new Nudge(Volatile.Read(ref waiting).Task);
 
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            deadline.CancelAfter(within);
-            try
+        private sealed class Nudge(Task nudged) : IQueueNudge
+        {
+            public async Task<bool> WaitAsync(TimeSpan within, CancellationToken ct)
             {
-                await nudged.WaitAsync(deadline.Token);
-                return true;
-            }
-            catch (OperationCanceledException)
-            {
-                // Told apart deliberately: the client going away is not the same
-                // as the wait running out, and only the first should end the
-                // request rather than answer it.
-                ct.ThrowIfCancellationRequested();
-                return false;
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                deadline.CancelAfter(within);
+                try
+                {
+                    await nudged.WaitAsync(deadline.Token);
+                    return true;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Told apart deliberately: the client going away is not the
+                    // same as the wait running out, and only the first should
+                    // end the request rather than answer it.
+                    ct.ThrowIfCancellationRequested();
+                    return false;
+                }
             }
         }
     }

@@ -303,6 +303,10 @@ namespace AlgoJudge.Server.Services
 
             await QueueRejudgeAsync(submission, ct);
             await context.SaveChangesAsync(ct);
+            // The same nudge `RejudgeManyAsync` sends, and it was missing here
+            // alone — on the path a manager actually uses, since a corrected
+            // package is retried on one entry before the round.
+            queue.Wake();
             await submissions.AnnounceAsync(submissionId, ct);
 
             return Project(await LoadSubmissionAsync(submissionId, ct));
@@ -934,6 +938,13 @@ namespace AlgoJudge.Server.Services
             // `lab-a` on an activity cannot be two pools that read as one.
             runner.Tags = RunnerTags.Validated(tags, "The Runner's tags");
             await context.SaveChangesAsync(ct);
+            // **Retagging is a delivery, not just a setting.** The claim reads
+            // both sides of the comparison at claim time, so this Runner now
+            // matches work that was already queued — but it is holding a claim
+            // open and will not look again until something tells it to. The
+            // specification promises that retagging redirects work already
+            // waiting; without this it does so only once a deadline expires.
+            queue.Wake();
             var projectedRunner = await ProjectRunnerAsync(runner, ct);
             await AnnounceRunnerAsync(projectedRunner, null, ct);
             return projectedRunner;

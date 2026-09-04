@@ -124,6 +124,22 @@ namespace AlgoJudge.Server.Controllers
             var waiting = Waiting(input?.WaitSeconds);
             var started = Environment.TickCount64;
 
+            // **Captured before the look, never after it.** The obvious order —
+            // look, find nothing, then start listening — leaves this request
+            // deaf for as long as the look takes to unwind: the rollback round
+            // trip, the transaction's disposal, the return. A submission
+            // committed in that window fires its nudge into an empty room,
+            // because the waiter it was meant for is not holding anything yet,
+            // and the cost is a full wait of latency for work that was already
+            // there. Holding the signal first turns the same window into a
+            // nudge already delivered.
+            //
+            // Both halves of that window widen under exactly the load
+            // `NudgeSpread` exists for: the continuations after `CommitAsync`
+            // and `RollbackAsync` are thread-pool work, and a fleet resuming
+            // together is what starves the pool.
+            var nudge = queue.Capture();
+
             // The first look is this request's own, which is the whole of the
             // work when no wait was asked for.
             var runner = await runners.AuthenticateAsync(token, ct);
@@ -145,7 +161,7 @@ namespace AlgoJudge.Server.Controllers
                 // A nudge says something became claimable; it does not say it
                 // was claimable by *this* Runner, whose types and tags may not
                 // match. So the answer is another look, not a job.
-                if (await queue.WaitAsync(left, ct))
+                if (await nudge.WaitAsync(left, ct))
                 {
                     // Woken rather than timed out, so this look is one of many
                     // starting together — see `NudgeSpread`.
@@ -175,6 +191,10 @@ namespace AlgoJudge.Server.Controllers
                 // Both were true only because a claim became long. A fresh
                 // scope reads both from the database again, and costs one
                 // lookup per nudge.
+                // Captured before the look it protects, for the reason given
+                // where the first one is taken.
+                nudge = queue.Capture();
+
                 using var scope = scopes.CreateScope();
                 var again = scope.ServiceProvider.GetRequiredService<IRunnerService>();
                 var current = await again.AuthenticateAsync(token, ct);

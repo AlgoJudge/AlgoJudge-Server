@@ -354,6 +354,7 @@ namespace AlgoJudge.Server.Controllers
         IFileService files,
         IPermissionService permissions,
         IAccessKeyMinting minting,
+        Services.IQueueSignal queue,
         Realtime.IEventHub events
     ) : ControllerBase
     {
@@ -542,6 +543,10 @@ namespace AlgoJudge.Server.Controllers
             // Absent means "leave it alone", never "turn it off": a caller that
             // predates this field is saving something else, and reading its
             // silence as a decision would close the door under somebody.
+            // Whether this switch is what changed, so the queue is nudged
+            // only when there is a reason to.
+            var judgingOpened = input.ExternalJudgingEnabled is true
+                && !instance.ExternalJudgingEnabled;
             if (input.ExternalJudgingEnabled is { } externalJudging)
             {
                 instance.ExternalJudgingEnabled = externalJudging;
@@ -557,6 +562,14 @@ namespace AlgoJudge.Server.Controllers
             // lost race is answered as one: nothing was written, read it again.
             // Silently putting every field back was the alternative.
             await Concurrency.SaveAsync(context, ct);
+            if (judgingOpened)
+            {
+                // The claim re-reads this row on every look precisely so an
+                // operator turning the switch on sees the queue start draining
+                // rather than draining after a restart — which it cannot do
+                // while every external Runner is parked in a wait nobody ends.
+                queue.Wake();
+            }
 
             return await AnnounceAsync(ct);
         }

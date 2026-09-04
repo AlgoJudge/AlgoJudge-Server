@@ -92,6 +92,7 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         IEventHub events,
         MaintenanceLevelCache cache,
+        IQueueSignal queue,
         TimeProvider clock
     ) : IMaintenanceService
     {
@@ -151,6 +152,17 @@ namespace AlgoJudge.Server.Services
             }
 
             await context.SaveChangesAsync(ct);
+            if (!on)
+            {
+                // **Reopening releases a queue nobody is watching.** While
+                // draining, `ClaimAsync` answers everybody with nothing, and
+                // report and release keep handing work back — so the backlog
+                // grows behind a door every Runner has already found shut. They
+                // are all inside held claims, and a held claim looks again only
+                // when nudged. Without this the whole backlog waits out a
+                // deadline after the Server is open again.
+                queue.Wake();
+            }
             await AnnounceAsync(state, ct);
             return state;
         }
