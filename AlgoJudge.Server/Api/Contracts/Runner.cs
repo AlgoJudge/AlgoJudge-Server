@@ -257,7 +257,14 @@ namespace AlgoJudge.Server.Api.Contracts
 
     public record ReportAcceptedDto
     {
-        public required string ResultId { get; init; }
+        /// <summary>
+        /// Absent when nothing was stored, which is an infrastructure failure
+        /// the Server is going to have judged again: a stored result is what
+        /// makes a repeat answer <c>duplicate</c>, so keeping one from a failed
+        /// attempt would hand the next Runner's honest work back to it as a
+        /// duplicate of the failure. <c>state</c> says <c>queued</c> there.
+        /// </summary>
+        public string? ResultId { get; init; }
         public required string State { get; init; }
         /// <summary>
         /// True when this report was a repeat and the stored result was returned

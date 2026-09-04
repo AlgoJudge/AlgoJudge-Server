@@ -169,6 +169,22 @@ namespace AlgoJudge.Server.Controllers
             return await runners.RenewAsync(runner, jobId, input.LeaseToken, input.LeaseSeconds, ct);
         }
 
+        /// <summary>
+        /// Gives a job back because this Runner is stopping. It is queued again
+        /// at once, and the delivery the claim counted is given back — an
+        /// operator restarting a fleet must not spend a submission's attempts.
+        /// </summary>
+        [HttpPost("jobs/{jobId:guid}/release")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> Release(
+            Guid jobId, [FromBody] LeaseRequestDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            await runners.ReleaseAsync(runner, jobId, input.LeaseToken, ct);
+            return NoContent();
+        }
+
         /// <summary>Still working. Renews the lease, which is all the Server can do with the news.</summary>
         [HttpPost("jobs/{jobId:guid}/progress")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]

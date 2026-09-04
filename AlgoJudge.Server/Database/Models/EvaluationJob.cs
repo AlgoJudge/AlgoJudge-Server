@@ -66,6 +66,19 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public int Deliveries { get; set; }
 
+        /// <summary>
+        /// How many times a Runner has handed this job back because it was
+        /// stopping, and been given the delivery back for it.
+        /// <para>
+        /// <b>Bounded, because a Runner restarting in a loop looks exactly like
+        /// an operator restarting one.</b> Being shut down is not a
+        /// participant's doing, so the first few cost nothing; past
+        /// <c>RunnerService.FreeReleases</c> a release counts like every other
+        /// way a job comes back, and the delivery cap ends it.
+        /// </para>
+        /// </summary>
+        public int Releases { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? ClaimedAt { get; set; }
         public DateTime? LeaseExpiresAt { get; set; }
