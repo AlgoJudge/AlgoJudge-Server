@@ -3,6 +3,7 @@ using AlgoJudge.Server.Services;
 using AlgoJudge.Server.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AlgoJudge.Server.Controllers
 {
@@ -28,7 +29,8 @@ namespace AlgoJudge.Server.Controllers
         IRunnerService runners,
         IFileService files,
         ITrialService trials,
-        IQueueSignal queue
+        IQueueSignal queue,
+        IServiceScopeFactory scopes
     ) : ControllerBase
     {
         /// <summary>
@@ -90,7 +92,7 @@ namespace AlgoJudge.Server.Controllers
         public async Task<ActionResult<ClaimedJobDto>> Claim(
             [FromBody] ClaimRequestDto? input, CancellationToken ct)
         {
-            var runner = await runners.AuthenticateAsync(Token(), ct);
+            var token = Token();
 
             // **Nothing is held while waiting.** The transaction, the lock and
             // the connection all live inside `ClaimAsync` and are gone before
@@ -99,14 +101,16 @@ namespace AlgoJudge.Server.Controllers
             var waiting = Waiting(input?.WaitSeconds);
             var started = Environment.TickCount64;
 
+            // The first look is this request's own, which is the whole of the
+            // work when no wait was asked for.
+            var runner = await runners.AuthenticateAsync(token, ct);
+            if (await runners.ClaimAsync(runner, input?.LeaseSeconds, ct) is { } first)
+            {
+                return Ok(first);
+            }
+
             for (; ; )
             {
-                var job = await runners.ClaimAsync(runner, input?.LeaseSeconds, ct);
-                if (job is not null)
-                {
-                    return Ok(job);
-                }
-
                 var left = waiting - TimeSpan.FromMilliseconds(Environment.TickCount64 - started);
                 if (left <= TimeSpan.Zero)
                 {
@@ -119,6 +123,34 @@ namespace AlgoJudge.Server.Controllers
                 // was claimable by *this* Runner, whose types and tags may not
                 // match. So the answer is another look, not a job.
                 await queue.WaitAsync(left, ct);
+
+                // **A scope of its own for every later look, and this is not
+                // tidiness.** A request scope carries one `DbContext`, and a
+                // tracking query returns the instance already in its change
+                // tracker rather than the row as it now stands. Holding one
+                // request open for the length of a wait therefore froze two
+                // things that are checked precisely because they change:
+                //
+                //   - the maintenance level, so a drain begun mid-hold was
+                //     invisible and this claim could hand out a job *after*
+                //     the drainer had seen the queue go quiet and closed the
+                //     door — defeating the one guarantee a drain offers;
+                //   - the Runner's own row, so revoking a Runner or retagging
+                //     an activity away from it did not take effect until the
+                //     hold ended, against a comment on `AuthenticateAsync`
+                //     saying it is checked on every call for exactly that
+                //     reason.
+                //
+                // Both were true only because a claim became long. A fresh
+                // scope reads both from the database again, and costs one
+                // lookup per nudge.
+                using var scope = scopes.CreateScope();
+                var again = scope.ServiceProvider.GetRequiredService<IRunnerService>();
+                var current = await again.AuthenticateAsync(token, ct);
+                if (await again.ClaimAsync(current, input?.LeaseSeconds, ct) is { } job)
+                {
+                    return Ok(job);
+                }
             }
         }
 

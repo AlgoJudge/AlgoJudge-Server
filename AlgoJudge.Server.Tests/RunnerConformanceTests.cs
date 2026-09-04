@@ -1,3 +1,4 @@
+using AlgoJudge.Server.Authorization;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
@@ -505,6 +506,77 @@ public class RunnerConformanceTests(ServerFixture server)
             started.Elapsed < TimeSpan.FromSeconds(10),
             $"it took {started.Elapsed} to be handed a job that existed after half a "
                 + "second, so it waited the wait out rather than being told");
+    }
+
+    /// <summary>
+    /// **A drain begun while a claim is held is seen by that claim.**
+    /// <para>
+    /// A request scope carries one <c>DbContext</c>, and a tracking query hands
+    /// back the instance already in its change tracker rather than the row as it
+    /// now stands. So a claim held across the switch read a snapshot taken
+    /// before it — and could hand out a job **after** the drainer had watched
+    /// the queue go quiet and closed the door, which is the one guarantee a
+    /// drain offers an operator taking a backup.
+    /// </para>
+    /// <para>
+    /// **The queue is refilled by a release rather than a submission**, because
+    /// a draining Server refuses a participant's write — so the only way to put
+    /// work back after the switch is a Runner handing a job back, which is
+    /// allowed and is also what a fleet being restarted for that very
+    /// maintenance does.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_claim_held_across_a_drain_hands_out_nothing()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(5)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        // One Runner takes the job, so the queue is empty when the other starts
+        // waiting — and holds something it can give back later.
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+        var jobId = job.GetProperty("jobId").GetString()!;
+
+        var waiter = await Build.RunnerAsync(server);
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var drained = await waiter.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+            if (drained.StatusCode == HttpStatusCode.NoContent) break;
+            await Sign.Succeeded(drained);
+        }
+
+        var waiting = waiter.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 8 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        var operators = server.CreateClient();
+        operators.DefaultRequestHeaders.Add(AdminSurface.TokenHeader, ServerFixture.AdminToken);
+        var switched = await operators.PostAsJsonAsync(
+            "/api/v1/admin/maintenance", new { on = true, reason = "a backup" });
+        Assert.True(switched.IsSuccessStatusCode, await switched.Content.ReadAsStringAsync());
+
+        try
+        {
+            // Back on the queue, and the nudge wakes the held claim — which must
+            // now find a Server that is draining rather than the one it saw when
+            // the request began.
+            var released = await holder.Client.PostAsJsonAsync(
+                $"/api/v1/runner/jobs/{jobId}/release",
+                new { leaseToken = job.GetProperty("leaseToken").GetString() });
+            Assert.Equal(HttpStatusCode.NoContent, released.StatusCode);
+
+            var answer = await waiting;
+            Assert.Equal(HttpStatusCode.NoContent, answer.StatusCode);
+        }
+        finally
+        {
+            await operators.PostAsJsonAsync(
+                "/api/v1/admin/maintenance", new { on = false, reason = (string?)null });
+        }
     }
 
     /// <summary>
