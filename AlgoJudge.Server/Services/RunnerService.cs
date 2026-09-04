@@ -857,10 +857,11 @@ namespace AlgoJudge.Server.Services
         /// **Not a release, and deliberately not routed through one.** A release
         /// is a Runner saying it is stopping, and it spends one of three free
         /// ones; this is the Server noticing that the caller it committed a job
-        /// to has gone before the answer could reach it. Nobody was stopped,
-        /// nothing was tried, and the delivery is given back without counting —
-        /// the same rule the reaper applies to a claim nobody was ever heard
-        /// from about, arriving sooner because here the going was observed.
+        /// to has gone before the answer could reach it. Nobody was stopped and
+        /// nothing was tried, so the delivery is given back — **bounded and
+        /// counted by <c>Refunds</c>**, exactly the rule the reaper applies to a
+        /// claim nobody was ever heard from about, and sharing its counter with
+        /// it. It arrives sooner here only because the going was observed.
         /// </para>
         /// <para>
         /// **Refuses to touch a job anybody was heard from.** The check is not

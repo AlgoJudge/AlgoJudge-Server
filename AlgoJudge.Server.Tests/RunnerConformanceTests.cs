@@ -918,9 +918,12 @@ public class RunnerConformanceTests(ServerFixture server)
     /// never fail.
     /// </para>
     /// <para>
-    /// Three are free, as three releases are and three unacknowledged reclaims
-    /// are, and they share one counter — so the three paths cannot each spend
-    /// three.
+    /// Three are free, and the reaper's refund for an unacknowledged reclaim
+    /// spends the same three — one counter, so the two paths that give a
+    /// delivery back for a handover that did not happen cannot each spend it.
+    /// A release is counted apart, in <c>Releases</c> with three free of its
+    /// own, because a release is a Runner saying it is stopping: something was
+    /// tried and something did happen.
     /// </para>
     /// </summary>
     [Fact]
@@ -951,10 +954,12 @@ public class RunnerConformanceTests(ServerFixture server)
 
         var (deliveries, refunds) = await AccountingAsync(jobId);
         Assert.Equal(AlgoJudge.Server.Services.RunnerService.FreeRefunds, refunds);
-        Assert.True(
-            deliveries >= 2,
-            $"after four abandonments the job had {deliveries} deliveries, so the bound "
-                + "on the refund is not holding and the cap can never be reached");
+
+        // **Exactly two, and the number is what makes this test bite.** Five
+        // claims were made and three were refunded, so two stand. Delete the
+        // refund and every claim counts: five. Unbound it and none does: zero.
+        // A `>=` here would have passed on both.
+        Assert.Equal(2, deliveries);
     }
 
     /// <summary>
