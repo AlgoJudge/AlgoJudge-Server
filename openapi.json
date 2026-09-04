@@ -16833,6 +16833,14 @@
           },
           "machine": {
             "nullable": true
+          },
+          "nonce": {
+            "type": "string",
+            "nullable": true
+          },
+          "signature": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

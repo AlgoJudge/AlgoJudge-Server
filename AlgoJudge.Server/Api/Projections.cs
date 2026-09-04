@@ -80,6 +80,7 @@ namespace AlgoJudge.Server.Api
             EvaluationJobState.Completed => "completed",
             EvaluationJobState.Failed => "failed",
             EvaluationJobState.Cancelled => "cancelled",
+            EvaluationJobState.Superseded => "superseded",
             _ => "queued",
         };
 

@@ -219,6 +219,16 @@ public class RunnerTests(ServerFixture server)
         var jobId = Guid.Parse(job.GetProperty("jobId").GetString()!);
         var staleToken = job.GetProperty("leaseToken").GetString()!;
 
+        // **Heard from before it dies**, which is what the story here says: the
+        // Runner took the job and then stopped. Since 2026-09-04 the Server
+        // tells that apart from a handout whose answer never arrived — it
+        // commits a claim before writing the response to it — and refunds the
+        // second. Without this renewal the delivery below is correctly given
+        // back and the count is one, which is a different test.
+        await Sign.Succeeded(await first.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/lease",
+            new { leaseToken = staleToken, leaseSeconds = 60 }));
+
         // The Runner dies. Its lease runs out.
         await using (var context = server.NewContext())
         {
@@ -278,6 +288,16 @@ public class RunnerTests(ServerFixture server)
     /// <summary>
     /// A job that keeps being reclaimed is a job that keeps killing Runners.
     /// Retrying it for ever is how one bad package stops an installation.
+    /// <para>
+    /// **Each round renews the lease, and that is load-bearing.** Since
+    /// 2026-09-04 a claim nobody was ever heard from about is refunded rather
+    /// than charged — because the Server commits a handout before writing the
+    /// answer to it, and an answer lost that way spends a participant's attempt
+    /// on a delivery that never happened. Without the renewal this loop is that
+    /// case six times over and the job is correctly never failed. What the cap
+    /// is for is the other one: a Runner that *received* the job, started on it,
+    /// and died. One renewal is what says so.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task A_job_nobody_can_finish_is_given_up_on_rather_than_retried_for_ever()
@@ -297,6 +317,17 @@ public class RunnerTests(ServerFixture server)
             if (job is null) break;
 
             jobId = Guid.Parse(job.Value.GetProperty("jobId").GetString()!);
+
+            // Heard from once, which is what tells this apart from a handout
+            // whose answer never arrived.
+            await Sign.Succeeded(await runner.Client.PostAsJsonAsync(
+                $"/api/v1/runner/jobs/{jobId}/lease",
+                new
+                {
+                    leaseToken = job.Value.GetProperty("leaseToken").GetString(),
+                    leaseSeconds = 60,
+                }));
+
             await using var context = server.NewContext();
             var stored = await context.EvaluationJobs.FirstAsync(j => j.Id == jobId);
             stored.LeaseExpiresAt = DateTime.UtcNow.AddMinutes(-1);

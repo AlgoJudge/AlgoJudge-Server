@@ -396,7 +396,16 @@ public sealed class StubRunner(
     /// <summary>Kept so a test can register the same key again — which is what a restart is.</summary>
     public string PublicKey { get; } = publicKey;
 
-    public async Task AuthenticateAsync()
+    /// <summary>
+    /// A nonce and this key's signature over it.
+    /// <para>
+    /// Two calls need one: the handshake, and — since 2026-09-04 — registering
+    /// again with a fingerprint the Server already knows. A first registration
+    /// cannot have one, because the challenge endpoint has no row to issue it
+    /// against.
+    /// </para>
+    /// </summary>
+    public async Task<(string Nonce, string Signature)> ProofAsync()
     {
         var challenge = await Build.PostAsync(
             Client, "/api/v1/runner/auth/challenge", new { fingerprint });
@@ -406,7 +415,12 @@ public sealed class StubRunner(
         signer.Init(true, key);
         var message = Encoding.UTF8.GetBytes(nonce);
         signer.BlockUpdate(message, 0, message.Length);
-        var signature = Convert.ToBase64String(signer.GenerateSignature());
+        return (nonce, Convert.ToBase64String(signer.GenerateSignature()));
+    }
+
+    public async Task AuthenticateAsync()
+    {
+        var (nonce, signature) = await ProofAsync();
 
         var token = await Build.PostAsync(Client, "/api/v1/runner/auth/token", new
         {

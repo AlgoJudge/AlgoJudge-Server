@@ -464,6 +464,15 @@ namespace AlgoJudge.Server.Database
                 // actually waiting on.
                 e.HasIndex(j => new { j.State, j.CreatedAt })
                     .HasFilter("\"State\" < 2");
+                // The claim's fourth filter: is a sibling of this submission
+                // already being judged.
+                //
+                // **Filtered to `Running` alone, so it is the size of the fleet
+                // rather than of history.** Every claim runs this subquery, and
+                // an unfiltered index on `SubmissionId` would carry a row per
+                // attempt ever made to answer a question only about the handful
+                // in flight.
+                e.HasIndex(j => j.SubmissionId).HasFilter("\"State\" = 1");
                 // The reaper's query: leases that have run out.
                 e.HasIndex(j => j.LeaseExpiresAt);
                 // Reporting a result is idempotent on the lease token, and this

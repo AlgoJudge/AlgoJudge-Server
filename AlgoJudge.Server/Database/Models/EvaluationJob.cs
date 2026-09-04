@@ -79,6 +79,36 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public int Releases { get; set; }
 
+        /// <summary>
+        /// When a Runner was first heard from about this claim, and null while
+        /// nobody has been.
+        /// <para>
+        /// <b>A claim is committed before the answer to it is written.</b> The
+        /// row goes `Running` with a lease and a delivery spent, and only then
+        /// is the response built — so an answer lost between those two leaves a
+        /// job nobody holds, that nobody else may take, and that cost a
+        /// participant one of five attempts. The Runner cannot give it back: it
+        /// never learned the lease token.
+        /// </para>
+        /// <para>
+        /// This is what tells that apart from a Runner that took the job and
+        /// died judging it. The reaper reclaims both; only the first is refunded.
+        /// </para>
+        /// </summary>
+        public DateTime? AcknowledgedAt { get; set; }
+
+        /// <summary>
+        /// How many deliveries have been given back because nobody was ever
+        /// heard from about them.
+        /// <para>
+        /// <b>Bounded for the reason <see cref="Releases"/> is.</b> A row that
+        /// something throws on after the commit — every time, for every Runner
+        /// — would otherwise be claimed and refunded for ever, and the delivery
+        /// cap that ends a bad job would never be reached.
+        /// </para>
+        /// </summary>
+        public int Refunds { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? ClaimedAt { get; set; }
         public DateTime? LeaseExpiresAt { get; set; }

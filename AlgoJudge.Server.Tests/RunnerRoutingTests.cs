@@ -345,7 +345,9 @@ public class RunnerRoutingTests(ServerFixture server)
         var runner = await Build.RunnerAsync(server, tags: ["lab-a"]);
 
         // The same key, registering again — which is a restart, as far as the
-        // Server can tell.
+        // Server can tell. Signed, because a fingerprint the Server already
+        // knows may not be rewritten by whoever can read its public key.
+        var (nonce, signature) = await runner.ProofAsync();
         await Build.PostAsync(server.CreateClient(), "/api/v1/runner/register", new
         {
             name = "stub",
@@ -354,6 +356,8 @@ public class RunnerRoutingTests(ServerFixture server)
             publicKey = runner.PublicKey,
             problemTypes = new[] { "standard-io@1" },
             tags = new[] { "lab-b" },
+            nonce,
+            signature,
         });
 
         await using var context = server.NewContext();

@@ -107,6 +107,26 @@ namespace AlgoJudge.Server.Workers
                 job.RunnerId = null;
                 job.ClaimedAt = null;
 
+                // **A delivery nobody was ever heard about was not a
+                // delivery.** The claim was committed — `Running`, a lease, a
+                // token, `Deliveries += 1` — and then the answer was lost, so
+                // the Runner holds nothing and cannot release it. Charging a
+                // participant an attempt for that ends, five of them over a
+                // contest, with a submission failed and a message blaming the
+                // package.
+                //
+                // Told apart from a Runner that took the job and died judging it
+                // by a single fact: whether anything ever came back against this
+                // lease. Bounded by `FreeRefunds`, or a row that throws after
+                // every commit is refunded for ever and never reaches the cap.
+                if (job.AcknowledgedAt is null && job.Refunds < RunnerService.FreeRefunds)
+                {
+                    job.Deliveries -= 1;
+                    job.Refunds += 1;
+                    logger.LogInformation(
+                        "Job {Job} was never acknowledged, so its delivery is given back", job.Id);
+                }
+
                 if (job.Deliveries >= RunnerService.DeliveryCap)
                 {
                     job.State = EvaluationJobState.Failed;

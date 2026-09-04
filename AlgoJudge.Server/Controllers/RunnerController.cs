@@ -30,6 +30,7 @@ namespace AlgoJudge.Server.Controllers
         IFileService files,
         ITrialService trials,
         IQueueSignal queue,
+        IHostApplicationLifetime lifetime,
         IServiceScopeFactory scopes
     ) : ControllerBase
     {
@@ -117,6 +118,20 @@ namespace AlgoJudge.Server.Controllers
         {
             var token = Token();
 
+            // **The handout itself is not the client's to interrupt.** A claim
+            // commits before its answer exists — `Running`, a lease token, a
+            // delivery spent — and only then is the response built, so a request
+            // torn down in between leaves a job nobody holds, that nobody else
+            // may take, and that cost a participant an attempt. The Runner
+            // cannot give it back: it never learned the lease token.
+            //
+            // So the look runs on the process's own lifetime and the *wait*
+            // keeps the request's, which is the half where interrupting costs
+            // nothing. What this cannot close is an answer lost with no abort
+            // ever observed — a black-holed connection — and that is what the
+            // reaper's refund is for.
+            var handing = lifetime.ApplicationStopping;
+
             // **Nothing is held while waiting.** The transaction, the lock and
             // the connection all live inside `ClaimAsync` and are gone before
             // the wait begins — otherwise a fleet holding claims open would be
@@ -142,10 +157,10 @@ namespace AlgoJudge.Server.Controllers
 
             // The first look is this request's own, which is the whole of the
             // work when no wait was asked for.
-            var runner = await runners.AuthenticateAsync(token, ct);
-            if (await runners.ClaimAsync(runner, input?.LeaseSeconds, ct) is { } first)
+            var runner = await runners.AuthenticateAsync(token, handing);
+            if (await runners.ClaimAsync(runner, input?.LeaseSeconds, handing) is { } first)
             {
-                return Ok(first);
+                return await HandedOverAsync(runners, first, handing);
             }
 
             for (; ; )
@@ -197,12 +212,32 @@ namespace AlgoJudge.Server.Controllers
 
                 using var scope = scopes.CreateScope();
                 var again = scope.ServiceProvider.GetRequiredService<IRunnerService>();
-                var current = await again.AuthenticateAsync(token, ct);
-                if (await again.ClaimAsync(current, input?.LeaseSeconds, ct) is { } job)
+                var current = await again.AuthenticateAsync(token, handing);
+                if (await again.ClaimAsync(current, input?.LeaseSeconds, handing) is { } job)
                 {
-                    return Ok(job);
+                    return await HandedOverAsync(again, job, handing);
                 }
             }
+        }
+
+        /// <summary>
+        /// Answers with the job, unless the caller has already gone — in which
+        /// case the handout is undone rather than left leased to nobody.
+        /// <para>
+        /// **A best effort, and it says so.** `RequestAborted` is set when the
+        /// going was noticed, which is not every way a client goes; the
+        /// remaining cases are the reaper's, and cost the participant nothing
+        /// because the delivery is refunded there too. What this buys over the
+        /// reaper alone is the ten minutes in between.
+        /// </para>
+        /// </summary>
+        private async Task<ActionResult<ClaimedJobDto>> HandedOverAsync(
+            IRunnerService service, ClaimedJobDto job, CancellationToken handing)
+        {
+            if (!HttpContext.RequestAborted.IsCancellationRequested) return Ok(job);
+
+            await service.UnclaimAsync(Guid.Parse(job.JobId), handing);
+            return NoContent();
         }
 
         /// <summary>
