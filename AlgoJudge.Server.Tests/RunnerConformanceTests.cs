@@ -509,6 +509,127 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **A nudge is a broadcast; a job is not.** The only Runner waiting cannot
+    /// judge the type, so it is woken and handed nothing — and the job is still
+    /// there afterwards for one that can.
+    /// <para>
+    /// This is the property the whole arrangement rests on and the one a
+    /// broadcast could plausibly have broken: <c>Wake</c> carries no information
+    /// about *which* job became claimable, so every waiter looks, and what keeps
+    /// a job away from a Runner that cannot judge it is the claim's own filter
+    /// rather than anything the signal knows.
+    /// </para>
+    /// <para>
+    /// **Written so there is no race to win.** The obvious shape — both Runners
+    /// waiting, assert the capable one gets it — passes against a Server with no
+    /// type filter at all, because the capable Runner takes the job first
+    /// anyway and the other one then finds an empty queue. Measured: with
+    /// <c>p."Type" = ANY(...)</c> defeated it still went green. Only one Runner
+    /// waits here, and it is the wrong one.
+    /// </para>
+    /// <para>
+    /// The second half matters as much as the first. A <c>204</c> alone is also
+    /// what a Server that lost the submission would return; the capable
+    /// Runner's <c>200</c> afterwards is what says the job was withheld rather
+    /// than dropped.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_waiting_runner_is_not_handed_a_type_it_did_not_declare()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var capable = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+        var other = await Build.RunnerAsync(server, problemTypes: ["output-only@1"]);
+        await DrainAsync(capable, other);
+
+        // The wrong Runner, and nobody else, is listening.
+        var waiting = other.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 5 });
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        // `standard-io@1`, which is what `Build.ActivityAsync` publishes.
+        await Build.SubmitAsync(participant, slug, "print(6)\n");
+
+        var began = Stopwatch.StartNew();
+        var refused = await waiting;
+        Assert.Equal(HttpStatusCode.NoContent, refused.StatusCode);
+
+        // It held the claim open to its deadline rather than answering at once,
+        // so the empty answer is one the wait path produced.
+        Assert.True(
+            began.Elapsed >= TimeSpan.FromSeconds(3),
+            $"the claim came back after {began.Elapsed.TotalSeconds:0.0}s, so it never waited");
+
+        // Withheld, not lost.
+        var taken = await capable.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+        Assert.Equal(HttpStatusCode.OK, taken.StatusCode);
+    }
+
+    /// <summary>
+    /// Empties the queue of whatever the rest of the collection left behind, so
+    /// a test that counts what one submission produces is counting that.
+    /// </summary>
+    private static async Task DrainAsync(params StubRunner[] runners)
+    {
+        foreach (var runner in runners)
+        {
+            for (var attempt = 0; attempt < 50; attempt++)
+            {
+                var drained = await runner.Client.PostAsJsonAsync(
+                    "/api/v1/runner/jobs/claim", new { leaseSeconds = 60 });
+                if (drained.StatusCode == HttpStatusCode.NoContent) break;
+                await Sign.Succeeded(drained);
+            }
+        }
+    }
+
+    /// <summary>
+    /// **One job, two Runners that both want it, and exactly one gets it.**
+    /// <para>
+    /// <c>FOR UPDATE OF j SKIP LOCKED LIMIT 1</c> is the whole mechanism, and it
+    /// was true before a nudge existed. What is new is that both Runners now
+    /// look at the *same instant* rather than whenever their own backoff
+    /// happened to expire — so the two claims race in a way they previously
+    /// could only do by coincidence.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task One_submission_reaches_exactly_one_of_two_identical_runners()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var first = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+        var second = await Build.RunnerAsync(server, problemTypes: ["standard-io@1"]);
+
+        await DrainAsync(first, second);
+
+        var waiting = new[]
+        {
+            first.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 6 }),
+            second.Client.PostAsJsonAsync(
+                "/api/v1/runner/jobs/claim", new { leaseSeconds = 60, waitSeconds = 6 }),
+        };
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        await Build.SubmitAsync(participant, slug, "print(7)\n");
+
+        var answers = await Task.WhenAll(waiting);
+        var handed = answers.Count(a => a.StatusCode == HttpStatusCode.OK);
+        var empty = answers.Count(a => a.StatusCode == HttpStatusCode.NoContent);
+
+        // Reported together, because which of the two is wrong is the whole
+        // diagnosis: two `200`s is a job judged twice, two `204`s is a job
+        // nobody was given, and anything else is a claim that failed outright.
+        var seen = string.Join(", ", answers.Select(a => a.StatusCode.ToString()));
+        Assert.True(handed == 1 && empty == 1, $"the two claims answered {seen}");
+    }
+
+    /// <summary>
     /// **A drain begun while a claim is held is seen by that claim.**
     /// <para>
     /// A request scope carries one <c>DbContext</c>, and a tracking query hands
