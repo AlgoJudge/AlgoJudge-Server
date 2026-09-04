@@ -358,8 +358,15 @@ public class RunnerConformanceTests(ServerFixture server)
     /// An infrastructure failure is not a wrong answer. Recording it as a zero
     /// would be a lie about the solution — the submission was never judged.
     /// </summary>
+    /// <summary>
+    /// **The first infrastructure failure is a reason to try again, not a
+    /// verdict.** A Runner cannot tell a broken package from a torn download,
+    /// or a broken host from a bad second — and ending a submission on the
+    /// first of those made a hiccup permanent and a manual rejudge the only way
+    /// back. §6.
+    /// </summary>
     [Fact]
-    public async Task An_infrastructure_failure_is_not_scored_as_a_wrong_answer()
+    public async Task An_infrastructure_failure_is_queued_again_rather_than_failed()
     {
         var (slug, _) = await Build.ActivityAsync(server);
         var participant = await Build.ParticipantAsync(server, slug);
@@ -379,26 +386,124 @@ public class RunnerConformanceTests(ServerFixture server)
             });
         await Sign.Succeeded(reported);
 
+        // No result is named, because none was stored: a stored one is what
+        // makes a repeat answer `duplicate`, and it would hand the next
+        // Runner's honest work back to it as a duplicate of this failure.
+        var answer = JsonDocument.Parse(await reported.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("queued", answer.GetProperty("state").GetString());
+        Assert.False(answer.TryGetProperty("resultId", out var named) &&
+                     named.ValueKind is not JsonValueKind.Null);
+
+        await using var context = server.NewContext();
+        var stored = await context.EvaluationJobs
+            .Include(j => j.Result)
+            .FirstAsync(j => j.Id == jobId);
+
+        Assert.Equal(EvaluationJobState.Queued, stored.State);
+        Assert.Null(stored.Result);
+        Assert.Null(stored.RunnerId);
+        Assert.Null(stored.FinishedAt);
+        Assert.Contains("checksum", stored.FailureReason ?? "", StringComparison.OrdinalIgnoreCase);
+
+        // And it does not count towards what this Runner has got through.
+        var runnerRow = await context.Runners.FirstAsync(r => r.Id == Guid.Parse(runner.Id));
+        Assert.Equal(0, runnerRow.CompletedJobs);
+    }
+
+    /// <summary>
+    /// **And it stops travelling once the deliveries run out.** Retrying for
+    /// ever is how one bad package stops an installation, which is what the cap
+    /// in §5 is for; the last reason given is the one recorded. §6.
+    /// </summary>
+    [Fact]
+    public async Task An_infrastructure_failure_is_final_once_the_deliveries_run_out()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(3)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var runner = await Build.RunnerAsync(server);
+        Guid jobId = Guid.Empty;
+
+        // Five deliveries, each one claimed and each one failing the same way.
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            var job = await runner.ClaimUntilAsync(submissionId);
+            jobId = Guid.Parse(job.GetProperty("jobId").GetString()!);
+
+            var reported = await runner.Client.PostAsJsonAsync(
+                $"/api/v1/runner/jobs/{jobId}/report",
+                new
+                {
+                    leaseToken = job.GetProperty("leaseToken").GetString(),
+                    infrastructureFailure = true,
+                    failureReason = $"the sandbox would not start ({attempt})",
+                });
+            await Sign.Succeeded(reported);
+        }
+
         await using var context = server.NewContext();
         var stored = await context.EvaluationJobs
             .Include(j => j.Result)
             .FirstAsync(j => j.Id == jobId);
 
         Assert.Equal(EvaluationJobState.Failed, stored.State);
-        Assert.Contains("checksum", stored.FailureReason ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("(5)", stored.FailureReason ?? "");
+        Assert.NotNull(stored.FinishedAt);
 
-        // A result row is still written — it is what makes a repeated report
-        // idempotent — but it carries **no score**, and `Scoring.Best` skips a
-        // result without one. So the attempt is on record and the board never
-        // sees a zero that would read as a wrong answer.
+        // A result row is written at the end — it is what makes a repeated
+        // report idempotent — and it carries **no score**, so `Scoring.Best`
+        // skips it and no board ever sees a zero that reads as a wrong answer.
         Assert.NotNull(stored.Result);
         Assert.Null(stored.Result!.Score);
         Assert.Null(stored.Result.MaxScore);
-
-        // And it does not count towards what this Runner has got through.
-        var runnerRow = await context.Runners.FirstAsync(r => r.Id == stored.RunnerId);
-        Assert.Equal(0, runnerRow.CompletedJobs);
     }
+
+    /// <summary>
+    /// **A Runner being stopped gives the job back, and it costs the
+    /// participant nothing.** The job is queued again at once instead of
+    /// waiting out a lease nobody is going to miss, and the delivery the claim
+    /// counted is given back — an operator restarting a fleet must not spend a
+    /// submission's attempts. §5.1.
+    /// </summary>
+    [Fact]
+    public async Task A_released_job_is_queued_again_at_once_and_costs_no_delivery()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(3)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var runner = await Build.RunnerAsync(server);
+        var job = await runner.ClaimUntilAsync(submissionId);
+        var jobId = Guid.Parse(job.GetProperty("jobId").GetString()!);
+
+        var released = await runner.Client.PostAsJsonAsync(
+            $"/api/v1/runner/jobs/{jobId}/release",
+            new { leaseToken = job.GetProperty("leaseToken").GetString() });
+        Assert.Equal(HttpStatusCode.NoContent, released.StatusCode);
+
+        await using (var context = server.NewContext())
+        {
+            var stored = await context.EvaluationJobs
+                .Include(j => j.Result)
+                .FirstAsync(j => j.Id == jobId);
+
+            Assert.Equal(EvaluationJobState.Queued, stored.State);
+            Assert.Null(stored.Result);
+            Assert.Null(stored.LeaseToken);
+            Assert.Null(stored.RunnerId);
+            // The claim counted one and the release gave it back.
+            Assert.Equal(0, stored.Deliveries);
+            Assert.Equal(1, stored.Releases);
+        }
+
+        // And it is there to be taken: the same job, by whoever asks next.
+        var again = await runner.ClaimUntilAsync(submissionId);
+        Assert.Equal(jobId, Guid.Parse(again.GetProperty("jobId").GetString()!));
+    }
+
     /// <summary>
     /// A Runner says what it awarded **and** what it awarded it out of, and both
     /// are read.

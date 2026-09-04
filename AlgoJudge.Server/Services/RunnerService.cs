@@ -26,6 +26,7 @@ namespace AlgoJudge.Server.Services
         Task HeartbeatAsync(DbRunner runner, string? address, CancellationToken ct);
         Task<LeaseDto> RenewAsync(DbRunner runner, Guid jobId, string leaseToken, int? seconds, CancellationToken ct);
         Task ProgressAsync(DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct);
+        Task ReleaseAsync(DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct);
 
         /// <summary>
         /// Whether this Runner may read these bytes <b>through a job it is
@@ -62,6 +63,18 @@ namespace AlgoJudge.Server.Services
         private static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan MaxLease = TimeSpan.FromMinutes(60);
         private const int MaxDeliveries = 5;
+
+        /// <summary>
+        /// How many times a job may be handed back by a Runner that is stopping
+        /// before it starts costing a delivery like everything else.
+        /// <para>
+        /// Being shut down is an operator's doing and a participant's attempts
+        /// are not the operator's to spend — but a Runner crash-looping under a
+        /// supervisor hands jobs back in exactly the same way, and from here
+        /// nothing tells the two apart except how often it happens.
+        /// </para>
+        /// </summary>
+        private const int FreeReleases = 3;
 
         /// <summary>
         /// Nonces and tokens, in memory.
@@ -565,6 +578,13 @@ namespace AlgoJudge.Server.Services
                 }
             }
 
+            // **Not final, and this is what decides it.** A Runner cannot tell
+            // a broken package from a torn download, or a broken host from a bad
+            // second, so the first infrastructure failure is a reason to try
+            // again rather than a verdict on the submission. The delivery count
+            // that bounds every other way a job comes back bounds this too.
+            var again = report.InfrastructureFailure && job.Deliveries < MaxDeliveries;
+
             var result = new Result
             {
                 EvaluationJobId = job.Id,
@@ -578,16 +598,29 @@ namespace AlgoJudge.Server.Services
                 Props = props,
                 RunnerVersion = report.RunnerVersion ?? runner.Version,
             };
-            context.Results.Add(result);
+            // **No result while it is going to be tried again.** One stored is
+            // what makes a repeat answer `duplicate`, so a result kept from a
+            // failed attempt would hand the next Runner's work back to it as a
+            // duplicate of the failure.
+            if (!again) context.Results.Add(result);
 
             // An infrastructure failure is not a wrong answer and must never be
             // scored as one.
-            job.State = report.InfrastructureFailure ? EvaluationJobState.Failed : EvaluationJobState.Completed;
+            job.State = again
+                ? EvaluationJobState.Queued
+                : report.InfrastructureFailure ? EvaluationJobState.Failed : EvaluationJobState.Completed;
             job.FailureReason = report.InfrastructureFailure ? report.FailureReason : null;
-            job.FinishedAt = now;
+            job.FinishedAt = again ? null : now;
             job.LeaseToken = null;
             job.LeaseExpiresAt = null;
             job.LeaseSeconds = null;
+            // Back to nobody's, as the reaper leaves it: the next claim is a
+            // fresh delivery and this Runner has no more part in it.
+            if (again)
+            {
+                job.RunnerId = null;
+                job.ClaimedAt = null;
+            }
 
             foreach (var attachment in report.Files ?? [])
             {
@@ -615,7 +648,7 @@ namespace AlgoJudge.Server.Services
 
             return new ReportAcceptedDto
             {
-                ResultId = Wire.Id(result.Id),
+                ResultId = again ? null : Wire.Id(result.Id),
                 State = Projections.Wire(job.State),
                 Duplicate = false,
             };
@@ -664,6 +697,49 @@ namespace AlgoJudge.Server.Services
                 LeaseToken = leaseToken,
                 LeaseExpiresAt = Wire.At(expires),
             };
+        }
+
+        /// <summary>
+        /// Gives a job back, because this Runner is stopping.
+        /// <para>
+        /// <b>The job is queued again at once and the delivery the claim counted
+        /// is given back.</b> Being shut down is an operator's doing, and a
+        /// participant's attempts are not the operator's to spend — so a fleet
+        /// restarted during a contest costs the submissions in flight their
+        /// place in the queue and nothing else.
+        /// </para>
+        /// <para>
+        /// <b>It means only that.</b> Every other way a job comes back without a
+        /// result is a report: a Runner that could not judge one has something
+        /// to say about why, and one being stopped has not.
+        /// </para>
+        /// </summary>
+        public async Task ReleaseAsync(
+            DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct)
+        {
+            var job = await HeldJobAsync(runner, jobId, leaseToken, ct);
+
+            // The token goes first, for the reason `LeaseReaper` gives: a Runner
+            // that wakes up and reports against the old lease is refused rather
+            // than allowed to overwrite whoever has the job now.
+            job.LeaseToken = null;
+            job.LeaseExpiresAt = null;
+            job.LeaseSeconds = null;
+            job.RunnerId = null;
+            job.ClaimedAt = null;
+            job.State = EvaluationJobState.Queued;
+
+            if (job.Releases < FreeReleases)
+            {
+                job.Releases += 1;
+                // Never below zero: the claim that counted it may have been a
+                // delivery this job was already given back once.
+                job.Deliveries = Math.Max(0, job.Deliveries - 1);
+            }
+
+            runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
+            await context.SaveChangesAsync(ct);
+            await submissions.AnnounceAsync(job.SubmissionId, ct);
         }
 
         /// <summary>
