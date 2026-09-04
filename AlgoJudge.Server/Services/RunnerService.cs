@@ -54,6 +54,7 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         ISubmissionService submissions,
         IMaintenanceService maintenance,
+        IQueueSignal queue,
         TimeProvider clock,
         ILogger<RunnerService> logger
     ) : IRunnerService
@@ -644,6 +645,10 @@ namespace AlgoJudge.Server.Services
             runner.LastSeenAt = now;
 
             await context.SaveChangesAsync(ct);
+            // Only when it went back: a job that finished is not work for
+            // anybody, and waking twelve Runners to tell them so is a hundred
+            // and fifty pointless looks over a contest.
+            if (again) queue.Wake();
             await submissions.AnnounceAsync(job.SubmissionId, ct);
 
             return new ReportAcceptedDto
@@ -739,6 +744,10 @@ namespace AlgoJudge.Server.Services
 
             runner.LastSeenAt = clock.GetUtcNow().UtcDateTime;
             await context.SaveChangesAsync(ct);
+            // **The whole point of the release.** A Runner stopping hands its
+            // job back so somebody else takes it *at once*; without this the
+            // job would sit until another Runner's wait ran out.
+            queue.Wake();
             await submissions.AnnounceAsync(job.SubmissionId, ct);
         }
 

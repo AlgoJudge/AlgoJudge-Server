@@ -256,6 +256,9 @@ namespace AlgoJudge.Server
             // The connection registry outlives any request: it is what the
             // users screen counts, and what an event is fanned out over.
             builder.Services.AddSingleton<IEventHub, EventHub>();
+            // A singleton because it is one queue: every Runner holding a claim
+            // open in this process waits on the same nudge.
+            builder.Services.AddSingleton<IQueueSignal, QueueSignal>();
             // Who hears about a thing, resolved by the same rule that answers a
             // fetch for it. Scoped, because it reads the grants.
             builder.Services.AddScoped<Realtime.IEventAudience, Realtime.EventAudience>();

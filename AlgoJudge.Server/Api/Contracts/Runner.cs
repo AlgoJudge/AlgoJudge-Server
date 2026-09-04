@@ -107,6 +107,27 @@ namespace AlgoJudge.Server.Api.Contracts
         /// evaluation takes, nor extended without bound by a Runner that dies.
         /// </summary>
         public int? LeaseSeconds { get; init; }
+
+        /// <summary>
+        /// How long the Server may hold this request open while the queue is
+        /// empty, in seconds. Absent or <c>0</c> answers immediately, which is
+        /// what every Runner did before this existed and what the conformance
+        /// sequence still asserts.
+        /// <para>
+        /// Clamped to <c>MaxWait</c>. A Runner asking for longer than the
+        /// Server allows is not refused — it is answered sooner, and asks
+        /// again, which is the same shape as the lease clamp above.
+        /// </para>
+        /// <para>
+        /// **The bound is somebody else's proxy, not this Server.** RFC 6202
+        /// puts the safe figure at about thirty seconds and reports success up
+        /// to a hundred and twenty; a stock nginx and an AWS ALB cut a silent
+        /// request at sixty, Cloudflare answers 524 at a hundred and
+        /// twenty-five, and an Azure Application Gateway gives up at twenty.
+        /// An installation that owns the whole path may ask for much more.
+        /// </para>
+        /// </summary>
+        public int? WaitSeconds { get; init; }
     }
 
     /// <summary>

@@ -27,9 +27,31 @@ namespace AlgoJudge.Server.Controllers
     public class RunnerController(
         IRunnerService runners,
         IFileService files,
-        ITrialService trials
+        ITrialService trials,
+        IQueueSignal queue
     ) : ControllerBase
     {
+        /// <summary>
+        /// The longest a <c>claim</c> may be held open.
+        /// <para>
+        /// Five minutes, which is what an installation that owns its whole
+        /// network path can use. It is a ceiling and not a recommendation: the
+        /// Runner ships asking for twenty-five seconds, because the thing that
+        /// cuts a silent request is an intermediary nobody here controls.
+        /// </para>
+        /// </summary>
+        private static readonly TimeSpan MaxWait = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// How much of the wait to spread the timeouts over.
+        /// <para>
+        /// Without it every Runner that started together answers its own 204 in
+        /// the same instant and they all ask again together, for ever — the same
+        /// reason the Runner's own backoff carries jitter. A sixteenth is
+        /// Consul's figure for the same problem.
+        /// </para>
+        /// </summary>
+        private const int JitterDivisor = 16;
         /// <summary>
         /// Presents a public key. Registration is not approval: an administrator
         /// approves the fingerprint, and nothing is evaluated before that.
@@ -69,8 +91,52 @@ namespace AlgoJudge.Server.Controllers
             [FromBody] ClaimRequestDto? input, CancellationToken ct)
         {
             var runner = await runners.AuthenticateAsync(Token(), ct);
-            var job = await runners.ClaimAsync(runner, input?.LeaseSeconds, ct);
-            return job is null ? NoContent() : Ok(job);
+
+            // **Nothing is held while waiting.** The transaction, the lock and
+            // the connection all live inside `ClaimAsync` and are gone before
+            // the wait begins — otherwise a fleet holding claims open would be
+            // a fleet holding the connection pool empty.
+            var waiting = Waiting(input?.WaitSeconds);
+            var started = Environment.TickCount64;
+
+            for (; ; )
+            {
+                var job = await runners.ClaimAsync(runner, input?.LeaseSeconds, ct);
+                if (job is not null)
+                {
+                    return Ok(job);
+                }
+
+                var left = waiting - TimeSpan.FromMilliseconds(Environment.TickCount64 - started);
+                if (left <= TimeSpan.Zero)
+                {
+                    // The same 204 as always, and it still means "nothing
+                    // matched" rather than anything having gone wrong.
+                    return NoContent();
+                }
+
+                // A nudge says something became claimable; it does not say it
+                // was claimable by *this* Runner, whose types and tags may not
+                // match. So the answer is another look, not a job.
+                await queue.WaitAsync(left, ct);
+            }
+        }
+
+        /// <summary>
+        /// How long this request may be held, clamped and jittered.
+        /// </summary>
+        private static TimeSpan Waiting(int? asked)
+        {
+            if (asked is not { } seconds || seconds <= 0)
+            {
+                return TimeSpan.Zero;
+            }
+
+            var wanted = TimeSpan.FromSeconds(Math.Min(seconds, MaxWait.TotalSeconds));
+            // Shortened rather than lengthened, so the clamp above stays a
+            // ceiling and a Runner's own request timeout is never overrun.
+            var spread = Random.Shared.NextDouble() * wanted.TotalMilliseconds / JitterDivisor;
+            return wanted - TimeSpan.FromMilliseconds(spread);
         }
 
         /// <summary>

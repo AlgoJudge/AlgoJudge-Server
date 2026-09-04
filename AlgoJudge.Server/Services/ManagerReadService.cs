@@ -55,6 +55,7 @@ namespace AlgoJudge.Server.Services
         ISubmissionService submissions,
         IEventHub events,
         IEventAudience audience,
+        IQueueSignal queue,
         TimeProvider clock
     ) : IManagerReadService
     {
@@ -369,6 +370,8 @@ namespace AlgoJudge.Server.Services
 
             foreach (var submission in affected) await QueueRejudgeAsync(submission, ct);
             await context.SaveChangesAsync(ct);
+            // A Runner holding a claim open is waiting for exactly this.
+            queue.Wake();
 
             foreach (var submission in affected) await submissions.AnnounceAsync(submission.Id, ct);
             return affected.Count;
@@ -908,6 +911,8 @@ namespace AlgoJudge.Server.Services
             // somebody else has just touched — or a job the reaper took back
             // first — stops this whole write rather than half of it.
             await Concurrency.SaveAsync(context, ct);
+            // A Runner holding a claim open is waiting for exactly this.
+            queue.Wake();
             foreach (var job in held) await submissions.AnnounceAsync(job.SubmissionId, ct);
 
             var projectedRunner = await ProjectRunnerAsync(runner, ct);
