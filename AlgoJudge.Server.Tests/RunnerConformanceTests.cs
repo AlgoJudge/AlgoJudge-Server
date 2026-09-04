@@ -695,8 +695,9 @@ public class RunnerConformanceTests(ServerFixture server)
 
         Assert.Equal(1, await DeliveriesAsync(jobId));
         await ExpireLeaseAsync(jobId);
-        Assert.Equal(1, await SweepAsync());
+        await SweepAsync();
 
+        Assert.Equal(EvaluationJobState.Queued, await StateAsync(jobId));
         Assert.Equal(0, await DeliveriesAsync(jobId));
     }
 
@@ -718,8 +719,9 @@ public class RunnerConformanceTests(ServerFixture server)
             $"/api/v1/runner/jobs/{jobId}/lease", new { leaseToken, leaseSeconds = 60 }));
 
         await ExpireLeaseAsync(jobId);
-        Assert.Equal(1, await SweepAsync());
+        await SweepAsync();
 
+        Assert.Equal(EvaluationJobState.Queued, await StateAsync(jobId));
         Assert.Equal(1, await DeliveriesAsync(jobId));
     }
 
@@ -1343,6 +1345,24 @@ public class RunnerConformanceTests(ServerFixture server)
                 j => j.LeaseExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
     }
 
+    private async Task<EvaluationJobState> StateAsync(Guid jobId)
+    {
+        using var scope = server.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await context.EvaluationJobs.Where(j => j.Id == jobId)
+            .Select(j => j.State).FirstAsync();
+    }
+
+    /// <summary>
+    /// One pass of the reaper.
+    /// <para>
+    /// **What it answers is deliberately not asserted.** The reaper reclaims
+    /// every expired lease in the installation, and the collections in this
+    /// suite run against one database at the same time — so the count is
+    /// whatever the rest of the suite happened to leave, and a test that
+    /// insisted on one passed alone and failed in the run that matters.
+    /// </para>
+    /// </summary>
     private Task<int> SweepAsync() =>
         server.Services.GetRequiredService<LeaseReaper>().SweepAsync(default);
 }
