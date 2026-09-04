@@ -857,10 +857,11 @@ namespace AlgoJudge.Server.Services
         /// **Not a release, and deliberately not routed through one.** A release
         /// is a Runner saying it is stopping, and it spends one of three free
         /// ones; this is the Server noticing that the caller it committed a job
-        /// to has gone before the answer could reach it. Nobody was stopped,
-        /// nothing was tried, and the delivery is given back without counting —
-        /// the same rule the reaper applies to a claim nobody was ever heard
-        /// from about, arriving sooner because here the going was observed.
+        /// to has gone before the answer could reach it. Nobody was stopped and
+        /// nothing was tried, so the delivery is given back — **bounded and
+        /// counted by <c>Refunds</c>**, exactly the rule the reaper applies to a
+        /// claim nobody was ever heard from about, and sharing its counter with
+        /// it. It arrives sooner here only because the going was observed.
         /// </para>
         /// <para>
         /// **Refuses to touch a job anybody was heard from.** The check is not
@@ -885,7 +886,20 @@ namespace AlgoJudge.Server.Services
             job.RunnerId = null;
             job.ClaimedAt = null;
             job.State = EvaluationJobState.Queued;
-            if (job.Deliveries > 0) job.Deliveries -= 1;
+
+            // **Bounded, and counted, exactly as the reaper's refund is.** The
+            // delivery is given back because the handover demonstrably did not
+            // happen — but a caller that claims and aborts in a loop has the
+            // same shape as a row that throws after every commit, and that is
+            // what `FreeRefunds` exists to stop. Without the bound this path
+            // resets the count for ever and `DeliveryCap` never fires; without
+            // the counter, nothing downstream can tell how often work was
+            // really handed out, because `Deliveries` alone no longer says.
+            if (job.Refunds < FreeRefunds && job.Deliveries > 0)
+            {
+                job.Deliveries -= 1;
+                job.Refunds += 1;
+            }
 
             await context.SaveChangesAsync(ct);
             queue.Wake();
