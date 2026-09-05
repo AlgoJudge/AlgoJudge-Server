@@ -1,8 +1,24 @@
 name: algojudge-server
 
+# **Bounded, and the same driver an installation uses.** Docker left to itself
+# keeps an unbounded `json-file`, which on a machine that judges all afternoon is
+# a full disk. `AlgoJudge-Ops` pins `local` on every service it ships; this file
+# does the same so that what a developer runs behaves like what an operator runs.
+#
+# Literal values rather than `${...}`: an example that needs an `.env` before it
+# starts is an example that does not.
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+    # `local` compresses what it rotates unless told otherwise, and the daemon
+    # refuses compression beside a single file. Three files, so it may stand.
+
 services:
 
   postgres:
+    logging: *logging
     # Pinned deliberately: an unpinned `postgres:latest` silently broke this
     # file once already, when the image moved to a new major.
     #
@@ -45,6 +61,7 @@ services:
   # Not published to the host, so nothing outside the Compose network reaches
   # it, and no console: the credentials below exist for this stack alone.
   rustfs:
+    logging: *logging
     image: rustfs/rustfs:1.0.0-rc.4
     environment:
       # **The same two values the Server signs with**, substituted from one
@@ -59,6 +76,7 @@ services:
       - '9000'
 
   algojudge:
+    logging: *logging
     build:
       context: .
       dockerfile: AlgoJudge.Server/Dockerfile
