@@ -178,7 +178,12 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status413PayloadTooLarge)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         [Consumes("multipart/form-data")]
-        [Api.MultipartForm(Fields = ["code", "fileName", "sha256", "title", "submissionId"])]
+        // **A file part as well as a text field, and the file is the honest one.**
+        // A browser normalises every newline in a multipart *text* field to CRLF
+        // before it leaves, so a checksum computed over the bytes the reader
+        // picked never matches what arrives — the failure is a 422 on a file
+        // nothing is wrong with. A file part travels byte for byte.
+        [Api.MultipartForm(File = "file", Fields = ["code", "fileName", "sha256", "title", "submissionId"])]
         [RequestSizeLimit(UploadLimits.Printout)]
         [DisableFormValueModelBinding]
         public async Task<ActionResult<PrintoutDto>> RequestPrintout(
@@ -189,11 +194,18 @@ namespace AlgoJudge.Server.Controllers
                 (content, _, _, token) => files.StageAsync(content, token), ct);
 
             var code = upload.Fields.TryGetValue("code", out var pasted) ? pasted : null;
-            if (code is null) throw new ValidationException("Send some source", "printout.empty");
+            if (upload.File is null && code is null)
+            {
+                throw new ValidationException("Send some source", "printout.empty");
+            }
 
-            var name = upload.Fields.TryGetValue("fileName", out var named) && named is { Length: > 0 }
-                ? named
-                : throw new ValidationException("A file name is required", "printout.fileName.required");
+            // The picked file's own name, or the one the Client derived from the
+            // language — a typed fragment has none of its own.
+            var name = upload.FileName is { Length: > 0 } picked
+                ? picked
+                : upload.Fields.TryGetValue("fileName", out var named) && named is { Length: > 0 }
+                    ? named
+                    : throw new ValidationException("A file name is required", "printout.fileName.required");
 
             Guid? submissionId = null;
             if (upload.Fields.TryGetValue("submissionId", out var raw) && raw is { Length: > 0 })
@@ -205,8 +217,9 @@ namespace AlgoJudge.Server.Controllers
                 submissionId = parsed;
             }
 
-            var staged = await files.StageAsync(
-                new MemoryStream(System.Text.Encoding.UTF8.GetBytes(code)), ct);
+            var staged = upload.File
+                ?? await files.StageAsync(
+                    new MemoryStream(System.Text.Encoding.UTF8.GetBytes(code!)), ct);
 
             try
             {

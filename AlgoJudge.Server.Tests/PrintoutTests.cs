@@ -478,7 +478,117 @@ public class PrintoutTests(ServerFixture server)
         }
     }
 
+    // ── Two people, one printer ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Taking a row marks it, so the other operator can see it is somebody's.
+    /// <para>
+    /// This is the whole of what the state prevents: not a race on the row, but
+    /// two people each opening a sheet believing they are alone with the queue.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Taking_a_row_shows_the_other_operator_who_has_it()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+        await Sign.Succeeded(await AskAsync(await Build.ParticipantAsync(server, slug), slug));
+        var printoutId = await PrintoutInAsync(slug);
+
+        var first = await OperatorOfAsync(slug);
+        var second = await OperatorOfAsync(slug);
+
+        var claimed = await Build.PostAsync(first, $"/api/v1/printouts/{printoutId}/claim", new { });
+        Assert.Equal("printing", claimed.GetProperty("state").GetString());
+        Assert.True(claimed.GetProperty("claimedByMe").GetBoolean());
+
+        // The same row, read by the other one.
+        var theirs = await Build.GetAsync(second, "/api/v1/printouts?page=1&pageSize=100");
+        var row = theirs.GetProperty("items").EnumerateArray()
+            .First(r => r.GetProperty("id").GetString() == printoutId.ToString());
+
+        Assert.Equal("printing", row.GetProperty("state").GetString());
+        Assert.False(row.GetProperty("claimedByMe").GetBoolean());
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("claimedByName").GetString()));
+    }
+
+    /// <summary>
+    /// And it can be taken over, because the alternative is a page stranded
+    /// behind somebody who went home.
+    /// </summary>
+    [Fact]
+    public async Task A_row_somebody_walked_away_from_can_be_taken_over()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+        await Sign.Succeeded(await AskAsync(await Build.ParticipantAsync(server, slug), slug));
+        var printoutId = await PrintoutInAsync(slug);
+
+        await Build.PostAsync(await OperatorOfAsync(slug), $"/api/v1/printouts/{printoutId}/claim", new { });
+
+        var second = await OperatorOfAsync(slug);
+        var taken = await Build.PostAsync(second, $"/api/v1/printouts/{printoutId}/claim", new { });
+        Assert.True(taken.GetProperty("claimedByMe").GetBoolean());
+
+        // And handed back, which returns it to the queue rather than resolving it.
+        var released = await Build.PostAsync(second, $"/api/v1/printouts/{printoutId}/release", new { });
+        Assert.Equal("requested", released.GetProperty("state").GetString());
+        Assert.False(released.TryGetProperty("claimedByName", out _), "and nobody holds it");
+    }
+
+    /// <summary>A resolved row is nobody's to take.</summary>
+    [Fact]
+    public async Task A_resolved_row_cannot_be_claimed()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+        await Sign.Succeeded(await AskAsync(await Build.ParticipantAsync(server, slug), slug));
+        var printoutId = await PrintoutInAsync(slug);
+
+        var printer = await OperatorOfAsync(slug);
+        await Sign.Succeeded(await printer.PostAsJsonAsync(
+            $"/api/v1/printouts/{printoutId}/resolve", new { outcome = "printed" }));
+
+        var refused = await printer.PostAsJsonAsync($"/api/v1/printouts/{printoutId}/claim", new { });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+    }
+
     // ── The upload rules ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// **A file part keeps its bytes, newlines included.**
+    /// <para>
+    /// A browser normalises every newline in a multipart *text* field to CRLF
+    /// before it leaves, so source picked from disk and hashed as it is on disk
+    /// never matched what arrived — a 422 on a file nothing was wrong with. The
+    /// file part is what makes the checksum mean what it says.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_picked_file_arrives_with_the_bytes_it_had()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        // Unix newlines, which is what a text field would have turned into CRLF.
+        var source = "int main() {\n    return 0;\n}\n";
+        var bytes = Encoding.UTF8.GetBytes(source);
+
+        var form = new MultipartFormDataContent();
+        var part = new ByteArrayContent(bytes);
+        part.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        form.Add(part, "file", "program (1).cpp");
+        form.Add(new StringContent(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()), "sha256");
+
+        await Sign.Succeeded(await participant.PostAsync($"/api/v1/activities/{slug}/printouts", form));
+
+        var printoutId = await PrintoutInAsync(slug);
+        var sheet = await Build.GetAsync(await OperatorOfAsync(slug), $"/api/v1/printouts/{printoutId}");
+
+        Assert.Equal(source, sheet.GetProperty("source").GetString());
+        Assert.Equal("program (1).cpp", sheet.GetProperty("printout").GetProperty("fileName").GetString());
+    }
 
     /// <summary>
     /// A checksum that does not match what arrived stores nothing — no row and

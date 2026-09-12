@@ -606,6 +606,10 @@ namespace AlgoJudge.Server.Database
                     .WithMany()
                     .HasForeignKey(x => x.ResolvedByUserId)
                     .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.ClaimedBy)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClaimedByUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<QuestionRead>(e =>
