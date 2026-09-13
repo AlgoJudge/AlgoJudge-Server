@@ -369,6 +369,39 @@ namespace AlgoJudge.Server.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// Renews every lease named, in one call.
+        /// <para>
+        /// For a Runner that holds a pool: the External Runner waits on somebody
+        /// else's archive and holds up to a hundred submissions, which was a
+        /// hundred requests a cycle. The answer says what happened to each, so
+        /// one stale lease does not decide the rest.
+        /// </para>
+        /// </summary>
+        [HttpPost("jobs/leases")]
+        [ProducesResponseType<LeaseOutcomesDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<LeaseOutcomesDto> RenewMany(
+            [FromBody] RenewManyDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            return await runners.RenewManyAsync(runner, input, ct);
+        }
+
+        /// <summary>
+        /// Gives every job named back, in one call, because this Runner is
+        /// stopping. It means exactly what the single-job release means.
+        /// </summary>
+        [HttpPost("jobs/releases")]
+        [ProducesResponseType<ReleaseOutcomesDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
+        public async Task<ReleaseOutcomesDto> ReleaseMany(
+            [FromBody] ReleaseManyDto input, CancellationToken ct)
+        {
+            var runner = await runners.AuthenticateAsync(Token(), ct);
+            return await runners.ReleaseManyAsync(runner, input, ct);
+        }
+
         /// <summary>Still working. Renews the lease, which is all the Server can do with the news.</summary>
         [HttpPost("jobs/{jobId:guid}/progress")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]

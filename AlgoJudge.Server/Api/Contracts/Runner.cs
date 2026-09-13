@@ -289,6 +289,62 @@ namespace AlgoJudge.Server.Api.Contracts
         public int? LeaseSeconds { get; init; }
     }
 
+    /// <summary>One job in a batch, named with the lease that proves it is held.</summary>
+    public record JobLeaseRefDto
+    {
+        public required string JobId { get; init; }
+        public required string LeaseToken { get; init; }
+    }
+
+    /// <summary>
+    /// Renews many leases at once. <c>leaseSeconds</c> applies to the whole
+    /// batch, because a Runner asks for the same lease every time.
+    /// </summary>
+    public record RenewManyDto
+    {
+        public int? LeaseSeconds { get; init; }
+        public required IReadOnlyList<JobLeaseRefDto> Jobs { get; init; }
+    }
+
+    /// <summary>Gives many jobs back at once, because this Runner is stopping.</summary>
+    public record ReleaseManyDto
+    {
+        public required IReadOnlyList<JobLeaseRefDto> Jobs { get; init; }
+    }
+
+    /// <summary>
+    /// What happened to one job in a batch.
+    /// <para>
+    /// <b>An absent <c>code</c> means it worked.</b> The codes are the ones a
+    /// single-job call answers with as a status - <c>runner.lease.stale</c>,
+    /// <c>runner.lease.foreign</c>, <c>job.state</c>, <c>not_found</c> - so a
+    /// Runner branches on the same strings whichever call it made.
+    /// </para>
+    /// </summary>
+    public record LeaseOutcomeDto
+    {
+        public required string JobId { get; init; }
+        public string? Code { get; init; }
+        /// <summary>Present when the lease was renewed, and only then.</summary>
+        public string? LeaseExpiresAt { get; init; }
+    }
+
+    public record ReleaseOutcomeDto
+    {
+        public required string JobId { get; init; }
+        public string? Code { get; init; }
+    }
+
+    public record LeaseOutcomesDto
+    {
+        public required IReadOnlyList<LeaseOutcomeDto> Results { get; init; }
+    }
+
+    public record ReleaseOutcomesDto
+    {
+        public required IReadOnlyList<ReleaseOutcomeDto> Results { get; init; }
+    }
+
     /// <summary>Naming a file the Runner has already uploaded, on the attempt it holds.</summary>
     public record AttachToJobDto
     {

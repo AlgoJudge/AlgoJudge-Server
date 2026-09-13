@@ -29,6 +29,22 @@ namespace AlgoJudge.Server.Services
         Task ReleaseAsync(DbRunner runner, Guid jobId, string leaseToken, CancellationToken ct);
 
         /// <summary>
+        /// Renews every lease in one call, answering per job.
+        /// <para>
+        /// For a Runner that holds a pool rather than one job: the External
+        /// Runner waits on somebody else's archive and holds up to a hundred
+        /// submissions, which was a hundred requests a cycle.
+        /// </para>
+        /// </summary>
+        Task<LeaseOutcomesDto> RenewManyAsync(DbRunner runner, RenewManyDto input, CancellationToken ct);
+
+        /// <summary>
+        /// Gives every job back in one call, answering per job. Means exactly
+        /// what <see cref="ReleaseAsync"/> means, for several jobs.
+        /// </summary>
+        Task<ReleaseOutcomesDto> ReleaseManyAsync(DbRunner runner, ReleaseManyDto input, CancellationToken ct);
+
+        /// <summary>
         /// Undoes a handout whose answer never reached the Runner.
         /// </summary>
         Task UnclaimAsync(Guid jobId, CancellationToken ct);
@@ -132,7 +148,12 @@ namespace AlgoJudge.Server.Services
         /// nothing tells the two apart except how often it happens.
         /// </para>
         /// </summary>
-        private const int FreeReleases = 3;
+        internal const int FreeReleases = 3;
+
+        // **A ceiling, because nothing here rate-limits.** Five times the pool an
+        // External Runner holds by default, and well inside the model binder's
+        // own collection limit.
+        private const int MaxBatch = 512;
 
         /// <summary>
         /// How many unheard-of deliveries are given back before the cap is
@@ -951,6 +972,215 @@ namespace AlgoJudge.Server.Services
             // job would sit until another Runner's wait ran out.
             queue.Wake();
             await submissions.AnnounceAsync(job.SubmissionId, ct);
+        }
+
+        public async Task<LeaseOutcomesDto> RenewManyAsync(
+            DbRunner runner, RenewManyDto input, CancellationToken ct)
+        {
+            var lease = input.LeaseSeconds is { } requested
+                ? TimeSpan.FromSeconds(Math.Clamp(requested, 60, MaxLease.TotalSeconds))
+                : DefaultLease;
+
+            var applied = await ApplyToBatchAsync(
+                runner, input.Jobs,
+                (job, now) => job.LeaseExpiresAt = Later(job.LeaseExpiresAt, now.Add(lease)),
+                ct);
+
+            return new LeaseOutcomesDto
+            {
+                Results = applied.Select(one => new LeaseOutcomeDto
+                {
+                    JobId = one.JobId,
+                    Code = one.Code,
+                    LeaseExpiresAt = one.Code is null && one.Job is { LeaseExpiresAt: { } until }
+                        ? Wire.At(until)
+                        : null,
+                }).ToList(),
+            };
+        }
+
+        public async Task<ReleaseOutcomesDto> ReleaseManyAsync(
+            DbRunner runner, ReleaseManyDto input, CancellationToken ct)
+        {
+            var applied = await ApplyToBatchAsync(runner, input.Jobs, GiveBack, ct);
+
+            var freed = applied.Where(one => one.Code is null && one.Job is not null).ToList();
+            if (freed.Count > 0)
+            {
+                // Once for the batch: a nudge says work exists, not how much.
+                queue.Wake();
+                foreach (var one in freed)
+                {
+                    await submissions.AnnounceAsync(one.Job!.SubmissionId, ct);
+                }
+            }
+
+            return new ReleaseOutcomesDto
+            {
+                Results = applied
+                    .Select(one => new ReleaseOutcomeDto { JobId = one.JobId, Code = one.Code })
+                    .ToList(),
+            };
+        }
+
+        /// <summary>What a release does to one job, on the rules <see cref="ReleaseAsync"/> states.</summary>
+        private static void GiveBack(EvaluationJob job, DateTime now)
+        {
+            // The token goes first, for the reason `LeaseReaper` gives.
+            job.LeaseToken = null;
+            job.LeaseExpiresAt = null;
+            job.LeaseSeconds = null;
+            job.RunnerId = null;
+            job.ClaimedAt = null;
+            job.State = EvaluationJobState.Queued;
+
+            if (job.Releases < FreeReleases)
+            {
+                job.Releases += 1;
+                job.Deliveries = Math.Max(0, job.Deliveries - 1);
+            }
+        }
+
+        /// <summary>One job's place in a batch: what was asked, and what came of it.</summary>
+        private sealed class Batched
+        {
+            public required string JobId { get; init; }
+            public required Guid? Id { get; init; }
+            public required Guid? Token { get; init; }
+            public EvaluationJob? Job { get; set; }
+            public string? Code { get; set; }
+        }
+
+        /// <summary>
+        /// The batch machinery both bulk calls run on.
+        /// <para>
+        /// <b>Classified rather than thrown.</b> <see cref="HeldJobAsync"/>
+        /// answers one job by raising, and a batch cannot: one stale lease among
+        /// a hundred must not decide the other ninety-nine. The same three
+        /// questions are asked in the same order and written onto the item.
+        /// </para>
+        /// <para>
+        /// <b>One save, and the losers of the race are re-read rather than
+        /// refused wholesale.</b> <c>EvaluationJob</c> carries <c>xmin</c> and
+        /// the reaper runs every thirty seconds, so a row can move under the
+        /// batch — and EF fails the whole <c>SaveChanges</c> for one such row.
+        /// Reloading only the conflicting entries and asking them again turns
+        /// that into the per-item answer a single-job call would have given.
+        /// </para>
+        /// </summary>
+        private async Task<IReadOnlyList<Batched>> ApplyToBatchAsync(
+            DbRunner runner,
+            IReadOnlyList<JobLeaseRefDto> requested,
+            Action<EvaluationJob, DateTime> mutate,
+            CancellationToken ct)
+        {
+            if (requested.Count > MaxBatch)
+            {
+                throw new ValidationException(
+                    $"A batch carries at most {MaxBatch} jobs", "runner.batch.size");
+            }
+
+            // **One answer per distinct id.** Results are matched by id rather
+            // than by position, so a repeated id is answered once instead of the
+            // second copy meeting a job the first has already given back.
+            var batch = requested
+                .GroupBy(one => one.JobId, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .Select(one => new Batched
+                {
+                    JobId = one.JobId,
+                    Id = Guid.TryParse(one.JobId, out var id) ? id : null,
+                    Token = Guid.TryParse(one.LeaseToken, out var token) ? token : null,
+                })
+                .ToList();
+
+            var ids = batch.Where(one => one.Id is not null).Select(one => one.Id!.Value).ToList();
+            var found = ids.Count == 0
+                ? new Dictionary<Guid, EvaluationJob>()
+                : await context.EvaluationJobs
+                    .Where(j => ids.Contains(j.Id))
+                    .ToDictionaryAsync(j => j.Id, ct);
+
+            var now = clock.GetUtcNow().UtcDateTime;
+            foreach (var one in batch)
+            {
+                one.Job = one.Id is { } id && found.TryGetValue(id, out var job) ? job : null;
+                Consider(one, runner, now, mutate);
+            }
+
+            // Once for the batch rather than once a job, which is the repeated
+            // write this endpoint exists to stop.
+            Seen(runner, now);
+
+            try
+            {
+                await context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException conflict)
+            {
+                var moved = new HashSet<Guid>();
+                foreach (var entry in conflict.Entries)
+                {
+                    // Reloaded rather than re-queried: the context still tracks
+                    // the stale instance, so a second read hands back what was
+                    // just refused.
+                    await entry.ReloadAsync(ct);
+                    if (entry.Entity is EvaluationJob job)
+                    {
+                        moved.Add(job.Id);
+                    }
+                }
+
+                foreach (var one in batch.Where(one => one.Job is { } job && moved.Contains(job.Id)))
+                {
+                    one.Code = null;
+                    Consider(one, runner, clock.GetUtcNow().UtcDateTime, mutate);
+                }
+
+                // A second conflict would mean continuous contention on one row,
+                // and spinning through it holds a request open rather than
+                // answering it. The bound is `ExtendAsync`'s, for its reason.
+                await context.SaveChangesAsync(ct);
+            }
+
+            return batch;
+        }
+
+        /// <summary>
+        /// Asks of one item the three questions <see cref="HeldJobAsync"/> asks,
+        /// in the same order, and applies the change where it may.
+        /// </summary>
+        private static void Consider(
+            Batched one, DbRunner runner, DateTime now, Action<EvaluationJob, DateTime> mutate)
+        {
+            if (one.Job is not { } job)
+            {
+                one.Code = "not_found";
+                return;
+            }
+
+            // **Stale before foreign**, as on the single-job path: a job the
+            // reaper has already taken back belongs to nobody, so asking who
+            // owns it first would tell a Runner whose lease merely ran out that
+            // somebody else has its work.
+            if (one.Token is not { } presented || job.LeaseToken != presented)
+            {
+                one.Code = "runner.lease.stale";
+                return;
+            }
+            if (job.RunnerId != runner.Id)
+            {
+                one.Code = "runner.lease.foreign";
+                return;
+            }
+            if (job.State != EvaluationJobState.Running)
+            {
+                one.Code = "job.state";
+                return;
+            }
+
+            job.AcknowledgedAt ??= now;
+            mutate(job, now);
         }
 
         /// <summary>

@@ -184,6 +184,270 @@ public class RunnerTests(ServerFixture server)
     }
 
 
+
+    /// <summary>
+    /// A Runner holding a pool renews the pool in one call, and the answer says
+    /// what happened to each job.
+    /// <para>
+    /// <b>Renewing never shortens holds per item.</b> The claims below take five
+    /// minutes and the batch asks for one, so every deadline in the answer must
+    /// be the one already granted — the batch is exactly where a per-job rule
+    /// gets lost, because one clamp for the whole request looks reasonable.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_batch_renews_every_lease_and_never_shortens_one()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var runner = await Build.RunnerAsync(server);
+
+        var held = new List<(string JobId, string Token, DateTime Granted)>();
+        for (var i = 0; i < 3; i++)
+        {
+            var submitted = await Build.SubmitAsync(participant, slug, $"print({i})\n");
+            var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+            held.Add((
+                job.GetProperty("jobId").GetString()!,
+                job.GetProperty("leaseToken").GetString()!,
+                DateTime.Parse(
+                    job.GetProperty("leaseExpiresAt").GetString()!,
+                    null,
+                    System.Globalization.DateTimeStyles.RoundtripKind)));
+        }
+
+        var response = await runner.Client.PostAsJsonAsync("/api/v1/runner/jobs/leases", new
+        {
+            leaseSeconds = 60,
+            jobs = held.Select(one => new { jobId = one.JobId, leaseToken = one.Token }),
+        });
+        await Sign.Succeeded(response);
+
+        var results = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("results").EnumerateArray().ToList();
+        Assert.Equal(3, results.Count);
+
+        foreach (var (jobId, _, granted) in held)
+        {
+            var one = results.Single(r => r.GetProperty("jobId").GetString() == jobId);
+            Assert.False(one.TryGetProperty("code", out _), "an absent code is what says it worked");
+
+            var renewed = DateTime.Parse(
+                one.GetProperty("leaseExpiresAt").GetString()!,
+                null,
+                System.Globalization.DateTimeStyles.RoundtripKind);
+
+            // On the microsecond, for the reason the single-job conformance case
+            // gives: a deadline that has been through PostgreSQL comes back up
+            // to nine ticks earlier with nothing having moved.
+            Assert.True(
+                renewed >= granted.AddMicroseconds(-1),
+                $"the batch moved {jobId} from {granted:O} back to {renewed:O}");
+        }
+    }
+
+    /// <summary>
+    /// <b>The case the whole per-item answer exists for.</b> One lease in the
+    /// batch is no longer held; the other two must still be renewed, because a
+    /// Runner shutting down or holding a hundred jobs cannot act on a refusal
+    /// that covers all of them.
+    /// </summary>
+    [Fact]
+    public async Task A_stale_lease_in_a_batch_leaves_its_neighbours_renewed()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var runner = await Build.RunnerAsync(server);
+
+        var held = new List<(string JobId, string Token)>();
+        for (var i = 0; i < 2; i++)
+        {
+            var submitted = await Build.SubmitAsync(participant, slug, $"print({i + 10})\n");
+            var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+            held.Add((job.GetProperty("jobId").GetString()!, job.GetProperty("leaseToken").GetString()!));
+        }
+
+        var response = await runner.Client.PostAsJsonAsync("/api/v1/runner/jobs/leases", new
+        {
+            jobs = new object[]
+            {
+                new { jobId = held[0].JobId, leaseToken = held[0].Token },
+                // A token that was never this job's, which is what a lease the
+                // reaper has already taken back looks like from here.
+                new { jobId = held[1].JobId, leaseToken = Guid.NewGuid().ToString() },
+            },
+        });
+        await Sign.Succeeded(response);
+
+        var results = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("results").EnumerateArray().ToList();
+
+        var good = results.Single(r => r.GetProperty("jobId").GetString() == held[0].JobId);
+        Assert.False(good.TryGetProperty("code", out _));
+        Assert.True(good.TryGetProperty("leaseExpiresAt", out _));
+
+        var refused = results.Single(r => r.GetProperty("jobId").GetString() == held[1].JobId);
+        Assert.Equal("runner.lease.stale", refused.GetProperty("code").GetString());
+        Assert.False(refused.TryGetProperty("leaseExpiresAt", out _));
+    }
+
+    /// <summary>
+    /// Somebody else's job, and an id that names nothing, are refused with the
+    /// codes a single-job call answers with — and neither decides the batch.
+    /// </summary>
+    [Fact]
+    public async Task A_foreign_job_and_an_unknown_one_are_refused_by_themselves()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var mine = await Build.RunnerAsync(server);
+        var theirs = await Build.RunnerAsync(server);
+
+        var first = await Build.SubmitAsync(participant, slug, "print(20)\n");
+        var ours = await mine.ClaimUntilAsync(first.GetProperty("id").GetString()!);
+
+        var second = await Build.SubmitAsync(participant, slug, "print(21)\n");
+        var alien = await theirs.ClaimUntilAsync(second.GetProperty("id").GetString()!);
+
+        var unknown = Guid.NewGuid().ToString();
+
+        var response = await mine.Client.PostAsJsonAsync("/api/v1/runner/jobs/leases", new
+        {
+            jobs = new object[]
+            {
+                new
+                {
+                    jobId = ours.GetProperty("jobId").GetString(),
+                    leaseToken = ours.GetProperty("leaseToken").GetString(),
+                },
+                new
+                {
+                    jobId = alien.GetProperty("jobId").GetString(),
+                    leaseToken = alien.GetProperty("leaseToken").GetString(),
+                },
+                new { jobId = unknown, leaseToken = Guid.NewGuid().ToString() },
+            },
+        });
+        await Sign.Succeeded(response);
+
+        var results = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("results").EnumerateArray().ToList();
+        Assert.Equal(3, results.Count);
+
+        Assert.False(results
+            .Single(r => r.GetProperty("jobId").GetString() == ours.GetProperty("jobId").GetString())
+            .TryGetProperty("code", out _));
+
+        Assert.Equal(
+            "runner.lease.foreign",
+            results
+                .Single(r => r.GetProperty("jobId").GetString() == alien.GetProperty("jobId").GetString())
+                .GetProperty("code").GetString());
+
+        Assert.Equal(
+            "not_found",
+            results.Single(r => r.GetProperty("jobId").GetString() == unknown)
+                .GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// The race, in a batch. One row moves under the save; EF fails the whole
+    /// <c>SaveChanges</c> for it, and the answer must still be per job — the
+    /// reclaimed one refused and its neighbour renewed.
+    /// <para>
+    /// Without the reload-and-ask-again this answers <b>409</b> or <b>500</b>
+    /// for jobs nothing was wrong with, which is the one shape a Runner cannot
+    /// act on.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_batch_renewal_that_loses_the_race_refuses_only_that_job()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+
+        var thief = new ReclaimWhileSaving(server.ConnectionString);
+        using var host = HostRacing(thief);
+        var runner = await Build.RunnerAsync(server, host);
+
+        var held = new List<(string JobId, string Token)>();
+        for (var i = 0; i < 2; i++)
+        {
+            var submitted = await Build.SubmitAsync(participant, slug, $"print({i + 30})\n");
+            var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+            held.Add((job.GetProperty("jobId").GetString()!, job.GetProperty("leaseToken").GetString()!));
+        }
+
+        // Armed only now, so the claims themselves are ordinary.
+        thief.JobId = Guid.Parse(held[1].JobId);
+
+        var response = await runner.Client.PostAsJsonAsync("/api/v1/runner/jobs/leases", new
+        {
+            leaseSeconds = 3600,
+            jobs = held.Select(one => new { jobId = one.JobId, leaseToken = one.Token }),
+        });
+
+        Assert.True(thief.Fired, "the race never happened, so this test proved nothing");
+        await Sign.Succeeded(response);
+
+        var results = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("results").EnumerateArray().ToList();
+
+        Assert.False(
+            results.Single(r => r.GetProperty("jobId").GetString() == held[0].JobId)
+                .TryGetProperty("code", out _),
+            "the job that did not move must still be renewed");
+
+        Assert.Equal(
+            "runner.lease.stale",
+            results.Single(r => r.GetProperty("jobId").GetString() == held[1].JobId)
+                .GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// An empty batch is an ordinary answer, not a refusal. It is what a Runner
+    /// asks at start-up to learn whether this Server knows the route at all.
+    /// </summary>
+    [Fact]
+    public async Task An_empty_batch_is_answered_with_an_empty_list()
+    {
+        var runner = await Build.RunnerAsync(server);
+
+        var response = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/leases", new { jobs = Array.Empty<object>() });
+        await Sign.Succeeded(response);
+
+        var results = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("results");
+        Assert.Equal(0, results.GetArrayLength());
+
+        var released = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/releases", new { jobs = Array.Empty<object>() });
+        await Sign.Succeeded(released);
+    }
+
+    /// <summary>
+    /// Nothing in this Server rate-limits, so the batch bounds itself. Refused
+    /// whole rather than truncated: a Runner told "some of these" has no way to
+    /// know which.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_over_the_ceiling_is_refused_whole()
+    {
+        var runner = await Build.RunnerAsync(server);
+
+        var tooMany = Enumerable.Range(0, 513)
+            .Select(_ => new { jobId = Guid.NewGuid().ToString(), leaseToken = Guid.NewGuid().ToString() })
+            .ToArray();
+
+        var response = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/leases", new { jobs = tooMany });
+
+        Assert.Equal(HttpStatusCode.UnprocessableContent, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("runner.batch.size", problem.GetProperty("code").GetString());
+    }
+
     /// <summary>
     /// A host whose database context carries the interceptor.
     ///

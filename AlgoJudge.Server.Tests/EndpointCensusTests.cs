@@ -85,6 +85,8 @@ public class EndpointCensusTests(ServerFixture server)
         "POST /runner/auth/token",
         "POST /runner/heartbeat",
         "POST /runner/jobs/claim",
+        "POST /runner/jobs/leases",
+        "POST /runner/jobs/releases",
         "POST /runner/jobs/{jobId:guid}/lease",
         "POST /runner/jobs/{jobId:guid}/progress",
         "POST /runner/jobs/{jobId:guid}/release",
