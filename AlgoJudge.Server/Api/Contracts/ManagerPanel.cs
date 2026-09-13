@@ -382,6 +382,19 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Id { get; init; }
         public required string ActivityId { get; init; }
         public required string ActivitySlug { get; init; }
+        /// <summary>
+        /// The IANA zone this row's activity keeps its clock in, e.g.
+        /// `Europe/Warsaw`.
+        /// <para>
+        /// **Here because the panel lists rows from several activities at once.**
+        /// The Client shows every instant in the reader's own zone and names the
+        /// activity's beside it; without this field these rows could name
+        /// nothing, and a manager arguing about whether a submission beat a
+        /// deadline would have had no way to see the clock the deadline was set
+        /// on.
+        /// </para>
+        /// </summary>
+        public required string TimeZone { get; init; }
         public required string Kind { get; init; }
         public required string Topic { get; init; }
         public required string Body { get; init; }
@@ -427,6 +440,19 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Id { get; init; }
         public required string ActivityId { get; init; }
         public required string ActivitySlug { get; init; }
+        /// <summary>
+        /// The IANA zone this row's activity keeps its clock in, e.g.
+        /// `Europe/Warsaw`.
+        /// <para>
+        /// **Here because the panel lists rows from several activities at once.**
+        /// The Client shows every instant in the reader's own zone and names the
+        /// activity's beside it; without this field these rows could name
+        /// nothing, and a manager arguing about whether a submission beat a
+        /// deadline would have had no way to see the clock the deadline was set
+        /// on.
+        /// </para>
+        /// </summary>
+        public required string TimeZone { get; init; }
         public required string SeriesId { get; init; }
         public required string SeriesName { get; init; }
         /// <summary>The assignment, not the library entry.</summary>

@@ -15312,6 +15312,7 @@
           "isPublished",
           "kind",
           "readCount",
+          "timeZone",
           "topic"
         ],
         "type": "object",
@@ -15325,6 +15326,10 @@
             "nullable": true
           },
           "activitySlug": {
+            "type": "string",
+            "nullable": true
+          },
+          "timeZone": {
             "type": "string",
             "nullable": true
           },
@@ -15791,6 +15796,7 @@
           "seriesProblemId",
           "state",
           "submittedAt",
+          "timeZone",
           "userId",
           "userName"
         ],
@@ -15805,6 +15811,10 @@
             "nullable": true
           },
           "activitySlug": {
+            "type": "string",
+            "nullable": true
+          },
+          "timeZone": {
             "type": "string",
             "nullable": true
           },
@@ -15927,6 +15937,7 @@
           "seriesProblemId",
           "state",
           "submittedAt",
+          "timeZone",
           "userId",
           "userName"
         ],
@@ -15941,6 +15952,10 @@
             "nullable": true
           },
           "activitySlug": {
+            "type": "string",
+            "nullable": true
+          },
+          "timeZone": {
             "type": "string",
             "nullable": true
           },
