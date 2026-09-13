@@ -1369,6 +1369,147 @@ public class RunnerConformanceTests(ServerFixture server)
         Assert.Equal(jobId, Guid.Parse(again.GetProperty("jobId").GetString()!));
     }
 
+
+    /// <summary>
+    /// <b>A Runner that holds a pool gives all of it back in one call.</b> Every
+    /// job is queued again at once, each with its delivery given back, exactly
+    /// as the single-job release does — and the whole of it is one request, so a
+    /// stop is not a race between a fan of HTTP calls and a grace period. §5.1.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_release_queues_every_job_at_once_and_costs_no_delivery()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var runner = await Build.RunnerAsync(server);
+
+        var held = new List<(Guid JobId, string Token)>();
+        for (var i = 0; i < 3; i++)
+        {
+            var submitted = await Build.SubmitAsync(participant, slug, $"print({i + 40})\n");
+            var job = await runner.ClaimUntilAsync(submitted.GetProperty("id").GetString()!);
+            held.Add((
+                Guid.Parse(job.GetProperty("jobId").GetString()!),
+                job.GetProperty("leaseToken").GetString()!));
+        }
+
+        var response = await runner.Client.PostAsJsonAsync("/api/v1/runner/jobs/releases", new
+        {
+            jobs = held.Select(one => new { jobId = one.JobId.ToString(), leaseToken = one.Token }),
+        });
+        await Sign.Succeeded(response);
+
+        var results = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("results").EnumerateArray().ToList();
+        Assert.Equal(3, results.Count);
+        Assert.All(results, one => Assert.False(one.TryGetProperty("code", out _)));
+
+        await using (var context = server.NewContext())
+        {
+            foreach (var (jobId, _) in held)
+            {
+                var stored = await context.EvaluationJobs.FirstAsync(j => j.Id == jobId);
+
+                Assert.Equal(EvaluationJobState.Queued, stored.State);
+                Assert.Null(stored.LeaseToken);
+                Assert.Null(stored.LeaseExpiresAt);
+                Assert.Null(stored.LeaseSeconds);
+                Assert.Null(stored.RunnerId);
+                Assert.Null(stored.ClaimedAt);
+                // The claim counted one and the release gave it back.
+                Assert.Equal(0, stored.Deliveries);
+                Assert.Equal(1, stored.Releases);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <b>A release is free three times and then it is not</b>, per job, in a
+    /// batch as singly. A Runner crash-looping under a supervisor gives its work
+    /// back exactly as an operator's restart does, and only the count separates
+    /// them. §5.1.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_release_stops_being_free_after_three_for_the_same_job()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(50)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var runner = await Build.RunnerAsync(server);
+        Guid jobId = default;
+
+        // Four rounds of claim-and-give-back. The first three cost nothing; the
+        // fourth leaves the delivery spent.
+        for (var round = 0; round < 4; round++)
+        {
+            var job = await runner.ClaimUntilAsync(submissionId);
+            jobId = Guid.Parse(job.GetProperty("jobId").GetString()!);
+
+            var response = await runner.Client.PostAsJsonAsync("/api/v1/runner/jobs/releases", new
+            {
+                jobs = new[]
+                {
+                    new
+                    {
+                        jobId = jobId.ToString(),
+                        leaseToken = job.GetProperty("leaseToken").GetString(),
+                    },
+                },
+            });
+            await Sign.Succeeded(response);
+        }
+
+        await using var context = server.NewContext();
+        var stored = await context.EvaluationJobs.FirstAsync(j => j.Id == jobId);
+
+        Assert.Equal(AlgoJudge.Server.Services.RunnerService.FreeReleases, stored.Releases);
+        // Four claims, three refunded.
+        Assert.Equal(1, stored.Deliveries);
+    }
+
+    /// <summary>
+    /// A batch release ends another Runner's held claim, as the single-job one
+    /// does. The nudge is what makes "queued again at once" mean at once rather
+    /// than when somebody's wait runs out — and a batch must wake the queue
+    /// once, not never.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_release_ends_a_held_claim()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var submitted = await Build.SubmitAsync(participant, slug, "print(60)\n");
+        var submissionId = submitted.GetProperty("id").GetString()!;
+
+        var holder = await Build.RunnerAsync(server);
+        var job = await holder.ClaimUntilAsync(submissionId);
+
+        // A second Runner waits on an empty queue. Nothing is claimable by it
+        // until the first gives its job back.
+        var waiting = await Build.RunnerAsync(server);
+        var held = waiting.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/claim", new { leaseSeconds = 300, waitSeconds = 20 });
+
+        var released = await holder.Client.PostAsJsonAsync("/api/v1/runner/jobs/releases", new
+        {
+            jobs = new[]
+            {
+                new
+                {
+                    jobId = job.GetProperty("jobId").GetString(),
+                    leaseToken = job.GetProperty("leaseToken").GetString(),
+                },
+            },
+        });
+        await Sign.Succeeded(released);
+
+        var answered = await held.WaitAsync(TimeSpan.FromSeconds(10));
+        await Sign.Succeeded(answered);
+        Assert.Equal(HttpStatusCode.OK, answered.StatusCode);
+    }
+
     /// <summary>
     /// A Runner says what it awarded **and** what it awarded it out of, and both
     /// are read.

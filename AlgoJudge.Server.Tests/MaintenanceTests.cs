@@ -299,6 +299,37 @@ public class MaintenanceTests(ServerFixture server)
         await OpenAsync();
     }
 
+    /// <summary>
+    /// The bulk lease and release routes answer while the Server drains.
+    /// <para>
+    /// <b>This is the case they exist for.</b> `update.sh` throws the switch and
+    /// only then recreates the containers, so a Runner handing its pool back is
+    /// doing it against a draining Server — and the gate matches on path
+    /// prefixes, so a route named anywhere but under `/runner/jobs/` would be
+    /// refused at exactly that moment.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Draining_admits_the_bulk_lease_and_release_routes()
+    {
+        await OpenAsync();
+        var runner = await Build.RunnerAsync(server);
+
+        await BusyAsync();
+        await SwitchAsync(Operator(), on: true);
+
+        var renewed = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/leases", new { jobs = Array.Empty<object>() }, Json);
+        Assert.Equal(HttpStatusCode.OK, renewed.StatusCode);
+
+        var released = await runner.Client.PostAsJsonAsync(
+            "/api/v1/runner/jobs/releases", new { jobs = Array.Empty<object>() }, Json);
+        Assert.Equal(HttpStatusCode.OK, released.StatusCode);
+
+        await SwitchAsync(Operator(), on: false);
+        await OpenAsync();
+    }
+
     [Fact]
     public async Task Closed_refuses_the_runner_too()
     {
