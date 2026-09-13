@@ -43,6 +43,57 @@ public class ManagerTemplateTests(ServerFixture server)
         return (await context.Activities.AsNoTracking().FirstAsync(a => a.Slug == slug)).Id.ToString();
     }
 
+
+    /// <summary>
+    /// A managed row names the zone its activity keeps its clock in.
+    ///
+    /// <para>
+    /// The panel lists rows from several activities at once, and the Client
+    /// draws every instant in the reader's own zone. Without this field a
+    /// manager arguing about whether a submission beat a deadline could not see
+    /// the clock the deadline was set on — the row would name their zone and
+    /// nothing else.
+    /// </para>
+    /// <para>
+    /// It is asserted against a zone that is <b>not</b> the default, because the
+    /// projection falls back to <c>UTC</c> when the activity is not loaded, and
+    /// a test written against the fallback would pass on a missing
+    /// <c>Include</c>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_managed_row_names_its_activitys_time_zone()
+    {
+        var admin = await AdminAsync(server);
+        var (slug, _) = await Build.ActivityAsync(server);
+
+        // A zone that is not the fallback, and not the one every other fixture
+        // uses. Half an hour off the hour as well, which is the shape a naive
+        // reader of an offset gets wrong.
+        var current = await Build.GetAsync(admin, $"/api/v1/manager/activities/{slug}");
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/activities/{slug}", new
+        {
+            slug,
+            name = current.GetProperty("name").GetString(),
+            type = current.GetProperty("type").GetString(),
+            rankingType = current.GetProperty("rankingType").GetString(),
+            timeZone = "Asia/Kolkata",
+        }));
+
+        await Build.SubmitAsync(await Build.ParticipantAsync(server, slug), slug, "print(1)\n");
+
+        var page = await Build.GetAsync(admin, $"/api/v1/submissions?page=1&pageSize=50&activitySlug={slug}");
+        var row = page.GetProperty("items").EnumerateArray().First();
+        Assert.Equal("Asia/Kolkata", row.GetProperty("timeZone").GetString());
+
+        var questions = await Build.GetAsync(admin, "/api/v1/questions?page=1&pageSize=50");
+        foreach (var question in questions.GetProperty("items").EnumerateArray())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(question.GetProperty("timeZone").GetString()),
+                "a question row names a zone");
+        }
+    }
+
     /// <summary>
     /// A manager of one activity, pointed at the shipped role on it — the way
     /// the panel enrols one, rather than by copying its permissions in.
