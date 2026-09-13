@@ -17,7 +17,7 @@ namespace AlgoJudge.Server.Services
     /// </para>
     /// <para>
     /// <c>SubmissionService</c> asked this and nothing else did. An installation
-    /// that maps an identity provider's group to the participant template — a
+    /// that maps an identity provider's group to the participant role — a
     /// contribution <c>FederatedSignInService</c> writes at system scope, with no
     /// activity — therefore handed every such account a reader's view of every
     /// activity on the installation: the board, the rounds, the statements and

@@ -112,6 +112,55 @@ public class EventAudienceTests(ServerFixture server)
     /// A person and an activity, with whichever grants the test wants.
     /// Scoped to what it creates: the database is shared.
     /// </summary>
+
+    /// <summary>
+    /// <b>An audience is computed from the role too.</b> This class re-implements
+    /// the union rule rather than calling <c>PermissionService</c>, so the join
+    /// could be added to the resolver and forgotten here — and the symptom would
+    /// be a manager whose screens simply never update, with nothing refused and
+    /// nothing logged.
+    /// </summary>
+    [Fact]
+    public async Task Somebody_whose_permission_comes_from_a_role_is_in_the_audience()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var login = "aud-role-" + Guid.NewGuid().ToString("N")[..10];
+        await Sign.NewAccountAsync(server, login);
+
+        Guid activityId;
+        string userId;
+        await using (var context = server.NewContext())
+        {
+            activityId = (await context.Activities.FirstAsync(a => a.Slug == slug)).Id;
+            userId = (await context.Users.FirstAsync(u => u.UserName == login)).Id;
+
+            var role = new Role
+            {
+                Name = "audience-" + Guid.NewGuid().ToString("N")[..8],
+                ActivityId = activityId,
+                Permissions = $"""["{Permissions.QuestionReadAll}"]""",
+            };
+            context.PermissionRoles.Add(role);
+            await context.SaveChangesAsync();
+
+            context.Grants.Add(new Grant
+            {
+                UserId = userId,
+                ActivityId = activityId,
+                RoleId = role.Id,
+                Permissions = "[]",
+                State = GrantState.Active,
+            });
+            await context.SaveChangesAsync();
+        }
+
+        using var scope = server.Services.CreateScope();
+        var audience = scope.ServiceProvider.GetRequiredService<IEventAudience>();
+
+        Assert.Contains(
+            userId, await audience.InActivityAsync(activityId, Permissions.QuestionReadAll, default));
+    }
+
     private async Task<(string UserId, Guid ActivityId)> PersonInAnActivityAsync(
         string? inActivity, string? system)
     {

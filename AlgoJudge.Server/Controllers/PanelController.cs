@@ -11,39 +11,42 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AlgoJudge.Server.Controllers
 {
-    /// <summary>Permission templates: the sets a grant starts from.</summary>
+    /// <summary>Roles: the permission sets grants point at.</summary>
     [ApiController]
-    [Route("permission-templates")]
+    [Route("roles")]
     [Authorize]
-    public class PermissionTemplatesController(IGrantService grants) : ControllerBase
+    public class RolesController(IGrantService grants) : ControllerBase
     {
+        /// <summary>
+        /// The installation's roles, plus those of one activity when it is named.
+        /// </summary>
         [HttpGet]
-        [ProducesResponseType<IReadOnlyList<PermissionTemplateDto>>(StatusCodes.Status200OK)]
-        public Task<IReadOnlyList<PermissionTemplateDto>> List(CancellationToken ct) =>
-            grants.ListTemplatesAsync(ct);
+        [ProducesResponseType<IReadOnlyList<RoleDto>>(StatusCodes.Status200OK)]
+        public Task<IReadOnlyList<RoleDto>> List([FromQuery] Guid? activityId, CancellationToken ct) =>
+            grants.ListRolesAsync(activityId, ct);
 
         [HttpPost]
-        [ProducesResponseType<PermissionTemplateDto>(StatusCodes.Status201Created)]
-        public async Task<ActionResult<PermissionTemplateDto>> Create(
-            [FromBody] PermissionTemplateInputDto input, CancellationToken ct)
+        [ProducesResponseType<RoleDto>(StatusCodes.Status201Created)]
+        public async Task<ActionResult<RoleDto>> Create(
+            [FromBody] RoleInputDto input, CancellationToken ct)
         {
-            var created = await grants.CreateTemplateAsync(input, ct);
-            return Created($"/api/v1/permission-templates/{created.Id}", created);
+            var created = await grants.CreateRoleAsync(input, ct);
+            return Created($"/api/v1/roles/{created.Id}", created);
         }
 
-        /// <summary>PUT, not POST: the input is the whole template, so this replaces it.</summary>
+        /// <summary>PUT, not POST: the input is the whole role, so this replaces it.</summary>
         [HttpPut("{id:guid}")]
-        [ProducesResponseType<PermissionTemplateDto>(StatusCodes.Status200OK)]
-        public Task<PermissionTemplateDto> Update(
-            Guid id, [FromBody] PermissionTemplateInputDto input, CancellationToken ct) =>
-            grants.UpdateTemplateAsync(id, input, ct);
+        [ProducesResponseType<RoleDto>(StatusCodes.Status200OK)]
+        public Task<RoleDto> Update(
+            Guid id, [FromBody] RoleInputDto input, CancellationToken ct) =>
+            grants.UpdateRoleAsync(id, input, ct);
 
         [HttpDelete("{id:guid}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         {
-            await grants.DeleteTemplateAsync(id, ct);
+            await grants.DeleteRoleAsync(id, ct);
             return NoContent();
         }
     }

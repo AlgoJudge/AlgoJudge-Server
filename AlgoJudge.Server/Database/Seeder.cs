@@ -56,7 +56,7 @@ namespace AlgoJudge.Server.Database
         public async Task EnsureAsync(bool development, CancellationToken ct = default)
         {
             await instances.EnsureAsync(ct);
-            await EnsureTemplatesAsync(ct);
+            await EnsureRolesAsync(ct);
             // Beside the templates and the instance row, and for the same
             // reason: an installation without one cannot be operated at all.
             // This used to live in the development block, which left a
@@ -78,7 +78,7 @@ namespace AlgoJudge.Server.Database
         /// nobody.
         /// </para>
         /// <para>
-        /// One grant, not a list: the administrator template bypasses the rest,
+        /// One grant, not a list: the administrator role bypasses the rest,
         /// and an administrator holding individual permissions is an
         /// administrator who can be trimmed.
         /// </para>
@@ -109,14 +109,15 @@ namespace AlgoJudge.Server.Database
                     + string.Join("; ", created.Errors.Select(e => e.Description)));
             }
 
-            context.Grants.Add(new Grant
+            var adminRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Admin, ct);
+            var grant = new Grant
             {
                 UserId = admin.Id,
                 ActivityId = null,
-                Permissions = JsonSerializer.Serialize(Permissions.AdminTemplate),
-                CreatedFromTemplate = "admin",
                 IsSystem = true,
-            });
+            };
+            DefaultRoles.Carry(grant, adminRole, Permissions.AdminTemplate, DefaultRoles.Admin);
+            context.Grants.Add(grant);
             await context.SaveChangesAsync(ct);
 
             // Said loudly, because an operator who does not read this has an
@@ -185,14 +186,15 @@ namespace AlgoJudge.Server.Database
                 return;
             }
 
-            context.Grants.Add(new Grant
+            var adminRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Admin, ct);
+            var restored = new Grant
             {
                 UserId = existing.Id,
                 ActivityId = null,
-                Permissions = JsonSerializer.Serialize(Permissions.AdminTemplate),
-                CreatedFromTemplate = "admin",
                 IsSystem = true,
-            });
+            };
+            DefaultRoles.Carry(restored, adminRole, Permissions.AdminTemplate, DefaultRoles.Admin);
+            context.Grants.Add(restored);
             await context.SaveChangesAsync(ct);
 
             logger.LogWarning(
@@ -238,11 +240,18 @@ namespace AlgoJudge.Server.Database
         }
 
         /// <summary>
-        /// The three shipped templates. Marked built-in so deleting one can be
-        /// refused; their contents are copied into a grant and never referenced,
-        /// so editing one later touches nobody who already used it.
+        /// The three shipped roles. Marked built-in so deleting one can be
+        /// refused.
+        /// <para>
+        /// <b>Written once and never rewritten.</b> A grant points at the row, so
+        /// an upgrade that refreshed these from the compiled-in lists would undo
+        /// whatever an installation had decided about its own managers — quietly,
+        /// on a restart. A permission added by a new version therefore reaches
+        /// installations through a role edit somebody makes, and reaches every
+        /// grant at once when they do.
+        /// </para>
         /// </summary>
-        private async Task EnsureTemplatesAsync(CancellationToken ct)
+        private async Task EnsureRolesAsync(CancellationToken ct)
         {
             var shipped = new (string Name, string Description, IReadOnlyList<string> Permissions)[]
             {
@@ -256,10 +265,10 @@ namespace AlgoJudge.Server.Database
 
             foreach (var (name, description, permissions) in shipped)
             {
-                var existing = await context.PermissionTemplates.FirstOrDefaultAsync(t => t.Name == name, ct);
+                var existing = await context.PermissionRoles.FirstOrDefaultAsync(t => t.Name == name, ct);
                 if (existing is not null) continue;
 
-                context.PermissionTemplates.Add(new PermissionTemplate
+                context.PermissionRoles.Add(new Role
                 {
                     Name = name,
                     Description = description,
@@ -319,28 +328,31 @@ namespace AlgoJudge.Server.Database
             });
             context.Activities.Add(activity);
 
-            context.Grants.Add(new Grant
+            var participantRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Participant, ct);
+            var studentGrant = new Grant
             {
                 UserId = student.Id,
                 ActivityId = activity.Id,
-                Permissions = JsonSerializer.Serialize(Permissions.ParticipantTemplate),
-                CreatedFromTemplate = "participant",
                 IsSystem = false,
-            });
+            };
+            DefaultRoles.Carry(
+                studentGrant, participantRole, Permissions.ParticipantTemplate, DefaultRoles.Participant);
+            context.Grants.Add(studentGrant);
 
             // Somebody runs this activity, and it is not a participation. The
             // administrator would reach it through the bypass anyway; the grant
             // is here because an activity nobody manages is not a state worth
             // developing against — and because it is what makes "staff are not
             // counted among the competitors" visible in the seeded data.
-            context.Grants.Add(new Grant
+            var managerRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Manager, ct);
+            var managerGrant = new Grant
             {
                 UserId = admin.Id,
                 ActivityId = activity.Id,
-                Permissions = JsonSerializer.Serialize(Permissions.ManagerTemplate),
-                CreatedFromTemplate = "manager",
                 IsSystem = true,
-            });
+            };
+            DefaultRoles.Carry(managerGrant, managerRole, Permissions.ManagerTemplate, DefaultRoles.Manager);
+            context.Grants.Add(managerGrant);
 
             var series = new Series
             {

@@ -95,7 +95,7 @@ namespace AlgoJudge.Server.Lti
         /// Whether this set of roles runs the course rather than takes part in it.
         /// <para>
         /// <b>A launch decides membership, not privilege.</b> What the resulting
-        /// grant actually carries comes from a permission template an operator
+        /// grant actually carries comes from a permission role an operator
         /// chose, the same as every other grant — so this answers one question
         /// only: which of the two templates the platform's roles point at.
         /// </para>

@@ -169,7 +169,7 @@ public class LtiIdentityTests(ServerFixture server)
 
         var grant = await GrantAsync(host, user.Id);
         Assert.NotNull(grant);
-        Assert.Equal("participant", grant!.CreatedFromTemplate);
+        Assert.Equal("participant", grant!.Role!.Name);
         Assert.False(grant.IsSystem);
         // Attributable: a course grant from a launch names the platform's
         // provider row rather than looking like somebody typed it in.
@@ -193,7 +193,7 @@ public class LtiIdentityTests(ServerFixture server)
 
         var grant = await GrantAsync(host, user.Id);
         Assert.NotNull(grant);
-        Assert.Equal("manager", grant!.CreatedFromTemplate);
+        Assert.Equal("manager", grant!.Role!.Name);
         Assert.True(grant.IsSystem);
     }
 
@@ -229,7 +229,7 @@ public class LtiIdentityTests(ServerFixture server)
 
         var grant = await GrantAsync(host, user.Id);
         Assert.NotNull(grant);
-        Assert.Equal("manager", grant!.CreatedFromTemplate);
+        Assert.Equal("manager", grant!.Role!.Name);
         Assert.True(grant.IsSystem);
     }
 
@@ -251,7 +251,7 @@ public class LtiIdentityTests(ServerFixture server)
             roles: [LtiRoles.Administrator, LtiRoles.Learner]);
 
         var grant = await GrantAsync(host, user.Id);
-        Assert.Equal("participant", grant!.CreatedFromTemplate);
+        Assert.Equal("participant", grant!.Role!.Name);
     }
 
     // ── The placement ────────────────────────────────────────────────────────
@@ -465,6 +465,7 @@ public class LtiIdentityTests(ServerFixture server)
         using var scope = host.Services.CreateScope();
         var core = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await core.Grants.AsNoTracking()
+            .Include(g => g.Role)
             .FirstOrDefaultAsync(g => g.UserId == userId && g.ActivityId != null);
     }
 

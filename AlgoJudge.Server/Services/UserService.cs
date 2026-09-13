@@ -204,6 +204,18 @@ namespace AlgoJudge.Server.Services
             }
 
             var wanted = input.Permissions?.ToList() ?? [.. Permissions.ParticipantTemplate];
+
+            // **No explicit set means the activity's role, linked.** Enrolling
+            // twenty people at once is still enrolling, and they should receive a
+            // correction to that role like everybody else. A caller who did name
+            // a set has made one by hand, and a hand-made set stays a copy.
+            Role? role = null;
+            if (activityId is { } forRole && input.Permissions is null)
+            {
+                role = await DefaultRoles.ForEnrolmentAsync(context, forRole, runsIt: false, ct);
+            }
+            var carried = role is null ? wanted : [.. Permissions.Parse(role.Permissions)];
+
             if (activityId is not null)
             {
                 var mine = await permissions.EffectiveAsync(activityId, ct);
@@ -211,7 +223,7 @@ namespace AlgoJudge.Server.Services
                 {
                     // The same rule as any other grant: nobody hands on what they
                     // do not hold, and enrolling in bulk is still granting.
-                    var excess = wanted.Where(p => !mine.Contains(p)).ToList();
+                    var excess = carried.Where(p => !mine.Contains(p)).ToList();
                     if (excess.Count > 0)
                     {
                         throw new ForbiddenActionException(
@@ -263,15 +275,18 @@ namespace AlgoJudge.Server.Services
 
                 if (activityId is { } scoped)
                 {
-                    context.Grants.Add(new Grant
+                    var grant = new Grant
                     {
                         UserId = user.Id,
                         ActivityId = scoped,
-                        Permissions = JsonSerializer.Serialize(wanted),
-                        CreatedFromTemplate = "participant",
-                        IsSystem = Permissions.IsStaff(wanted),
+                        IsSystem = Permissions.IsStaff(carried),
                         GrantedByUserId = issuer.Id,
-                    });
+                    };
+                    DefaultRoles.Carry(
+                        grant, role, wanted, role is null && input.Permissions is null
+                            ? DefaultRoles.Participant
+                            : null);
+                    context.Grants.Add(grant);
                 }
 
                 credentials.Add(new CreatedCredentialDto

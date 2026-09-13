@@ -39,7 +39,14 @@ namespace AlgoJudge.Server.Database
         public DbSet<Question> Questions { get; set; }
         public DbSet<Printout> Printouts { get; set; }
         public DbSet<QuestionRead> QuestionReads { get; set; }
-        public DbSet<PermissionTemplate> PermissionTemplates { get; set; }
+        /// <summary>
+        /// The permission roles. Named for the entity plus a qualifier because
+        /// <c>IdentityDbContext</c> already declares a <c>Roles</c> set of its
+        /// own — the framework's, which nothing here uses. The table is
+        /// <c>Roles</c> and the route is <c>/roles</c>; only this property
+        /// carries the distinction, and only because C# needs it to.
+        /// </summary>
+        public DbSet<Role> PermissionRoles { get; set; }
         public DbSet<Grant> Grants { get; set; }
         public DbSet<ActivityGroup> ActivityGroups { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
@@ -127,6 +134,23 @@ namespace AlgoJudge.Server.Database
                     .HasDefaultValueSql("'{}'::text[]");
                 // Listing filters on it on every arrival at the activity list.
                 e.HasIndex(a => new { a.Unlisted, a.ArchivedAt });
+
+                // The two roles this activity enrols into. `SetNull`, so a role
+                // that goes away leaves the activity falling back to the shipped
+                // one rather than pointing at nothing.
+                //
+                // This and `Roles` above make a cycle between the two tables, so
+                // nothing may create an activity and a role of its own in one
+                // `SaveChanges` — EF cannot order that, and says so. Every caller
+                // here writes the activity first.
+                e.HasOne(a => a.ParticipantRole)
+                    .WithMany()
+                    .HasForeignKey(a => a.ParticipantRoleId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                e.HasOne(a => a.ManagerRole)
+                    .WithMany()
+                    .HasForeignKey(a => a.ManagerRoleId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<AttachmentRule>(e =>
@@ -622,12 +646,29 @@ namespace AlgoJudge.Server.Database
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            builder.Entity<PermissionTemplate>(e =>
+            builder.Entity<Role>(e =>
             {
-                e.ToTable("PermissionTemplates");
+                e.ToTable("Roles");
                 e.Property(t => t.Name).HasMaxLength(64);
                 e.Property(t => t.Permissions).HasColumnType("jsonb");
-                e.HasIndex(t => t.Name).IsUnique();
+
+                // Two filtered indexes rather than one over (ActivityId, Name),
+                // for the reason the grant table already has three: Postgres
+                // treats nulls as distinct, so a plain composite index would let
+                // two global roles share a name.
+                e.HasIndex(t => t.Name)
+                    .IsUnique()
+                    .HasDatabaseName("IX_Roles_Name_Global")
+                    .HasFilter("\"ActivityId\" IS NULL");
+                e.HasIndex(t => new { t.ActivityId, t.Name })
+                    .IsUnique()
+                    .HasDatabaseName("IX_Roles_ActivityId_Name")
+                    .HasFilter("\"ActivityId\" IS NOT NULL");
+
+                e.HasOne(t => t.Activity)
+                    .WithMany(a => a.Roles)
+                    .HasForeignKey(t => t.ActivityId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<Grant>(e =>
@@ -683,6 +724,20 @@ namespace AlgoJudge.Server.Database
                     .WithMany(a => a.Grants)
                     .HasForeignKey(g => g.ActivityId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                // **`NoAction`, not `Restrict`, and the difference is load-bearing.**
+                // Deleting a role that grants still point at must be refused, and
+                // the service refuses it by name. But deleting an *activity*
+                // removes its grants and its own roles in one statement, and
+                // Postgres checks a `RESTRICT` immediately — mid-cascade, before
+                // those grants are gone — while `NO ACTION` checks once the
+                // statement has finished. The second is the one that can tell the
+                // two cases apart.
+                e.HasOne(g => g.Role)
+                    .WithMany()
+                    .HasForeignKey(g => g.RoleId)
+                    .OnDelete(DeleteBehavior.NoAction);
+                e.HasIndex(g => g.RoleId);
             });
 
             builder.Entity<ActivityGroup>(e =>
@@ -728,7 +783,7 @@ namespace AlgoJudge.Server.Database
                 e.Property(p => p.AccountUrl).HasMaxLength(512);
                 e.Property(p => p.DeletionUrl).HasMaxLength(512);
                 e.Property(p => p.ClaimPath).HasMaxLength(128);
-                e.Property(p => p.DefaultTemplateName).HasMaxLength(64);
+                e.Property(p => p.DefaultRoleName).HasMaxLength(64);
                 // The slug appears in a sign-in path and in the redirect URI
                 // registered on the provider's side, so it has to be unique and
                 // it is expensive to change.
@@ -739,7 +794,7 @@ namespace AlgoJudge.Server.Database
             {
                 e.ToTable("IdentityProviderMappingRules");
                 e.Property(r => r.ClaimValue).HasMaxLength(256);
-                e.Property(r => r.TemplateName).HasMaxLength(64);
+                e.Property(r => r.RoleName).HasMaxLength(64);
                 // One rule per value per provider. Two would be a question about
                 // ordering, and this model deliberately has no answer to it.
                 e.HasIndex(r => new { r.ProviderId, r.ClaimValue }).IsUnique();

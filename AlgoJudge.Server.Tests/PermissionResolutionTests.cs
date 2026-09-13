@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Realtime;
@@ -175,7 +176,7 @@ public class PermissionResolutionTests(ServerFixture server)
             {
                 UserId = personId,
                 SourceProviderId = providerId,
-                Permissions = """["template:read"]""",
+                Permissions = """["role:read"]""",
             });
             await context.SaveChangesAsync();
         }
@@ -183,7 +184,7 @@ public class PermissionResolutionTests(ServerFixture server)
         var mine = await person.GetFromJsonAsync<string[]>("/api/v1/permissions/mine");
 
         Assert.Contains("activity:create", mine!);
-        Assert.Contains("template:read", mine!);
+        Assert.Contains("role:read", mine!);
     }
 
     /// <summary>
@@ -360,7 +361,7 @@ public class PermissionResolutionTests(ServerFixture server)
             {
                 UserId = personId,
                 SourceProviderId = providerId,
-                Permissions = """["template:read"]""",
+                Permissions = """["role:read"]""",
             };
             context.Grants.Add(managed);
             await context.SaveChangesAsync();
@@ -555,10 +556,13 @@ public class PermissionResolutionTests(ServerFixture server)
             Assert.Equal("grant.administrator.last", await Code(demoted));
 
             await using var context = server.NewContext();
-            var still = await context.Grants.FirstAsync(
-                g => g.UserId == adminId && g.ActivityId == null);
+            var still = await context.Grants
+                .Include(g => g.Role)
+                .FirstAsync(g => g.UserId == adminId && g.ActivityId == null);
             Assert.Equal(GrantState.Active, still.State);
-            Assert.Contains("system:administrator", still.Permissions);
+            Assert.Contains(
+                "system:administrator",
+                Permissions.Effective(still.Role?.Permissions, still.Permissions));
         }
         finally
         {

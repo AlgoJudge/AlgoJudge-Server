@@ -41,7 +41,7 @@ public class PanelTests(ServerFixture server)
             permissions = new[] { "activity:read", "grant:read:all", "grant:update" },
         }));
 
-        var listed = await manager.GetAsync("/api/v1/permission-templates");
+        var listed = await manager.GetAsync("/api/v1/roles");
         await Sign.Succeeded(listed);
         var names = (await listed.Content.ReadFromJsonAsync<JsonElement>())
             .EnumerateArray()
@@ -54,7 +54,7 @@ public class PanelTests(ServerFixture server)
         // who may see the list — only where the holder's grant may live.
         var stranger = await Sign.NewAccountAsync(server, "template-stranger");
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await stranger.GetAsync("/api/v1/permission-templates")).StatusCode);
+            (await stranger.GetAsync("/api/v1/roles")).StatusCode);
     }
 
     /// <summary>
@@ -137,15 +137,15 @@ public class PanelTests(ServerFixture server)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        var templates = await admin.GetFromJsonAsync<JsonElement>("/api/v1/permission-templates");
+        var templates = await admin.GetFromJsonAsync<JsonElement>("/api/v1/roles");
         var builtIn = templates.EnumerateArray().First(t => t.GetProperty("isBuiltIn").GetBoolean());
 
         var response = await admin.DeleteAsync(
-            $"/api/v1/permission-templates/{builtIn.GetProperty("id").GetString()}");
+            $"/api/v1/roles/{builtIn.GetProperty("id").GetString()}");
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("template.builtIn", problem.GetProperty("code").GetString());
+        Assert.Equal("role.builtIn", problem.GetProperty("code").GetString());
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class PanelTests(ServerFixture server)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        var response = await admin.PostAsJsonAsync("/api/v1/permission-templates", new
+        var response = await admin.PostAsJsonAsync("/api/v1/roles", new
         {
             name = "invented-" + Guid.NewGuid().ToString("N")[..6],
             permissions = new[] { "activity:read", "problem:teleport" },
@@ -161,7 +161,7 @@ public class PanelTests(ServerFixture server)
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("template.permission.unknown", problem.GetProperty("code").GetString());
+        Assert.Equal("role.permission.unknown", problem.GetProperty("code").GetString());
     }
 
     /// <summary>

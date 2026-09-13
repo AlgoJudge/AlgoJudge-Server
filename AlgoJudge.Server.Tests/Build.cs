@@ -383,6 +383,30 @@ public static class Build
 
         await context.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// The id of a shipped role, so a test can grant one the way the panel does
+    /// — by pointing at it rather than by copying its permissions in.
+    /// </summary>
+    /// <param name="activityId">
+    /// An activity to include the roles of, for a role that belongs to one.
+    /// </param>
+    internal static async Task<string> RoleIdAsync(
+        HttpClient client, string name, string? activityId = null)
+    {
+        var path = activityId is null ? "/api/v1/roles" : $"/api/v1/roles?activityId={activityId}";
+        var roles = await client.GetFromJsonAsync<JsonElement>(path);
+
+        foreach (var role in roles.EnumerateArray())
+        {
+            if (role.GetProperty("name").GetString() == name)
+            {
+                return role.GetProperty("id").GetString()!;
+            }
+        }
+
+        throw new XunitException($"No role named \"{name}\" among {roles.GetArrayLength()}");
+    }
 }
 
 /// <summary>

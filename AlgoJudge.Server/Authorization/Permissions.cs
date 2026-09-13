@@ -18,7 +18,7 @@ namespace AlgoJudge.Server.Authorization
     /// <param name="Group">How the grant editor groups it.</param>
     /// <param name="Scope">Where it may be granted.</param>
     /// <param name="Participant">
-    /// Whether the participant template grants it by default. What the editor
+    /// Whether the participant role grants it by default. What the editor
     /// starts a new participant with — <b>not</b> what decides who competes.
     /// </param>
     /// <param name="Systemic">
@@ -26,7 +26,7 @@ namespace AlgoJudge.Server.Authorization
     /// participant count and the ranking.
     /// <para>
     /// Two flags rather than one, because they are two questions and the answer
-    /// differs for <c>trial:run</c>: outside the default template, yet held
+    /// differs for <c>trial:run</c>: outside the default role, yet held
     /// without ceasing to be a competitor. While the catalogue said only
     /// <see cref="Participant"/>, the Client had to infer this one by negating
     /// it — and inferred it wrongly the moment such a permission existed.
@@ -74,7 +74,7 @@ namespace AlgoJudge.Server.Authorization
         /// <summary>
         /// May ask for a package to be run without it being anybody's problem.
         /// <para>
-        /// <b>Absent from the participant template on purpose.</b> A trial
+        /// <b>Absent from the participant role on purpose.</b> A trial
         /// spends a Runner, so opening it is a manager's decision in one
         /// activity rather than a property of the installation — which is what
         /// granting it in an activity already expresses, with no new column
@@ -163,8 +163,18 @@ namespace AlgoJudge.Server.Authorization
         public const string GrantReadAll = "grant:read:all";
         public const string GrantUpdate = "grant:update";
 
-        public const string TemplateRead = "template:read";
-        public const string TemplateManage = "template:manage";
+        /// <summary>
+        /// Read the roles, and create, edit and delete them.
+        /// <para>
+        /// <b>Both scopes, because a role has both.</b> Held at system scope
+        /// these reach the installation's roles; held in an activity grant they
+        /// reach that activity's roles and nothing else. A manager may run their
+        /// own group's roles without being able to rewrite what every manager in
+        /// the installation may do.
+        /// </para>
+        /// </summary>
+        public const string RoleRead = "role:read";
+        public const string RoleManage = "role:manage";
 
         public const string RunnerRead = "runner:read";
         public const string RunnerApprove = "runner:approve";
@@ -213,7 +223,7 @@ namespace AlgoJudge.Server.Authorization
         /// <para>
         /// <see cref="IsStaff"/> used to measure against
         /// <see cref="ParticipantKeys"/> alone, which conflated two different
-        /// ideas: what the participant template grants by default, and what
+        /// ideas: what the participant role grants by default, and what
         /// makes somebody staff. They came apart the moment a permission existed
         /// that a participant may be given without it changing who they are —
         /// granting <c>trial:run</c> would have made every participant staff,
@@ -293,8 +303,8 @@ namespace AlgoJudge.Server.Authorization
             Define(GrantReadAll, "grant", PermissionScope.Both),
             Define(GrantUpdate, "grant", PermissionScope.Both),
 
-            Define(TemplateRead, "template", PermissionScope.Global),
-            Define(TemplateManage, "template", PermissionScope.Global),
+            Define(RoleRead, "role", PermissionScope.Both),
+            Define(RoleManage, "role", PermissionScope.Both),
 
             Define(RunnerRead, "runner", PermissionScope.Global),
             Define(RunnerApprove, "runner", PermissionScope.Global),
@@ -353,10 +363,35 @@ namespace AlgoJudge.Server.Authorization
             }
         }
 
+        /// <summary>
+        /// What a grant carries: the role it points at, unioned with its own
+        /// entries. Either half may be absent — a grant with no role holds the
+        /// whole set itself, which is what every hand-made one does.
+        /// <para>
+        /// <b>One reader, and the arguments are separate on purpose.</b> Three
+        /// places resolve grants — <c>PermissionService</c>, <c>EventAudience</c>
+        /// and <c>GrantService</c> — and a join added to two of them would leave
+        /// the third quietly answering without the role. Passing the role's json
+        /// explicitly makes the <c>Include</c> each caller owes visible where it
+        /// is owed.
+        /// </para>
+        /// </summary>
+        public static IReadOnlyList<string> Effective(string? roleJson, string? ownJson) =>
+            roleJson is null ? Parse(ownJson) : [.. Parse(roleJson).Union(Parse(ownJson))];
+
         public static IReadOnlyList<string> Unknown(IEnumerable<string> permissions) =>
             permissions.Where(key => !Known.Contains(key)).Distinct().ToList();
 
-        /// <summary>The three shipped templates, plus what each holds.</summary>
+        /// <summary>
+        /// What the three shipped roles are seeded with.
+        /// <para>
+        /// <b>Seed data, not an enforcement path.</b> Since a grant points at a
+        /// role, what somebody holds is the row in <c>Roles</c>, which an
+        /// installation may edit. These lists say what that row starts as, and
+        /// the seeder writes them once — it never rewrites a role that already
+        /// exists, or an upgrade would undo an installation's own decisions.
+        /// </para>
+        /// </summary>
         public static readonly IReadOnlyList<string> ManagerTemplate =
         [
             .. ParticipantKeys,
@@ -372,6 +407,7 @@ namespace AlgoJudge.Server.Authorization
             RankingReadUnfrozen, RankingUnfreeze,
             UserCreateTemporary,
             GrantReadAll, GrantUpdate,
+            RoleRead, RoleManage,
         ];
 
         public static readonly IReadOnlyList<string> ParticipantTemplate = [.. ParticipantKeys];

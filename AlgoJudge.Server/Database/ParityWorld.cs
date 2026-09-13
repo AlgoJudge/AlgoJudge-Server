@@ -426,28 +426,32 @@ namespace AlgoJudge.Server.Database
             }
             context.Activities.Add(activity);
 
-            context.Grants.Add(new Grant
+            var managerRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Manager, ct);
+            var participantRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Participant, ct);
+
+            var managerGrant = new Grant
             {
                 UserId = admin.Id,
                 ActivityId = activity.Id,
-                Permissions = JsonSerializer.Serialize(Permissions.ManagerTemplate),
-                CreatedFromTemplate = "manager",
                 IsSystem = true,
-            });
+            };
+            DefaultRoles.Carry(managerGrant, managerRole, Permissions.ManagerTemplate, DefaultRoles.Manager);
+            context.Grants.Add(managerGrant);
 
             var accounts = new Dictionary<string, User>();
             foreach (var who in people)
             {
                 var account = await EnsureAsync(who, ct);
                 accounts[who.Login] = account;
-                context.Grants.Add(new Grant
+                var grant = new Grant
                 {
                     UserId = account.Id,
                     ActivityId = activity.Id,
-                    Permissions = JsonSerializer.Serialize(Permissions.ParticipantTemplate),
-                    CreatedFromTemplate = "participant",
                     IsSystem = false,
-                });
+                };
+                DefaultRoles.Carry(
+                    grant, participantRole, Permissions.ParticipantTemplate, DefaultRoles.Participant);
+                context.Grants.Add(grant);
             }
 
             foreach (var round in rounds)

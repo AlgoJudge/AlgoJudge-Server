@@ -4,9 +4,9 @@ namespace AlgoJudge.Server.Api.Contracts
     /// The rest of the manager surface, mirroring `ManagerApi.ts`.
     /// </summary>
 
-    // ── Permission templates and grants ──────────────────────────────────────
+    // ── Roles and grants ─────────────────────────────────────────────────────
 
-    public record PermissionTemplateDto
+    public record RoleDto
     {
         public required string Id { get; init; }
         public required string Name { get; init; }
@@ -14,13 +14,37 @@ namespace AlgoJudge.Server.Api.Contracts
         public required IReadOnlyList<string> Permissions { get; init; }
         /// <summary>One of the three shipped. Deleting one is refused.</summary>
         public required bool IsBuiltIn { get; init; }
+
+        /// <summary>
+        /// Null for a role the installation shares; otherwise the activity that
+        /// owns it, where only that activity's grants may link to it.
+        /// </summary>
+        public string? ActivityId { get; init; }
+        public string? ActivityName { get; init; }
+
+        /// <summary>
+        /// How many grants point at this role — how many people an edit reaches.
+        /// <para>
+        /// Sent because a role fails <b>open</b>: the whole risk of editing one
+        /// is not knowing how far the edit goes, and a number is the cheapest
+        /// answer to that.
+        /// </para>
+        /// </summary>
+        public required int Grants { get; init; }
     }
 
-    public record PermissionTemplateInputDto
+    public record RoleInputDto
     {
         public required string Name { get; init; }
         public string? Description { get; init; }
         public required IReadOnlyList<string> Permissions { get; init; }
+
+        /// <summary>
+        /// The activity that owns it, or null for a role the installation
+        /// shares. Only settable at creation: moving a role between scopes would
+        /// silently change who every linked grant answers to.
+        /// </summary>
+        public string? ActivityId { get; init; }
     }
 
     /// <summary>Several people competing as one, in one activity.</summary>
@@ -80,14 +104,39 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string UserLogin { get; init; }
         public string? ActivityId { get; init; }
         public string? ActivityName { get; init; }
+
+        /// <summary>
+        /// This grant's <b>own</b> entries — what it adds on top of its role, or
+        /// the whole set where it has none.
+        /// <para>
+        /// What the person actually holds is this unioned with
+        /// <see cref="RolePermissions"/>. Two fields rather than one union,
+        /// because a screen has to edit the first and may not edit the second,
+        /// and a single list could not say which was which.
+        /// </para>
+        /// </summary>
         public required IReadOnlyList<string> Permissions { get; init; }
+
+        /// <summary>The role this grant points at, if it points at one.</summary>
+        public string? RoleId { get; init; }
+        public string? RoleName { get; init; }
+
+        /// <summary>
+        /// What that role contributes, sent so a row reads without a second
+        /// lookup. Empty where there is no role.
+        /// </summary>
+        public required IReadOnlyList<string> RolePermissions { get; init; }
+
         /// <summary>
         /// A membership that runs the activity rather than takes part in it.
         /// <b>Forced true for a staff grant</b>, and the Server decides.
         /// </summary>
         public required bool IsSystem { get; init; }
-        /// <summary>Where the set started. Informational — <b>not</b> a reference.</summary>
-        public string? CreatedFromTemplate { get; init; }
+        /// <summary>
+        /// Where a copied set started. Informational — <b>not</b> a reference,
+        /// and null on anything that points at a role.
+        /// </summary>
+        public string? CopiedFromRoleName { get; init; }
         /// <summary>`invited` | `active`.</summary>
         public required string State { get; init; }
         /// <summary>The group this person competes as, or null for themselves.</summary>
@@ -130,10 +179,23 @@ namespace AlgoJudge.Server.Api.Contracts
     {
         public required string UserId { get; init; }
         public string? ActivityId { get; init; }
+
+        /// <summary>
+        /// The grant's own entries. With <see cref="RoleId"/> set these are
+        /// additions to the role; without it they are the whole set.
+        /// </summary>
         public required IReadOnlyList<string> Permissions { get; init; }
+
+        /// <summary>
+        /// The role to point at, or null to leave the grant holding its own set
+        /// alone. A global role, or one belonging to this grant's activity.
+        /// </summary>
+        public string? RoleId { get; init; }
+
         /// <summary>Ignored where the permissions already settle it. The Server decides.</summary>
         public bool? IsSystem { get; init; }
-        public string? CreatedFromTemplate { get; init; }
+        /// <summary>Ignored when <see cref="RoleId"/> is set: the link says it.</summary>
+        public string? CopiedFromRoleName { get; init; }
         public string? State { get; init; }
 
         /// <summary>

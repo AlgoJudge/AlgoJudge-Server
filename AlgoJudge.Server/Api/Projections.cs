@@ -300,6 +300,12 @@ namespace AlgoJudge.Server.Api
                 ParticipantCount = participantCount,
                 RunnerTags = activity.RunnerTags,
                 MatchingRunners = matchingRunners,
+                ParticipantRoleId = activity.ParticipantRoleId is { } taking
+                    ? Contracts.Wire.Id(taking)
+                    : null,
+                ManagerRoleId = activity.ManagerRoleId is { } running
+                    ? Contracts.Wire.Id(running)
+                    : null,
             };
 
         // ── series ────────────────────────────────────────────────────────────

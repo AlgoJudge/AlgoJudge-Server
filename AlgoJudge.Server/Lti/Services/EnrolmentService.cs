@@ -56,22 +56,19 @@ namespace AlgoJudge.Server.Lti.Services
                 return;
             }
 
-            var template = LtiRoles.RunsTheCourse(roles) ? "manager" : "participant";
+            var runsIt = LtiRoles.RunsTheCourse(roles);
 
-            var permissions = await core.PermissionTemplates.AsNoTracking()
-                .Where(t => t.Name == template)
-                .Select(t => t.Permissions)
-                .FirstOrDefaultAsync(ct);
-
-            if (permissions is null)
+            // **The activity's own role, linked rather than copied.** A launch
+            // decides membership; what that membership carries is a role an
+            // operator chose, and a correction to it reaches everybody the course
+            // ever launched without waiting for them to launch again.
+            var role = await DefaultRoles.ForEnrolmentAsync(core, link.ActivityId, runsIt, ct);
+            if (role is null)
             {
                 return;
             }
 
-            var ordered = (JsonSerializer.Deserialize<List<string>>(permissions) ?? [])
-                .OrderBy(p => p, StringComparer.Ordinal)
-                .ToList();
-            var json = JsonSerializer.Serialize(ordered);
+            var held = Permissions.Parse(role.Permissions);
 
             // **One row per person per activity, whoever put it there.** Activity
             // scope is not the union that system scope is: the unique index is on
@@ -100,13 +97,12 @@ namespace AlgoJudge.Server.Lti.Services
                     UserId = userId,
                     ActivityId = link.ActivityId,
                     SourceProviderId = platform.Id,
-                    Permissions = json,
+                    RoleId = role.Id,
                     // Computed here, never taken from anywhere else: a grant
                     // carrying any permission an ordinary participant does not
                     // hold is systemic, and a jury member counted among the
                     // competitors is a bug rather than a preference.
-                    IsSystem = Permissions.IsStaff(ordered),
-                    CreatedFromTemplate = template,
+                    IsSystem = Permissions.IsStaff(held),
                     // **No override.** The flag means "this grant is
                     // authoritative inside this activity, and system
                     // contributions do not reach it", which is a demotion
@@ -116,16 +112,20 @@ namespace AlgoJudge.Server.Lti.Services
                     OverrideSystem = false,
                 });
             }
-            else if (grant.Permissions != json)
+            else if (grant.RoleId != role.Id)
             {
-                // Rewritten from the platform's roles, the same way a provider's
-                // system contribution is rewritten at every sign-in. A teacher
-                // who became a student in Moodle is a student here at their next
+                // Re-pointed from the platform's roles, the same way a provider's
+                // system contribution is rewritten at every sign-in. A teacher who
+                // became a student in Moodle is a student here at their next
                 // launch — within this contribution, which adds to whatever else
                 // they hold rather than replacing it.
-                grant.Permissions = json;
-                grant.IsSystem = Permissions.IsStaff(ordered);
-                grant.CreatedFromTemplate = template;
+                //
+                // Its own entries are left alone: an extra key handed to this
+                // person by a manager here is not the platform's to take away.
+                grant.RoleId = role.Id;
+                grant.CopiedFromRoleName = null;
+                grant.IsSystem = Permissions.IsStaff(
+                    Permissions.Effective(role.Permissions, grant.Permissions));
             }
 
             await core.SaveChangesAsync(ct);

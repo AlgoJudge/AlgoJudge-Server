@@ -44,7 +44,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public const string AnnouncementPublished = "announcementPublished";
 
         // Manager.
-        public const string PermissionTemplateChanged = "permissionTemplateChanged";
+        public const string RoleChanged = "roleChanged";
         public const string GrantChanged = "grantChanged";
         public const string ProblemChanged = "problemChanged";
         public const string ActivityChanged = "activityChanged";

@@ -79,7 +79,7 @@ namespace AlgoJudge.Server.Services
                 if (rule is null) continue;
 
                 matched.Add(value);
-                if (!templates.Contains(rule.TemplateName)) templates.Add(rule.TemplateName);
+                if (!templates.Contains(rule.RoleName)) templates.Add(rule.RoleName);
             }
 
             if (matched.Count == 0)
@@ -105,9 +105,13 @@ namespace AlgoJudge.Server.Services
         private async Task<IReadOnlySet<string>> PermissionsOfAsync(
             IReadOnlyList<string> templateNames, CancellationToken ct)
         {
-            var stored = await context.PermissionTemplates
+            // Global roles only. A mapping is system scope, and an activity's
+            // role of the same name is a different object belonging to somebody
+            // else's course — matching it here would let one activity's manager
+            // decide what a directory group buys installation-wide.
+            var stored = await context.PermissionRoles
                 .AsNoTracking()
-                .Where(t => templateNames.Contains(t.Name))
+                .Where(t => t.ActivityId == null && templateNames.Contains(t.Name))
                 .Select(t => t.Permissions)
                 .ToListAsync(ct);
 

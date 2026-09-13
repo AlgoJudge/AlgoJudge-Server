@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Scope { get; init; }
         public required string Group { get; init; }
         /// <summary>
-        /// Whether the participant template grants it by default — what the
+        /// Whether the participant role grants it by default — what the
         /// editor starts a new participant with.
         /// </summary>
         public required bool Participant { get; init; }
@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// and leaves the participant count and the ranking.
         /// <para>
         /// Published rather than inferred from `participant`. The two differ
-        /// for `trial:run` — outside the default template, held without
+        /// for `trial:run` — outside the default role, held without
         /// ceasing to compete — and a Client negating the other flag draws a
         /// switch the Server disagrees with.
         /// </para>
@@ -123,6 +123,14 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </para>
         /// </summary>
         public required int MatchingRunners { get; init; }
+
+        /// <summary>
+        /// The roles this activity enrols into, or null for the installation's
+        /// shipped ones. What self-enrolment, a bulk of temporary accounts and an
+        /// LTI launch hand out here.
+        /// </summary>
+        public string? ParticipantRoleId { get; init; }
+        public string? ManagerRoleId { get; init; }
     }
 
     public record ActivityInputDto
@@ -168,6 +176,19 @@ namespace AlgoJudge.Server.Api.Contracts
         /// the default pool. A round may override it.
         /// </summary>
         public IReadOnlyList<string>? RunnerTags { get; init; }
+
+        /// <summary>
+        /// The roles this activity enrols into — one for taking part, one for
+        /// running it. Absent leaves them alone; an empty string clears one back
+        /// to the installation's shipped role.
+        /// <para>
+        /// A global role, or one belonging to this activity. This is what lets a
+        /// role of an activity's own reach anybody: self-enrolment, a bulk of
+        /// temporary accounts and an LTI launch all read it.
+        /// </para>
+        /// </summary>
+        public string? ParticipantRoleId { get; init; }
+        public string? ManagerRoleId { get; init; }
     }
 
     public record ManagedSeriesProblemDto

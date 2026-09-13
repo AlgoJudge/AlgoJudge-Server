@@ -17,8 +17,8 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         Deny = 0,
 
-        /// <summary>Admit, and grant the provider's configured default template.</summary>
-        DefaultTemplate = 1,
+        /// <summary>Admit, and grant the provider's configured default role.</summary>
+        DefaultRole = 1,
     }
 
     /// <summary>
@@ -146,10 +146,10 @@ namespace AlgoJudge.Server.Database.Models
         public UnmappedBehavior UnmappedBehavior { get; set; } = UnmappedBehavior.Deny;
 
         /// <summary>
-        /// The template granted under <see cref="UnmappedBehavior.DefaultTemplate"/>.
+        /// The role granted under <see cref="UnmappedBehavior.DefaultRole"/>.
         /// Null under <c>Deny</c>, where there is nothing to grant.
         /// </summary>
-        public string? DefaultTemplateName { get; set; }
+        public string? DefaultRoleName { get; set; }
 
         /// <summary>
         /// Whether this provider may report a deleted account over the back
@@ -167,7 +167,7 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// The allowlist: which claim values map onto which template. Empty is a
+        /// The allowlist: which claim values map onto which role. Empty is a
         /// legitimate state and means every sign-in falls to
         /// <see cref="UnmappedBehavior"/>.
         /// </summary>
@@ -178,22 +178,20 @@ namespace AlgoJudge.Server.Database.Models
     }
 
     /// <summary>
-    /// One line of the allowlist: this claim value grants this template.
+    /// One line of the allowlist: this claim value grants this role.
     /// <para>
-    /// <b>This is the one object that holds a live reference to a
-    /// <see cref="PermissionTemplate"/>.</b> A grant does not — choosing a
-    /// template copies its permissions and nothing points back afterwards, which
-    /// is the whole reason it is a template rather than a role. A rule is
-    /// different: the contribution is re-derived from it at every sign-in, so
-    /// editing the template it names <i>does</i> reach people, at their next
-    /// sign-in. Two objects, two lifetimes, and the panel has to say which is
-    /// which or an administrator will edit a template expecting it to touch
-    /// nobody.
+    /// <b>The contribution this writes is a copy, and it is the one grant that
+    /// still is one.</b> A claim may match several rules at once and the
+    /// contribution is the union of every role they name, which a single link
+    /// cannot express. It loses nothing by being a copy: it is rewritten from
+    /// the rules at every sign-in, so editing a role it names reaches those
+    /// people the next time they sign in rather than immediately.
     /// </para>
     /// <para>
-    /// It names the template by <see cref="TemplateName"/> rather than by id
-    /// because that is what an operator configures and what the provider's
-    /// documentation will talk about. Deleting a named template is refused.
+    /// It names the role by <see cref="RoleName"/> rather than by id because
+    /// that is what an operator configures and what the provider's documentation
+    /// will talk about. Only a global role may be named — mapping is system
+    /// scope — and deleting a named role is refused.
     /// </para>
     /// </summary>
     public class IdentityProviderMappingRule
@@ -210,8 +208,8 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         public required string ClaimValue { get; set; }
 
-        /// <summary>The <see cref="PermissionTemplate.Name"/> this value grants.</summary>
-        public required string TemplateName { get; set; }
+        /// <summary>The <see cref="Role.Name"/> this value grants.</summary>
+        public required string RoleName { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

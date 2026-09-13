@@ -64,8 +64,8 @@ public class IdentityProviderTests(ServerFixture server)
         var created = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("editable", new[]
             {
-                new { claimValue = "staff", templateName = "manager" },
-                new { claimValue = "students", templateName = "participant" },
+                new { claimValue = "staff", roleName = "manager" },
+                new { claimValue = "students", roleName = "participant" },
             }));
         await Sign.Succeeded(created);
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
@@ -74,15 +74,15 @@ public class IdentityProviderTests(ServerFixture server)
         var edited = await admin.PutAsJsonAsync($"/api/v1/identity/providers/{id}",
             Registration("editable", new[]
             {
-                new { claimValue = "staff", templateName = "participant" },
-                new { claimValue = "guests", templateName = "participant" },
+                new { claimValue = "staff", roleName = "participant" },
+                new { claimValue = "guests", roleName = "participant" },
             }));
         await Sign.Succeeded(edited);
 
         var read = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/identity/providers/{id}");
         var rules = read.GetProperty("mappingRules").EnumerateArray()
             .ToDictionary(r => r.GetProperty("claimValue").GetString()!,
-                          r => r.GetProperty("templateName").GetString());
+                          r => r.GetProperty("roleName").GetString());
 
         Assert.Equal(["guests", "staff"], rules.Keys.OrderBy(k => k));
         Assert.Equal("participant", rules["staff"]);
@@ -92,8 +92,8 @@ public class IdentityProviderTests(ServerFixture server)
         await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/identity/providers/{id}",
             Registration("editable", new[]
             {
-                new { claimValue = "staff", templateName = "participant" },
-                new { claimValue = "guests", templateName = "participant" },
+                new { claimValue = "staff", roleName = "participant" },
+                new { claimValue = "guests", roleName = "participant" },
             })));
     }
 
@@ -195,7 +195,7 @@ public class IdentityProviderTests(ServerFixture server)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        var template = await admin.PostAsJsonAsync("/api/v1/permission-templates", new
+        var template = await admin.PostAsJsonAsync("/api/v1/roles", new
         {
             name = "back-door",
             permissions = new[] { "system:administrator" },
@@ -205,7 +205,7 @@ public class IdentityProviderTests(ServerFixture server)
         var refused = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("with-a-back-door", new[]
             {
-                new { claimValue = "staff", templateName = "back-door" },
+                new { claimValue = "staff", roleName = "back-door" },
             }));
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
@@ -230,7 +230,7 @@ public class IdentityProviderTests(ServerFixture server)
         var granted = await admin.PostAsJsonAsync("/api/v1/grants", new
         {
             userId = await UserIdAsync("provider-operator"),
-            permissions = new[] { "provider:manage", "template:read" },
+            permissions = new[] { "provider:manage", "role:read" },
         });
         await Sign.Succeeded(granted);
 
@@ -239,7 +239,7 @@ public class IdentityProviderTests(ServerFixture server)
         var refused = await operatorClient.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("over-reaching", new[]
             {
-                new { claimValue = "lecturers", templateName = "manager" },
+                new { claimValue = "lecturers", roleName = "manager" },
             }));
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
@@ -247,17 +247,17 @@ public class IdentityProviderTests(ServerFixture server)
 
         // And what they *do* hold goes through, so the guard is not simply
         // refusing everything.
-        var narrow = await admin.PostAsJsonAsync("/api/v1/permission-templates", new
+        var narrow = await admin.PostAsJsonAsync("/api/v1/roles", new
         {
             name = "just-templates",
-            permissions = new[] { "template:read" },
+            permissions = new[] { "role:read" },
         });
         await Sign.Succeeded(narrow);
 
         var allowed = await operatorClient.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("within-reach", new[]
             {
-                new { claimValue = "lecturers", templateName = "just-templates" },
+                new { claimValue = "lecturers", roleName = "just-templates" },
             }));
         await Sign.Succeeded(allowed);
     }
@@ -278,7 +278,7 @@ public class IdentityProviderTests(ServerFixture server)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        var template = await admin.PostAsJsonAsync("/api/v1/permission-templates", new
+        var template = await admin.PostAsJsonAsync("/api/v1/roles", new
         {
             name = "mapped-set",
             permissions = new[] { "activity:read" },
@@ -289,17 +289,17 @@ public class IdentityProviderTests(ServerFixture server)
         var created = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("maps-a-template", new[]
             {
-                new { claimValue = "students", templateName = "mapped-set" },
+                new { claimValue = "students", roleName = "mapped-set" },
             }));
         await Sign.Succeeded(created);
 
-        var refused = await admin.DeleteAsync($"/api/v1/permission-templates/{templateId}");
+        var refused = await admin.DeleteAsync($"/api/v1/roles/{templateId}");
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
-        Assert.Equal("template.mapped", await Code(refused));
+        Assert.Equal("role.mapped", await Code(refused));
 
         // A rename has to reach the rule, or the provider goes on naming
         // something that no longer answers.
-        var renamed = await admin.PutAsJsonAsync($"/api/v1/permission-templates/{templateId}", new
+        var renamed = await admin.PutAsJsonAsync($"/api/v1/roles/{templateId}", new
         {
             name = "mapped-set-renamed",
             permissions = new[] { "activity:read" },
@@ -310,7 +310,7 @@ public class IdentityProviderTests(ServerFixture server)
         var rule = await context.IdentityProviderMappingRules
             .Include(r => r.Provider)
             .FirstAsync(r => r.Provider!.Slug == "maps-a-template");
-        Assert.Equal("mapped-set-renamed", rule.TemplateName);
+        Assert.Equal("mapped-set-renamed", rule.RoleName);
     }
 
     /// <summary>
@@ -397,8 +397,8 @@ public class IdentityProviderTests(ServerFixture server)
         var refused = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("mapped-twice", new[]
             {
-                new { claimValue = "staff", templateName = "participant" },
-                new { claimValue = "staff", templateName = "participant" },
+                new { claimValue = "staff", roleName = "participant" },
+                new { claimValue = "staff", roleName = "participant" },
             }));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);

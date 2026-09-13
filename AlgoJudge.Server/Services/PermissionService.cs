@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
@@ -65,28 +64,27 @@ namespace AlgoJudge.Server.Services
             var user = await currentUser.GetAsync(ct);
             if (user is null) return grants = [];
 
+            // `Include`, because a grant's permissions are its role's and its
+            // own together. Without it every linked grant would resolve to its
+            // additions alone, which for an ordinary participant is nothing at
+            // all — a silent lockout rather than a visible error.
             grants = await context.Grants
                 .AsNoTracking()
+                .Include(g => g.Role)
                 .Where(g => g.UserId == user.Id && g.State == GrantState.Active)
                 .ToListAsync(ct);
             return grants;
         }
 
-        private static IReadOnlyList<string> Parse(Grant grant)
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<List<string>>(grant.Permissions) ?? [];
-            }
-            catch (JsonException)
-            {
-                // A grant whose permissions do not parse grants nothing. The
-                // alternative — throwing — would make one corrupt row lock every
-                // user out of every screen, and the alternative to that would be
-                // to ignore the error and treat it as an administrator.
-                return [];
-            }
-        }
+        /// <summary>
+        /// A grant whose permissions do not parse grants nothing — the reader in
+        /// <see cref="Permissions.Effective"/> swallows the error rather than
+        /// throwing, because one corrupt row must not lock every user out of
+        /// every screen, and the only other way to be wrong is to treat it as an
+        /// administrator.
+        /// </summary>
+        private static IReadOnlyList<string> Parse(Grant grant) =>
+            Permissions.Effective(grant.Role?.Permissions, grant.Permissions);
 
         private async Task<bool> IsAdministratorAsync(CancellationToken ct)
         {

@@ -32,8 +32,8 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>The value at the provider's claim path, matched exactly.</summary>
         public required string ClaimValue { get; init; }
 
-        /// <summary>The permission template that value grants.</summary>
-        public required string TemplateName { get; init; }
+        /// <summary>The permission role that value grants.</summary>
+        public required string RoleName { get; init; }
     }
 
     public record IdentityProviderDto
@@ -54,7 +54,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>`deny` | `defaultTemplate`.</summary>
         public required string UnmappedBehavior { get; init; }
 
-        public string? DefaultTemplateName { get; init; }
+        public string? DefaultRoleName { get; init; }
         public required bool DeletionChannelEnabled { get; init; }
 
         /// <summary>
@@ -116,7 +116,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>`deny` | `defaultTemplate`. Absent is `deny`.</summary>
         public string? UnmappedBehavior { get; init; }
 
-        public string? DefaultTemplateName { get; init; }
+        public string? DefaultRoleName { get; init; }
         public bool DeletionChannelEnabled { get; init; }
 
         /// <summary>Absent means "leave the stored one alone", as above.</summary>
