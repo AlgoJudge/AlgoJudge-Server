@@ -198,8 +198,13 @@ public class ProductionSeedTests : IAsyncLifetime
         await seeder.EnsureAsync(development: false);
 
         var restored = await context.Grants
+            .Include(g => g.Role)
             .SingleAsync(g => g.UserId == adminId && g.ActivityId == null);
-        Assert.Contains(Permissions.SystemAdministrator, restored.Permissions);
+        // Through the role it points at, not as a copy in the row: the seeder
+        // links what it restores, exactly as the panel would.
+        Assert.Contains(
+            Permissions.SystemAdministrator,
+            Permissions.Effective(restored.Role?.Permissions, restored.Permissions));
         Assert.Equal(GrantState.Active, restored.State);
         Assert.True(restored.IsSystem);
 

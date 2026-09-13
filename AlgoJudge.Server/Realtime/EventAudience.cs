@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
@@ -38,7 +37,7 @@ namespace AlgoJudge.Server.Realtime
         /// Everybody who may exercise it <b>anywhere</b>.
         /// <para>
         /// For the surfaces that are not an activity's: the problem library, the
-        /// permission templates, the Runners. A manager of one activity sees the
+        /// permission roles, the Runners. A manager of one activity sees the
         /// library, so the audience cannot be narrowed to an activity that does
         /// not exist for these.
         /// </para>
@@ -88,24 +87,20 @@ namespace AlgoJudge.Server.Realtime
                 .Where(g => g.ActivityId == activityId
                     && g.OverrideSystem
                     && g.State == GrantState.Active)
-                .Select(g => new { g.UserId, g.Permissions })
+                .Select(g => new
+                {
+                    g.UserId,
+                    g.Permissions,
+                    RolePermissions = g.Role != null ? g.Role.Permissions : null,
+                })
                 .ToListAsync(ct);
 
             var stoodDown = new HashSet<string>(StringComparer.Ordinal);
             foreach (var grant in overrides)
             {
-                List<string> keys;
-                try
-                {
-                    keys = JsonSerializer.Deserialize<List<string>>(grant.Permissions) ?? [];
-                }
-                catch (JsonException)
-                {
-                    // An override nobody can read grants nothing, which is what
-                    // `PermissionService` concludes about the same row.
-                    keys = [];
-                }
-
+                // An override nobody can read grants nothing, which is what
+                // `PermissionService` concludes about the same row.
+                var keys = Permissions.Effective(grant.RolePermissions, grant.Permissions);
                 if (!keys.Contains(permission)) stoodDown.Add(grant.UserId);
             }
             return stoodDown;
@@ -131,7 +126,16 @@ namespace AlgoJudge.Server.Realtime
                 .AsNoTracking()
                 .Where(g => g.State == GrantState.Active)
                 .Where(scope)
-                .Select(g => new { g.UserId, g.ActivityId, g.Permissions })
+                // The role travels with the grant here as well: an audience
+                // computed from the additions alone would tell a linked manager
+                // nothing, and tell nobody why.
+                .Select(g => new
+                {
+                    g.UserId,
+                    g.ActivityId,
+                    g.Permissions,
+                    RolePermissions = g.Role != null ? g.Role.Permissions : null,
+                })
                 .ToListAsync(ct);
 
             var holders = new HashSet<string>(StringComparer.Ordinal);
@@ -139,17 +143,9 @@ namespace AlgoJudge.Server.Realtime
             foreach (var grant in grants)
             {
                 // A grant whose permissions will not parse is a grant nobody can
-                // be judged by. Skipped rather than thrown on: one bad row must
-                // not stop everybody else being told.
-                List<string> keys;
-                try
-                {
-                    keys = JsonSerializer.Deserialize<List<string>>(grant.Permissions) ?? [];
-                }
-                catch (JsonException)
-                {
-                    continue;
-                }
+                // be judged by. It resolves to nothing rather than throwing: one
+                // bad row must not stop everybody else being told.
+                var keys = Permissions.Effective(grant.RolePermissions, grant.Permissions);
 
                 // **The administrator bypass is only meaningful at the system
                 // scope**, exactly as `PermissionService.IsAdministratorAsync`

@@ -18,10 +18,10 @@ namespace AlgoJudge.Server.Services
         Task<GrantDto> SetAsync(GrantInputDto input, CancellationToken ct);
         Task RevokeAsync(Guid id, CancellationToken ct);
 
-        Task<IReadOnlyList<PermissionTemplateDto>> ListTemplatesAsync(CancellationToken ct);
-        Task<PermissionTemplateDto> CreateTemplateAsync(PermissionTemplateInputDto input, CancellationToken ct);
-        Task<PermissionTemplateDto> UpdateTemplateAsync(Guid id, PermissionTemplateInputDto input, CancellationToken ct);
-        Task DeleteTemplateAsync(Guid id, CancellationToken ct);
+        Task<IReadOnlyList<RoleDto>> ListRolesAsync(Guid? activityId, CancellationToken ct);
+        Task<RoleDto> CreateRoleAsync(RoleInputDto input, CancellationToken ct);
+        Task<RoleDto> UpdateRoleAsync(Guid id, RoleInputDto input, CancellationToken ct);
+        Task DeleteRoleAsync(Guid id, CancellationToken ct);
     }
 
     public class GrantService(
@@ -55,18 +55,26 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// A template is the installation's, so its audience is everybody who may
-        /// read one. Templates are **copied** into a grant and never referenced,
-        /// so this changes what a future grant starts from and nobody's access.
+        /// Everybody who may read a role is told one changed.
+        /// <para>
+        /// <b>This is no longer only a list changing.</b> A grant points at a
+        /// role, so an edit changes what its holders may do — every screen
+        /// showing a permission has to reload, not just the role list.
+        /// </para>
         /// </summary>
-        private async Task AnnounceTemplateAsync(
-            PermissionTemplateDto? template, string? deletedId, CancellationToken ct)
+        private async Task AnnounceRoleAsync(
+            RoleDto? role, string? deletedId, CancellationToken ct)
         {
-            var readers = await audience.AnywhereAsync(Permissions.TemplateRead, ct);
+            // Both keys, matching who `ListRolesAsync` admits. Telling a narrower
+            // audience than may read the list is how the template list used to
+            // push changes at people it then refused to serve.
+            var readers = new HashSet<string>(
+                await audience.AnywhereAsync(Permissions.RoleRead, ct), StringComparer.Ordinal);
+            readers.UnionWith(await audience.AnywhereAsync(Permissions.GrantUpdate, ct));
             if (readers.Count == 0) return;
 
-            await events.SendToUsersAsync(readers, EventTypes.PermissionTemplateChanged,
-                deletedId is null ? new { template } : new { deletedId }, ct);
+            await events.SendToUsersAsync([.. readers], EventTypes.RoleChanged,
+                deletedId is null ? new { role } : new { deletedId }, ct);
         }
         public async Task<PageDto<GrantDto>> ListAsync(
             PageQuery paging, string? userId, Guid? activityId, string? scope, CancellationToken ct)
@@ -83,6 +91,7 @@ namespace AlgoJudge.Server.Services
                 .Include(g => g.Activity)
                 .Include(g => g.SourceProvider)
                 .Include(g => g.Group)
+                .Include(g => g.Role)
                 .AsQueryable();
 
             // **A system grant is not an activity's business.** Somebody holding
@@ -132,8 +141,11 @@ namespace AlgoJudge.Server.Services
             GroupId = grant.GroupId is { } group ? Wire.Id(group) : null,
             GroupName = grant.Group?.Name,
             Permissions = Parse(grant.Permissions),
+            RoleId = grant.RoleId is { } role ? Wire.Id(role) : null,
+            RoleName = grant.Role?.Name,
+            RolePermissions = Parse(grant.Role?.Permissions ?? "[]"),
             IsSystem = grant.IsSystem,
-            CreatedFromTemplate = grant.CreatedFromTemplate,
+            CopiedFromRoleName = grant.CopiedFromRoleName,
             State = grant.State == GrantState.Invited ? "invited" : "active",
             CreatedAt = Wire.At(grant.CreatedAt),
             Source = grant.SourceProviderId is null ? "manual" : "provider",
@@ -168,10 +180,12 @@ namespace AlgoJudge.Server.Services
             var systemGrants = await context.Grants
                 .AsNoTracking()
                 .Where(g => g.UserId == userId && g.ActivityId == null && g.State == GrantState.Active)
-                .Select(g => g.Permissions)
+                .Select(g => new { g.Permissions, Role = g.Role != null ? g.Role.Permissions : null })
                 .ToListAsync(ct);
 
-            return systemGrants.Any(p => Parse(p).Contains(Permissions.SystemAdministrator));
+            return systemGrants.Any(g => Permissions
+                .Effective(g.Role, g.Permissions)
+                .Contains(Permissions.SystemAdministrator));
         }
 
         /// <summary>
@@ -196,10 +210,12 @@ namespace AlgoJudge.Server.Services
             var others = await context.Grants
                 .AsNoTracking()
                 .Where(g => g.Id != excluding && g.ActivityId == null && g.State == GrantState.Active)
-                .Select(g => g.Permissions)
+                .Select(g => new { g.Permissions, Role = g.Role != null ? g.Role.Permissions : null })
                 .ToListAsync(ct);
 
-            return others.Any(p => Parse(p).Contains(Permissions.SystemAdministrator));
+            return others.Any(g => Permissions
+                .Effective(g.Role, g.Permissions)
+                .Contains(Permissions.SystemAdministrator));
         }
 
         /// <summary>
@@ -214,9 +230,13 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         /// <param name="grant">The row about to be removed or rewritten.</param>
+        /// <param name="held">
+        /// What it carries now — its role and its own entries together, since
+        /// either half may be where the key is.
+        /// </param>
         /// <param name="stillAdministers">Whether it administers afterwards.</param>
         private async Task RefuseLosingTheLastAdministratorAsync(
-            Grant grant, bool stillAdministers, CancellationToken ct)
+            Grant grant, IReadOnlyList<string> held, bool stillAdministers, CancellationToken ct)
         {
             if (stillAdministers) return;
 
@@ -224,7 +244,7 @@ namespace AlgoJudge.Server.Services
             // here is an administrator's grant, and parsing beats a query.
             if (grant.ActivityId is not null
                 || grant.State != GrantState.Active
-                || !Parse(grant.Permissions).Contains(Permissions.SystemAdministrator))
+                || !held.Contains(Permissions.SystemAdministrator))
             {
                 return;
             }
@@ -238,19 +258,19 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// Which providers name this template — through a mapping rule or as
-        /// their default. Both count: either way, deleting it leaves a provider
+        /// Which providers name this role — through a mapping rule or as their
+        /// default. Both count: either way, deleting it leaves a provider
         /// pointing at nothing.
         /// </summary>
         private async Task<IReadOnlyList<string>> ReferencingProvidersAsync(string name, CancellationToken ct)
         {
             var byRule = await context.IdentityProviderMappingRules
-                .Where(r => r.TemplateName == name)
+                .Where(r => r.RoleName == name)
                 .Select(r => r.Provider!.Slug)
                 .ToListAsync(ct);
 
             var byDefault = await context.IdentityProviders
-                .Where(p => p.DefaultTemplateName == name)
+                .Where(p => p.DefaultRoleName == name)
                 .Select(p => p.Slug)
                 .ToListAsync(ct);
 
@@ -293,13 +313,21 @@ namespace AlgoJudge.Server.Services
                     "No such permission: " + string.Join(", ", unknown), "grant.permission.unknown");
             }
 
+            var role = await RoleForGrantAsync(input.RoleId, activityId, ct);
+
+            // **Every rule below reads the union, not the additions.** A grant
+            // carries its role's permissions as surely as its own, so an excess
+            // check that looked only at what was typed in would let anybody with
+            // `grant:update` hand out an administrator's role by pointing at it.
+            var held = Permissions.Effective(role?.Permissions, JsonSerializer.Serialize(wanted));
+
             // Nobody may grant a permission they do not themselves hold. Without
             // this the model is decorative: anybody who could edit a grant could
             // write `system:administrator` into it.
             var mine = await permissions.EffectiveAsync(activityId, ct);
             if (!mine.Contains(Permissions.SystemAdministrator))
             {
-                var excess = wanted.Where(p => !mine.Contains(p)).ToList();
+                var excess = held.Where(p => !mine.Contains(p)).ToList();
                 if (excess.Count > 0)
                 {
                     throw new ForbiddenActionException(
@@ -330,7 +358,7 @@ namespace AlgoJudge.Server.Services
             // library asks for them **anywhere** rather than at system scope, so
             // an activity grant carries them. What the declaration means is
             // therefore documentation, and only this key's scope is a rule.
-            if (activityId is not null && wanted.Contains(Permissions.SystemAdministrator))
+            if (activityId is not null && held.Contains(Permissions.SystemAdministrator))
             {
                 throw new ValidationException(
                     "system:administrator is installation-wide; it means nothing in an activity grant",
@@ -346,10 +374,12 @@ namespace AlgoJudge.Server.Services
                 throw new NotFoundException("Activity");
             }
 
-            var grant = await context.Grants.FirstOrDefaultAsync(
-                g => g.UserId == input.UserId
-                    && g.ActivityId == activityId
-                    && g.SourceProviderId == null, ct);
+            var grant = await context.Grants
+                .Include(g => g.Role)
+                .FirstOrDefaultAsync(
+                    g => g.UserId == input.UserId
+                        && g.ActivityId == activityId
+                        && g.SourceProviderId == null, ct);
 
             if (grant is null)
             {
@@ -387,17 +417,22 @@ namespace AlgoJudge.Server.Services
             // to `invited` takes the installation away as completely as dropping
             // the key. A grant this method has just constructed carries `"[]"`,
             // so creating one is never refused.
-            var stillAdministers = wanted.Contains(Permissions.SystemAdministrator)
+            var stillAdministers = held.Contains(Permissions.SystemAdministrator)
                 && input.State != "invited";
-            await RefuseLosingTheLastAdministratorAsync(grant, stillAdministers, ct);
+            var before = Permissions.Effective(grant.Role?.Permissions, grant.Permissions);
+            await RefuseLosingTheLastAdministratorAsync(grant, before, stillAdministers, ct);
 
+            grant.RoleId = role?.Id;
             grant.Permissions = JsonSerializer.Serialize(wanted);
-            grant.CreatedFromTemplate = input.CreatedFromTemplate;
+            // The label describes where a *copied* set started, so a link erases
+            // it: two fields both claiming to say which role this is would
+            // eventually disagree.
+            grant.CopiedFromRoleName = role is null ? input.CopiedFromRoleName : null;
             grant.State = input.State == "invited" ? GrantState.Invited : GrantState.Active;
             // Settled here, never taken from the caller: a grant carrying any
             // permission a participant does not hold is staff, always — and that
             // is what keeps a jury member out of the ranking.
-            grant.IsSystem = Permissions.IsStaff(wanted) || input.IsSystem == true;
+            grant.IsSystem = Permissions.IsStaff(held) || input.IsSystem == true;
 
             await context.SaveChangesAsync(ct);
 
@@ -407,6 +442,7 @@ namespace AlgoJudge.Server.Services
                 .Include(g => g.Activity)
                 .Include(g => g.SourceProvider)
                 .Include(g => g.Group)
+                .Include(g => g.Role)
                 .FirstAsync(g => g.Id == grant.Id, ct);
             var projected = Projected(stored);
             await AnnounceGrantAsync(stored.ActivityId, stored.UserId, new { grant = projected }, ct);
@@ -421,7 +457,9 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         public async Task RevokeAsync(Guid id, CancellationToken ct)
         {
-            var grant = await context.Grants.FirstOrDefaultAsync(g => g.Id == id, ct)
+            var grant = await context.Grants
+                .Include(g => g.Role)
+                .FirstOrDefaultAsync(g => g.Id == id, ct)
                 ?? throw new NotFoundException("Grant");
 
             await permissions.RequireAsync(Permissions.GrantUpdate, grant.ActivityId, ct);
@@ -441,7 +479,11 @@ namespace AlgoJudge.Server.Services
 
             // After the managed refusal above, which is cheaper and more
             // specific when both apply.
-            await RefuseLosingTheLastAdministratorAsync(grant, stillAdministers: false, ct);
+            await RefuseLosingTheLastAdministratorAsync(
+                grant,
+                Permissions.Effective(grant.Role?.Permissions, grant.Permissions),
+                stillAdministers: false,
+                ct);
 
             // Read before the row goes: revoking a grant removes the very thing
             // an audience is resolved from, so afterwards the holder would not be
@@ -455,186 +497,376 @@ namespace AlgoJudge.Server.Services
             await AnnounceGrantAsync(scope, subject, new { deletedId = removed }, ct);
         }
 
-        public async Task<IReadOnlyList<PermissionTemplateDto>> ListTemplatesAsync(CancellationToken ct)
+        /// <summary>
+        /// The role a grant is being pointed at, checked against the scope it is
+        /// being written in.
+        /// <para>
+        /// <b>An activity's role belongs to that activity and nowhere else.</b>
+        /// Letting one be linked from elsewhere would make the scope decorative:
+        /// a manager could write a role in their own activity, where they may,
+        /// and then hand it out in somebody else's.
+        /// </para>
+        /// </summary>
+        private async Task<Role?> RoleForGrantAsync(string? raw, Guid? activityId, CancellationToken ct)
         {
-            // **Anywhere, not at the installation scope, and that is the fix.**
-            // This asked for `template:read` with a null activity while every
-            // path that makes a manager writes an *activity* grant — the seeder,
-            // `ActivityService.CreateAsync` for whoever created it, the panel and
-            // LTI enrolment alike. So the shipped Grants page and Participants
-            // tab both died on a 403 while `AnnounceTemplateAsync` below was
-            // resolving its audience with `AnywhereAsync` and pushing those same
-            // people every change to the list they could not fetch.
-            //
-            // Not fixed by adding the key to the manager template: `template:read`
-            // is `PermissionScope.Global`, and a global key in an activity grant
-            // confers nothing — pinned by
-            // `A_global_key_in_an_activity_grant_does_nothing`. It would also
-            // reach no installed database, because `Seeder` never updates a
-            // built-in template and `SetAsync` copies one into a grant.
-            //
-            // `grant:update` as the alternative because it is the reason to read
-            // one: a template is *applied* when somebody is enrolled by hand.
-            // Reading discloses nothing and confers nothing — a template is
-            // copied into a grant, never referenced, and the excess rule still
-            // refuses to hand on a permission the caller does not hold.
-            var mine = await permissions.AnywhereAsync(ct);
-            if (!mine.Contains(Permissions.TemplateRead) && !mine.Contains(Permissions.GrantUpdate))
+            if (raw is null || !Guid.TryParse(raw, out var roleId)) return null;
+
+            var role = await context.PermissionRoles.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == roleId, ct)
+                ?? throw new NotFoundException("Role");
+
+            if (role.ActivityId is { } owner && owner != activityId)
             {
-                // The same refusal as before for anybody still refused: only who
-                // is refused has moved.
-                throw new AccessDeniedException(Permissions.TemplateRead);
+                throw new ValidationException(
+                    activityId is null
+                        ? $"\"{role.Name}\" belongs to an activity and cannot be granted at system scope"
+                        : $"\"{role.Name}\" belongs to another activity",
+                    "grant.role.scope");
             }
 
-            var templates = await context.PermissionTemplates
-                .AsNoTracking()
-                .OrderByDescending(t => t.IsBuiltIn).ThenBy(t => t.Name)
-                .ToListAsync(ct);
-
-            return templates.Select(ProjectTemplate).ToList();
+            return role;
         }
 
-        private static PermissionTemplateDto ProjectTemplate(PermissionTemplate template) => new()
+        /// <summary>
+        /// Whether the caller may write this set into a role, and whether the
+        /// set is one a role at this scope may hold.
+        /// <para>
+        /// <b>The excess rule, applied where it never had to be before.</b> A
+        /// template could only be edited by an administrator, who is exempt from
+        /// it; a role may be edited by a manager, and editing one changes what
+        /// other people hold. Without this, `role:manage` in an activity would be
+        /// a way to grant oneself anything by writing it into a role and linking
+        /// to it.
+        /// </para>
+        /// </summary>
+        private async Task RefuseARoleTheCallerCouldNotGrantAsync(
+            Guid? activityId, IReadOnlyList<string> wanted, CancellationToken ct)
         {
-            Id = Wire.Id(template.Id),
-            Name = template.Name,
-            Description = template.Description,
-            Permissions = Parse(template.Permissions),
-            IsBuiltIn = template.IsBuiltIn,
-        };
-
-        public async Task<PermissionTemplateDto> CreateTemplateAsync(
-            PermissionTemplateInputDto input, CancellationToken ct)
-        {
-            await permissions.RequireAsync(Permissions.TemplateManage, null, ct);
-
-            var name = input.Name?.Trim() ?? "";
-            if (name.Length == 0) throw new ValidationException("A name is required", "template.name.required");
-            if (await context.PermissionTemplates.AnyAsync(t => t.Name == name, ct))
-            {
-                throw new ConflictException($"A template named \"{name}\" already exists", "template.name.taken");
-            }
-
-            var unknown = Permissions.Unknown(input.Permissions);
+            var unknown = Permissions.Unknown(wanted);
             if (unknown.Count > 0)
             {
                 throw new ValidationException(
-                    "No such permission: " + string.Join(", ", unknown), "template.permission.unknown");
+                    "No such permission: " + string.Join(", ", unknown), "role.permission.unknown");
             }
 
-            var template = new PermissionTemplate
+            // The same reason an activity grant may not carry it: the key is only
+            // honoured at system scope, so a role scoped to one activity that
+            // held it would show a right that every check disagrees with.
+            if (activityId is not null && wanted.Contains(Permissions.SystemAdministrator))
+            {
+                throw new ValidationException(
+                    "system:administrator is installation-wide; a role belonging to an activity cannot carry it",
+                    "role.permission.scope");
+            }
+
+            var mine = await permissions.EffectiveAsync(activityId, ct);
+            if (mine.Contains(Permissions.SystemAdministrator)) return;
+
+            var excess = wanted.Where(p => !mine.Contains(p)).ToList();
+            if (excess.Count > 0)
+            {
+                throw new ForbiddenActionException(
+                    "Cannot put into a role permissions you do not hold: " + string.Join(", ", excess),
+                    "role.excess");
+            }
+        }
+
+        /// <summary>
+        /// Brings every grant pointing at this role back into agreement with it.
+        /// <para>
+        /// <b><see cref="Grant.IsSystem"/> is derived, and a role edit is the one
+        /// thing that can change it without touching the grant.</b> Adding a
+        /// staff key to the participant role makes every participant staff, which
+        /// decides who is counted in an activity and who appears in a ranking. A
+        /// board silently emptied by an edit somewhere else is exactly the kind of
+        /// failure a live role invites, so the recompute is not optional.
+        /// </para>
+        /// <para>
+        /// <b>It raises the flag and never lowers it</b>, because the column
+        /// holds two things: what the permissions imply, and a decision somebody
+        /// made by hand about this person — a jury member holding nothing but a
+        /// participant's keys is marked systemic on purpose. A role edit knows
+        /// the first and cannot see the second, so it enforces the direction that
+        /// matters and leaves the other where it was made. Clearing the flag
+        /// stays a per-grant act.
+        /// </para>
+        /// <para>
+        /// Only the rows whose answer actually moved are announced: an edit
+        /// reaching a hundred grants should not put a hundred events on the wire
+        /// to say that nothing about them changed.
+        /// </para>
+        /// </summary>
+        private async Task<IReadOnlyList<Grant>> RestateLinkedGrantsAsync(Role role, CancellationToken ct)
+        {
+            var linked = await context.Grants
+                .Include(g => g.Activity)
+                .Where(g => g.RoleId == role.Id && !g.IsSystem)
+                .ToListAsync(ct);
+
+            var moved = new List<Grant>();
+            foreach (var grant in linked)
+            {
+                if (!Permissions.IsStaff(Permissions.Effective(role.Permissions, grant.Permissions)))
+                {
+                    continue;
+                }
+
+                grant.IsSystem = true;
+                moved.Add(grant);
+            }
+
+            return moved;
+        }
+
+        public async Task<IReadOnlyList<RoleDto>> ListRolesAsync(Guid? activityId, CancellationToken ct)
+        {
+            // **Anywhere, not at the installation scope.** Every path that makes
+            // a manager writes an *activity* grant — the seeder,
+            // `ActivityService.CreateAsync` for whoever created it, the panel and
+            // LTI enrolment alike — so asking for this key with a null activity
+            // refused the Grants page and the Participants tab to every manager
+            // there is.
+            //
+            // `grant:update` answers too, because applying a role is the reason
+            // to read one, and reading discloses nothing: the excess rule still
+            // refuses to hand on a permission the caller does not hold. It is
+            // kept beside `role:read` rather than replaced by it, because the
+            // manager grants written before roles existed carry the second and
+            // not the first.
+            var mine = await permissions.AnywhereAsync(ct);
+            if (!mine.Contains(Permissions.RoleRead) && !mine.Contains(Permissions.GrantUpdate))
+            {
+                throw new AccessDeniedException(Permissions.RoleRead);
+            }
+
+            // The installation's roles, plus the asked-for activity's own. An
+            // activity's role is only ever grantable there, so listing every
+            // activity's would offer a manager roles they cannot use.
+            var roles = await context.PermissionRoles
+                .AsNoTracking()
+                .Include(r => r.Activity)
+                .Where(r => r.ActivityId == null || r.ActivityId == activityId)
+                .OrderByDescending(r => r.ActivityId == null)
+                .ThenByDescending(r => r.IsBuiltIn)
+                .ThenBy(r => r.Name)
+                .ToListAsync(ct);
+
+            var ids = roles.Select(r => r.Id).ToList();
+            var counts = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.RoleId != null && ids.Contains(g.RoleId!.Value))
+                .GroupBy(g => g.RoleId!.Value)
+                .Select(g => new { RoleId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.RoleId, g => g.Count, ct);
+
+            return [.. roles.Select(r => ProjectRole(r, counts.GetValueOrDefault(r.Id)))];
+        }
+
+        private static RoleDto ProjectRole(Role role, int grants) => new()
+        {
+            Id = Wire.Id(role.Id),
+            Name = role.Name,
+            Description = role.Description,
+            Permissions = Parse(role.Permissions),
+            IsBuiltIn = role.IsBuiltIn,
+            ActivityId = role.ActivityId is { } a ? Wire.Id(a) : null,
+            ActivityName = role.Activity?.Name,
+            Grants = grants,
+        };
+
+        /// <summary>
+        /// Whether a role of this name already exists at this scope. Scoped
+        /// rather than global, because two activities naming a role `jury` are
+        /// not in conflict — the database says the same, in two filtered indexes.
+        /// </summary>
+        private async Task RefuseADuplicateNameAsync(
+            string name, Guid? activityId, Guid? excluding, CancellationToken ct)
+        {
+            var taken = await context.PermissionRoles.AnyAsync(
+                r => r.Name == name && r.ActivityId == activityId && r.Id != excluding, ct);
+
+            if (taken)
+            {
+                throw new ConflictException($"A role named \"{name}\" already exists", "role.name.taken");
+            }
+        }
+
+        public async Task<RoleDto> CreateRoleAsync(RoleInputDto input, CancellationToken ct)
+        {
+            Guid? activityId = input.ActivityId is { } raw && Guid.TryParse(raw, out var parsed)
+                ? parsed
+                : null;
+
+            // At the scope the role will live in: `role:manage` at system scope
+            // writes the installation's roles, and held in an activity grant it
+            // writes that activity's. One key, and the scope is the whole of the
+            // difference between correcting one course and correcting all of them.
+            await permissions.RequireAsync(Permissions.RoleManage, activityId, ct);
+
+            if (activityId is { } scoped && !await context.Activities.AnyAsync(a => a.Id == scoped, ct))
+            {
+                throw new NotFoundException("Activity");
+            }
+
+            var name = input.Name?.Trim() ?? "";
+            if (name.Length == 0) throw new ValidationException("A name is required", "role.name.required");
+            await RefuseADuplicateNameAsync(name, activityId, null, ct);
+
+            var wanted = input.Permissions.Distinct().ToList();
+            await RefuseARoleTheCallerCouldNotGrantAsync(activityId, wanted, ct);
+
+            var role = new Role
             {
                 Name = name,
                 Description = input.Description,
-                Permissions = JsonSerializer.Serialize(input.Permissions.Distinct()),
+                ActivityId = activityId,
+                Permissions = JsonSerializer.Serialize(wanted),
                 IsBuiltIn = false,
             };
-            context.PermissionTemplates.Add(template);
+            context.PermissionRoles.Add(role);
             await context.SaveChangesAsync(ct);
-            var created = ProjectTemplate(template);
-            await AnnounceTemplateAsync(created, null, ct);
+
+            var created = ProjectRole(role, 0);
+            await AnnounceRoleAsync(created, null, ct);
             return created;
         }
 
-        public async Task<PermissionTemplateDto> UpdateTemplateAsync(
-            Guid id, PermissionTemplateInputDto input, CancellationToken ct)
+        /// <summary>
+        /// Rewrites a role, and with it what everybody pointing at it may do.
+        /// <para>
+        /// <b>This is the method the whole change exists for, and the one that
+        /// fails open.</b> Three things stand between it and an accident: the
+        /// scope it is authorised at, the excess rule, and the recompute of every
+        /// linked grant's staff flag. The count the panel shows before saving is
+        /// the fourth, and the only one a person sees.
+        /// </para>
+        /// </summary>
+        public async Task<RoleDto> UpdateRoleAsync(Guid id, RoleInputDto input, CancellationToken ct)
         {
-            await permissions.RequireAsync(Permissions.TemplateManage, null, ct);
+            var role = await context.PermissionRoles
+                .Include(r => r.Activity)
+                .FirstOrDefaultAsync(r => r.Id == id, ct)
+                ?? throw new NotFoundException("Role");
 
-            var template = await context.PermissionTemplates.FirstOrDefaultAsync(t => t.Id == id, ct)
-                ?? throw new NotFoundException("Permission template");
+            await permissions.RequireAsync(Permissions.RoleManage, role.ActivityId, ct);
 
-            var name = input.Name?.Trim() ?? "";
-            if (name.Length == 0) throw new ValidationException("A name is required", "template.name.required");
-            if (await context.PermissionTemplates.AnyAsync(t => t.Name == name && t.Id != id, ct))
-            {
-                throw new ConflictException($"A template named \"{name}\" already exists", "template.name.taken");
-            }
-
-            var unknown = Permissions.Unknown(input.Permissions);
-            if (unknown.Count > 0)
+            // **A role does not move between scopes.** Making a global role an
+            // activity's would strip it from every grant elsewhere that points at
+            // it; the other way would hand one activity's decisions to the whole
+            // installation. Either is a new role and a re-link, deliberately.
+            var asked = input.ActivityId is { } raw && Guid.TryParse(raw, out var parsed)
+                ? (Guid?)parsed
+                : null;
+            if (input.ActivityId is not null && asked != role.ActivityId)
             {
                 throw new ValidationException(
-                    "No such permission: " + string.Join(", ", unknown), "template.permission.unknown");
+                    "A role cannot be moved between the installation and an activity",
+                    "role.scope.fixed");
             }
 
+            var name = input.Name?.Trim() ?? "";
+            if (name.Length == 0) throw new ValidationException("A name is required", "role.name.required");
+            await RefuseADuplicateNameAsync(name, role.ActivityId, id, ct);
+
+            var wanted = input.Permissions.Distinct().ToList();
+            await RefuseARoleTheCallerCouldNotGrantAsync(role.ActivityId, wanted, ct);
+
             // **The other half of "unreachable through a mapping".** The provider
-            // service refuses a rule pointing at a template that carries
+            // service refuses a rule pointing at a role that carries
             // `system:administrator`; without this, the same end is reached by
             // writing the rule first and adding the permission afterwards.
-            if (input.Permissions.Contains(Permissions.SystemAdministrator))
+            if (wanted.Contains(Permissions.SystemAdministrator))
             {
-                var mapped = await ReferencingProvidersAsync(template.Name, ct);
+                var mapped = await ReferencingProvidersAsync(role.Name, ct);
                 if (mapped.Count > 0)
                 {
                     throw new ForbiddenActionException(
-                        $"\"{template.Name}\" is mapped by {string.Join(", ", mapped)}, "
+                        $"\"{role.Name}\" is mapped by {string.Join(", ", mapped)}, "
                             + $"and no claim may ever grant {Permissions.SystemAdministrator}",
-                        "template.mapped.administrator");
+                        "role.mapped.administrator");
                 }
             }
 
             // A rename has to reach the mapping rules that name it, or a provider
-            // would go on referring to a template that no longer answers and
-            // quietly grant nothing at the next sign-in. This is not the same as
-            // a grant following its template — a grant holds a copy and keeps it.
-            if (template.Name != name)
+            // would go on referring to a role that no longer answers and quietly
+            // grant nothing at the next sign-in. Grants need no such care: they
+            // hold the id.
+            if (role.Name != name)
             {
                 foreach (var rule in await context.IdentityProviderMappingRules
-                    .Where(r => r.TemplateName == template.Name).ToListAsync(ct))
+                    .Where(r => r.RoleName == role.Name).ToListAsync(ct))
                 {
-                    rule.TemplateName = name;
+                    rule.RoleName = name;
                 }
                 foreach (var provider in await context.IdentityProviders
-                    .Where(p => p.DefaultTemplateName == template.Name).ToListAsync(ct))
+                    .Where(p => p.DefaultRoleName == role.Name).ToListAsync(ct))
                 {
-                    provider.DefaultTemplateName = name;
+                    provider.DefaultRoleName = name;
                 }
             }
 
-            template.Name = name;
-            template.Description = input.Description;
-            template.Permissions = JsonSerializer.Serialize(input.Permissions.Distinct());
+            role.Name = name;
+            role.Description = input.Description;
+            role.Permissions = JsonSerializer.Serialize(wanted);
 
-            // Editing a template touches nobody who already used it: choosing one
-            // copies its permissions into the grant, and nothing points back
-            // here afterwards. That is the whole reason it is a template rather
-            // than a role.
+            var restated = await RestateLinkedGrantsAsync(role, ct);
             await context.SaveChangesAsync(ct);
-            var updated = ProjectTemplate(template);
-            await AnnounceTemplateAsync(updated, null, ct);
+
+            var linked = await context.Grants.CountAsync(g => g.RoleId == role.Id, ct);
+            var updated = ProjectRole(role, linked);
+            await AnnounceRoleAsync(updated, null, ct);
+
+            // The rows whose staff flag moved are announced individually as well:
+            // a participant count and a ranking change with them, and a screen
+            // reading either would otherwise go on showing yesterday's answer.
+            foreach (var grant in restated)
+            {
+                await AnnounceGrantAsync(
+                    grant.ActivityId, grant.UserId, new { grant = Projected(grant) }, ct);
+            }
+
             return updated;
         }
 
-        public async Task DeleteTemplateAsync(Guid id, CancellationToken ct)
+        public async Task DeleteRoleAsync(Guid id, CancellationToken ct)
         {
-            await permissions.RequireAsync(Permissions.TemplateManage, null, ct);
+            var role = await context.PermissionRoles.FirstOrDefaultAsync(r => r.Id == id, ct)
+                ?? throw new NotFoundException("Role");
 
-            var template = await context.PermissionTemplates.FirstOrDefaultAsync(t => t.Id == id, ct)
-                ?? throw new NotFoundException("Permission template");
+            await permissions.RequireAsync(Permissions.RoleManage, role.ActivityId, ct);
 
-            if (template.IsBuiltIn)
+            if (role.IsBuiltIn)
             {
-                throw new ConflictException("A built-in template cannot be deleted", "template.builtIn");
+                throw new ConflictException("A built-in role cannot be deleted", "role.builtIn");
             }
 
-            // **The one place something points at a template.** A grant does not
-            // — choosing one copies its permissions and nothing points back — but
-            // an identity provider's mapping rule names it, and the contribution
+            // **A grant points at it, so deleting one takes rights away.** The
+            // foreign key refuses this too, at the end of the statement; the
+            // refusal is written here so it arrives as a sentence rather than as
+            // a constraint violation.
+            var held = await context.Grants.CountAsync(g => g.RoleId == role.Id, ct);
+            if (held > 0)
+            {
+                throw new ConflictException(
+                    $"\"{role.Name}\" is held by {held} grant(s). Move them to another role first",
+                    "role.inUse");
+            }
+
+            // An identity provider's mapping rule names it, and the contribution
             // is re-derived from that name at every sign-in. Deleting it would
             // leave a rule granting nothing, silently, at the next sign-in.
-            var referencing = await ReferencingProvidersAsync(template.Name, ct);
+            var referencing = await ReferencingProvidersAsync(role.Name, ct);
             if (referencing.Count > 0)
             {
                 throw new ConflictException(
-                    $"\"{template.Name}\" is mapped by: {string.Join(", ", referencing)}",
-                    "template.mapped");
+                    $"\"{role.Name}\" is mapped by: {string.Join(", ", referencing)}",
+                    "role.mapped");
             }
 
-            var removedTemplate = Wire.Id(template.Id);
-            context.PermissionTemplates.Remove(template);
+            var removedRole = Wire.Id(role.Id);
+            context.PermissionRoles.Remove(role);
             await context.SaveChangesAsync(ct);
-            await AnnounceTemplateAsync(null, removedTemplate, ct);
+            await AnnounceRoleAsync(null, removedRole, ct);
         }
     }
 }

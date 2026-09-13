@@ -170,6 +170,10 @@ namespace AlgoJudge.Server.Services
             {
                 activity.RunnerTags = RunnerTags.Validated(runnerTags, "The activity's Runner tags");
             }
+            activity.ParticipantRoleId =
+                await EnrolmentRoleAsync(input.ParticipantRoleId, activity, activity.ParticipantRoleId, ct);
+            activity.ManagerRoleId =
+                await EnrolmentRoleAsync(input.ManagerRoleId, activity, activity.ManagerRoleId, ct);
 
             if (input.JoinPolicy is { } policy)
             {
@@ -607,6 +611,40 @@ namespace AlgoJudge.Server.Services
             {
                 throw new ConflictException("An archived activity accepts no changes", "activity.archived");
             }
+        }
+
+
+        /// <summary>
+        /// One of the activity's two default roles, as written by the panel.
+        /// <para>
+        /// Absent leaves it alone, an empty string clears it back to the shipped
+        /// role, and anything else has to name a role this activity may use — a
+        /// global one, or one of its own. Naming another activity's would let one
+        /// course decide what another's enrolments carry.
+        /// </para>
+        /// </summary>
+        private async Task<Guid?> EnrolmentRoleAsync(
+            string? asked, Activity activity, Guid? current, CancellationToken ct)
+        {
+            if (asked is null) return current;
+            if (asked.Length == 0) return null;
+
+            if (!Guid.TryParse(asked, out var id))
+            {
+                throw new ValidationException("That is not a role id", "activity.role.unknown");
+            }
+
+            var role = await context.PermissionRoles.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == id, ct)
+                ?? throw new ValidationException("No such role", "activity.role.unknown");
+
+            if (role.ActivityId is { } owner && owner != activity.Id)
+            {
+                throw new ValidationException(
+                    $"\"{role.Name}\" belongs to another activity", "activity.role.scope");
+            }
+
+            return role.Id;
         }
 
         private static JoinPolicy ParseJoinPolicy(string? value) => value switch

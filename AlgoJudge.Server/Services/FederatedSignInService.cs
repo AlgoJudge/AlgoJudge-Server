@@ -96,7 +96,7 @@ namespace AlgoJudge.Server.Services
                 changed = await WriteContributionAsync(provider, link.UserId, mapped.Permissions, ct);
                 answer = new FederatedSignIn(true, user, null);
             }
-            else if (provider.UnmappedBehavior == UnmappedBehavior.DefaultTemplate)
+            else if (provider.UnmappedBehavior == UnmappedBehavior.DefaultRole)
             {
                 var fallback = await DefaultPermissionsAsync(provider, ct);
                 changed = await WriteContributionAsync(provider, link.UserId, fallback, ct);
@@ -141,7 +141,7 @@ namespace AlgoJudge.Server.Services
         {
             var permissions = mapped.Any
                 ? mapped.Permissions
-                : provider.UnmappedBehavior == UnmappedBehavior.DefaultTemplate
+                : provider.UnmappedBehavior == UnmappedBehavior.DefaultRole
                     ? await DefaultPermissionsAsync(provider, ct)
                     : null;
 
@@ -309,7 +309,12 @@ namespace AlgoJudge.Server.Services
                     SourceProviderId = provider.Id,
                     Permissions = json,
                     IsSystem = Authorization.Permissions.IsStaff(ordered),
-                    CreatedFromTemplate = null,
+                    // **The one contribution that still holds a copy.** A claim
+                    // may match several mapping rules and this is the union of
+                    // every role they name, which a single link cannot say. It
+                    // loses nothing: the union is rewritten from those rules at
+                    // every sign-in, so a role edit reaches these people then.
+                    RoleId = null,
                 });
                 return true;
             }
@@ -336,11 +341,11 @@ namespace AlgoJudge.Server.Services
         private async Task<IReadOnlySet<string>> DefaultPermissionsAsync(
             IdentityProvider provider, CancellationToken ct)
         {
-            if (provider.DefaultTemplateName is null) return new HashSet<string>();
+            if (provider.DefaultRoleName is null) return new HashSet<string>();
 
-            var template = await context.PermissionTemplates
+            var template = await context.PermissionRoles
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Name == provider.DefaultTemplateName, ct);
+                .FirstOrDefaultAsync(t => t.Name == provider.DefaultRoleName, ct);
 
             if (template is null) return new HashSet<string>();
 

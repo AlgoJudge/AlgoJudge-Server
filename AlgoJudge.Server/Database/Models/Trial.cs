@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Database.Models
     /// </para>
     /// <para>
     /// Who may ask is <c>trial:run</c>, granted in an activity. It is absent
-    /// from the participant template by default, so an installation opens trials
+    /// from the participant role by default, so an installation opens trials
     /// to participants by a manager's decision in one activity rather than
     /// everywhere at once.
     /// </para>

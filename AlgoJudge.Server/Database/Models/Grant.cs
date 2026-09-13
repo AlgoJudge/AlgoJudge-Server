@@ -92,10 +92,38 @@ namespace AlgoJudge.Server.Database.Models
         public bool OverrideSystem { get; set; }
 
         /// <summary>
-        /// This user's own permissions, as a <c>jsonb</c> array of strings. Filled
-        /// in from a <see cref="PermissionTemplate"/> and then editable: "a
-        /// manager with the right to update something taken away" is this set
-        /// with that entry removed, not a second role layered over a first.
+        /// The <see cref="Role"/> this grant carries, or null for a grant that
+        /// holds its own set alone.
+        /// <para>
+        /// <b>A link, not a copy</b>: editing the role changes what this person
+        /// may do without anything touching this row. A grant made by hand out of
+        /// raw permissions still points at nothing, and so does every grant made
+        /// before roles existed — those keep their whole set in
+        /// <see cref="Permissions"/> and are not disturbed.
+        /// </para>
+        /// <para>
+        /// A provider's contribution also points at nothing, deliberately: a
+        /// claim may match several mapping rules and the contribution is the
+        /// union of what they name, which one link cannot say. It is live
+        /// already, by being rewritten at every sign-in.
+        /// </para>
+        /// </summary>
+        public Guid? RoleId { get; set; }
+        public Role? Role { get; set; }
+
+        /// <summary>
+        /// This grant's own permissions, as a <c>jsonb</c> array of strings.
+        /// <para>
+        /// With a <see cref="Role"/> linked these are <b>additions</b> to it, and
+        /// what somebody holds is the union of the two: giving one person one
+        /// extra key does not cut them off from the role's corrections. With no
+        /// role linked this is the whole set.
+        /// </para>
+        /// <para>
+        /// Nothing subtracts. "A manager without the right to update something"
+        /// is a role of their own, or their own set, and never a delta against
+        /// somebody else's.
+        /// </para>
         /// </summary>
         public string Permissions { get; set; } = "[]";
 
@@ -112,11 +140,16 @@ namespace AlgoJudge.Server.Database.Models
         public bool IsSystem { get; set; }
 
         /// <summary>
-        /// Which template it was created from. Informational, for the interface —
-        /// <b>not</b> a reference: once the set has been edited, the name
-        /// describes where it started, not what it is.
+        /// Which role a copied set started from. Informational, for the
+        /// interface — <b>not</b> a reference, and meaningless once
+        /// <see cref="RoleId"/> is set, which is why linking clears it.
+        /// <para>
+        /// What it is for is the grants that are copies: the ones edited before
+        /// roles existed, and the ones somebody deliberately fills in by hand. It
+        /// says where the set began, not what it is now.
+        /// </para>
         /// </summary>
-        public string? CreatedFromTemplate { get; set; }
+        public string? CopiedFromRoleName { get; set; }
 
         /// <summary>
         /// The group this person competes as in this activity, or null for

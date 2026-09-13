@@ -542,8 +542,53 @@ namespace AlgoJudge.Server.Services
             context.Activities.Add(copy);
             await context.SaveChangesAsync(ct);
 
+            // **The activity's own roles travel, and the two defaults follow
+            // them.** A copy whose participant role still pointed at the
+            // original's would put the new cohort under a set the old activity's
+            // manager goes on editing — one course quietly deciding another's.
+            // A global default is carried as it is: it belongs to nobody.
+            //
+            // After the save above, and in two more of its own: `Activities` and
+            // `Roles` point at each other, so nothing may create both ends at
+            // once. EF calls that a circular dependency and refuses it.
+            var own = await context.PermissionRoles
+                .AsNoTracking()
+                .Where(r => r.ActivityId == source.Id)
+                .ToListAsync(ct);
+
+            var moved = new Dictionary<Guid, Guid>();
+            foreach (var role in own)
+            {
+                var duplicate = new Role
+                {
+                    Name = role.Name,
+                    Description = role.Description,
+                    ActivityId = copy.Id,
+                    Permissions = role.Permissions,
+                    IsBuiltIn = false,
+                };
+                context.PermissionRoles.Add(duplicate);
+                moved[role.Id] = duplicate.Id;
+            }
+
+            if (moved.Count > 0) await context.SaveChangesAsync(ct);
+
+            copy.ParticipantRoleId = Followed(source.ParticipantRoleId, moved);
+            copy.ManagerRoleId = Followed(source.ManagerRoleId, moved);
+            if (copy.ParticipantRoleId is not null || copy.ManagerRoleId is not null)
+            {
+                await context.SaveChangesAsync(ct);
+            }
+
             return await ManagedAsync(copy, ct);
         }
+
+        /// <summary>
+        /// The copy's version of a role the source named: the duplicate where the
+        /// role belonged to the source, and the same row where it is global.
+        /// </summary>
+        private static Guid? Followed(Guid? chosen, Dictionary<Guid, Guid> moved) =>
+            chosen is { } id ? (moved.TryGetValue(id, out var copied) ? copied : id) : null;
 
         /// <summary>
         /// How far everything dated moves, as a function that leaves nulls alone.
@@ -689,16 +734,20 @@ namespace AlgoJudge.Server.Services
             // would need somebody else to grant them access to what they just
             // made — and `activity:update` is activity-scoped, so a system grant
             // to create does not carry.
-            context.Grants.Add(new Grant
+            // The shipped `manager` role, not this activity's own choice: the
+            // activity is being created, so it has none yet and could not have
+            // one — a role of its own is written afterwards, if at all.
+            var managerRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Manager, ct);
+            var manages = new Grant
             {
                 UserId = user.Id,
                 ActivityId = activity.Id,
-                Permissions = JsonSerializer.Serialize(Permissions.ManagerTemplate),
-                CreatedFromTemplate = "manager",
                 IsSystem = true,
                 State = GrantState.Active,
                 GrantedByUserId = user.Id,
-            });
+            };
+            DefaultRoles.Carry(manages, managerRole, Permissions.ManagerTemplate, DefaultRoles.Manager);
+            context.Grants.Add(manages);
 
             await context.SaveChangesAsync(ct);
             return await ManagedAsync(activity, ct);
@@ -776,17 +825,26 @@ namespace AlgoJudge.Server.Services
                     break;
             }
 
-            context.Grants.Add(new Grant
+            // **This activity's participant role**, which is the point of the
+            // setting: a manager decides once what joining their course means,
+            // and every later self-enrolment carries it without anybody choosing.
+            var role = await DefaultRoles.ForEnrolmentAsync(context, activity.Id, runsIt: false, ct);
+            var joined = new Grant
             {
                 UserId = user.Id,
                 ActivityId = activity.Id,
-                Permissions = JsonSerializer.Serialize(Permissions.ParticipantTemplate),
-                CreatedFromTemplate = "participant",
-                // A participant set carries nothing a participant does not hold,
-                // so this is false — and that is what puts them in the ranking.
-                IsSystem = false,
                 State = GrantState.Active,
-            });
+            };
+            DefaultRoles.Carry(joined, role, Permissions.ParticipantTemplate, DefaultRoles.Participant);
+
+            // Derived rather than assumed false. An ordinary participant role
+            // carries nothing a participant does not hold, which is what puts
+            // them in the ranking — but an activity may have chosen a role that
+            // does, and somebody counted as a competitor while holding staff keys
+            // is the one thing this flag exists to prevent.
+            joined.IsSystem = Permissions.IsStaff(
+                Permissions.Effective(role?.Permissions, joined.Permissions));
+            context.Grants.Add(joined);
             await context.SaveChangesAsync(ct);
 
             return await ProjectAsync(activity, ct);

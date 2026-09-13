@@ -43,7 +43,10 @@ public class ManagerTemplateTests(ServerFixture server)
         return (await context.Activities.AsNoTracking().FirstAsync(a => a.Slug == slug)).Id.ToString();
     }
 
-    /// <summary>A manager of one activity, granted the shipped template on it.</summary>
+    /// <summary>
+    /// A manager of one activity, pointed at the shipped role on it — the way
+    /// the panel enrols one, rather than by copying its permissions in.
+    /// </summary>
     private async Task<HttpClient> ManagerOfAsync(string slug)
     {
         var admin = await AdminAsync(server);
@@ -53,8 +56,8 @@ public class ManagerTemplateTests(ServerFixture server)
         {
             userId = id,
             activityId = await ActivityIdAsync(slug),
-            permissions = Permissions.ManagerTemplate,
-            createdFromTemplate = "manager",
+            permissions = Array.Empty<string>(),
+            roleId = await Build.RoleIdAsync(admin, "manager"),
         }));
 
         return client;

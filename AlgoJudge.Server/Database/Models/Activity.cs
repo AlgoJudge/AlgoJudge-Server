@@ -79,6 +79,31 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>Every group competing in this activity.</summary>
         public ICollection<ActivityGroup> Groups { get; set; } = new List<ActivityGroup>();
 
+        /// <summary>
+        /// The roles this activity's own enrolments link to — for somebody
+        /// taking part, and for somebody running it.
+        /// <para>
+        /// Null means the installation's built-in <c>participant</c> and
+        /// <c>manager</c>. Set, they are what self-enrolment, a manager enrolling
+        /// somebody by hand, a bulk of temporary accounts and an LTI launch all
+        /// hand out here. <b>Without them an activity's own role could be created
+        /// and never reach anybody</b>: every automatic enrolment would still
+        /// land on the installation-wide one.
+        /// </para>
+        /// <para>
+        /// Only a global role or one of this activity's own may be named, which
+        /// is checked where they are written rather than by the foreign key.
+        /// </para>
+        /// </summary>
+        public Guid? ParticipantRoleId { get; set; }
+        public Role? ParticipantRole { get; set; }
+
+        public Guid? ManagerRoleId { get; set; }
+        public Role? ManagerRole { get; set; }
+
+        /// <summary>Every role this activity owns.</summary>
+        public ICollection<Role> Roles { get; set; } = new List<Role>();
+
         public JoinPolicy JoinPolicy { get; set; } = JoinPolicy.Closed;
 
         /// <summary>
@@ -151,7 +176,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <para>
         /// This is the ordinary way an activity ends. Deleting one destroys
         /// submissions participants may still want to look back at, which is why
-        /// it is a separate permission and not in the manager template.
+        /// it is a separate permission and not in the manager role.
         /// </para>
         /// </summary>
         public DateTime? ArchivedAt { get; set; }

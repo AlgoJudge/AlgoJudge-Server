@@ -89,10 +89,10 @@ namespace AlgoJudge.Server.Services
             AccountUrl = p.AccountUrl,
             DeletionUrl = p.DeletionUrl,
             ClaimPath = p.ClaimPath,
-            UnmappedBehavior = p.UnmappedBehavior == UnmappedBehavior.DefaultTemplate
-                ? "defaultTemplate"
+            UnmappedBehavior = p.UnmappedBehavior == UnmappedBehavior.DefaultRole
+                ? "defaultRole"
                 : "deny",
-            DefaultTemplateName = p.DefaultTemplateName,
+            DefaultRoleName = p.DefaultRoleName,
             DeletionChannelEnabled = p.DeletionChannelEnabled,
             // Built from the same string the OIDC options are built from, so the
             // panel and the handler cannot disagree about it.
@@ -101,7 +101,7 @@ namespace AlgoJudge.Server.Services
             HasDeletionSecret = !string.IsNullOrEmpty(p.DeletionSecret),
             MappingRules = p.MappingRules
                 .OrderBy(r => r.ClaimValue, StringComparer.Ordinal)
-                .Select(r => new MappingRuleDto { ClaimValue = r.ClaimValue, TemplateName = r.TemplateName })
+                .Select(r => new MappingRuleDto { ClaimValue = r.ClaimValue, RoleName = r.RoleName })
                 .ToList(),
             LinkedAccounts = counts.TryGetValue(p.Id, out var n) ? n : 0,
             CreatedAt = Wire.At(p.CreatedAt),
@@ -225,9 +225,9 @@ namespace AlgoJudge.Server.Services
             provider.UnmappedBehavior = input.UnmappedBehavior switch
             {
                 null or "" or "deny" => UnmappedBehavior.Deny,
-                "defaultTemplate" => UnmappedBehavior.DefaultTemplate,
+                "defaultRole" => UnmappedBehavior.DefaultRole,
                 _ => throw new ValidationException(
-                    "unmappedBehavior is deny or defaultTemplate", "provider.unmappedBehavior.unknown"),
+                    "unmappedBehavior is deny or defaultRole", "provider.unmappedBehavior.unknown"),
             };
 
             provider.DeletionChannelEnabled = input.DeletionChannelEnabled;
@@ -240,11 +240,11 @@ namespace AlgoJudge.Server.Services
                     "provider.deletionSecret.required");
             }
 
-            var defaultTemplate = string.IsNullOrWhiteSpace(input.DefaultTemplateName)
+            var defaultTemplate = string.IsNullOrWhiteSpace(input.DefaultRoleName)
                 ? null
-                : input.DefaultTemplateName.Trim();
+                : input.DefaultRoleName.Trim();
 
-            if (provider.UnmappedBehavior == UnmappedBehavior.DefaultTemplate)
+            if (provider.UnmappedBehavior == UnmappedBehavior.DefaultRole)
             {
                 if (defaultTemplate is null)
                 {
@@ -259,7 +259,7 @@ namespace AlgoJudge.Server.Services
                 // in the row would be a setting that looks live and is not.
                 defaultTemplate = null;
             }
-            provider.DefaultTemplateName = defaultTemplate;
+            provider.DefaultRoleName = defaultTemplate;
 
             if (input.MappingRules is { } wanted)
             {
@@ -276,7 +276,7 @@ namespace AlgoJudge.Server.Services
             foreach (var rule in wanted)
             {
                 var value = (rule.ClaimValue ?? "").Trim();
-                var template = (rule.TemplateName ?? "").Trim();
+                var template = (rule.RoleName ?? "").Trim();
 
                 if (value.Length == 0)
                 {
@@ -295,7 +295,7 @@ namespace AlgoJudge.Server.Services
                 {
                     ProviderId = provider.Id,
                     ClaimValue = value,
-                    TemplateName = template,
+                    RoleName = template,
                 });
             }
 
@@ -324,7 +324,7 @@ namespace AlgoJudge.Server.Services
             {
                 if (existing.Remove(rule.ClaimValue, out var kept))
                 {
-                    kept.TemplateName = rule.TemplateName;
+                    kept.RoleName = rule.RoleName;
                 }
                 else
                 {
@@ -356,14 +356,17 @@ namespace AlgoJudge.Server.Services
         {
             if (templateName.Length == 0)
             {
-                throw new ValidationException("A rule needs a template", "provider.rule.template.required");
+                throw new ValidationException("A rule needs a role", "provider.rule.role.required");
             }
 
-            var template = await context.PermissionTemplates
+            // Global roles only, for the reason `ClaimMappingService` resolves
+            // only those: a mapping is the installation's, and an activity's role
+            // is not the installation's to hand out.
+            var template = await context.PermissionRoles
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Name == templateName, ct)
+                .FirstOrDefaultAsync(t => t.ActivityId == null && t.Name == templateName, ct)
                 ?? throw new ValidationException(
-                    $"No template named \"{templateName}\"", "provider.rule.template.unknown");
+                    $"No role named \"{templateName}\"", "provider.rule.role.unknown");
 
             var granted = Parse(template.Permissions);
 

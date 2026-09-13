@@ -167,12 +167,12 @@ public class FederatedSignInTests(ServerFixture server)
     }
 
     [Fact]
-    public async Task DefaultTemplate_admits_what_deny_would_have_refused()
+    public async Task DefaultRole_admits_what_deny_would_have_refused()
     {
         var provider = await NewProviderAsync("welcoming",
             rules: [("lecturers", "manager")],
-            unmapped: "defaultTemplate",
-            defaultTemplate: "participant");
+            unmapped: "defaultRole",
+            defaultRole: "participant");
 
         var outcome = await SignInAsync(provider, Token("welcoming-0001",
             ("groups", "nothing-we-map"), ("preferred_username", "a-newcomer")));
@@ -227,7 +227,7 @@ public class FederatedSignInTests(ServerFixture server)
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        var created = await admin.PostAsJsonAsync("/api/v1/permission-templates", new
+        var created = await admin.PostAsJsonAsync("/api/v1/roles", new
         {
             name = "innocent-at-first",
             permissions = new[] { "activity:read" },
@@ -239,20 +239,20 @@ public class FederatedSignInTests(ServerFixture server)
             rules: [("staff", "innocent-at-first")]);
 
         // The edit that would have smuggled it in.
-        var refused = await admin.PutAsJsonAsync($"/api/v1/permission-templates/{templateId}", new
+        var refused = await admin.PutAsJsonAsync($"/api/v1/roles/{templateId}", new
         {
             name = "innocent-at-first",
             permissions = new[] { "activity:read", "system:administrator" },
         });
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-        Assert.Equal("template.mapped.administrator",
+        Assert.Equal("role.mapped.administrator",
             (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
 
         // And the belt to that pair of braces: written past the API, it is still
         // stripped when the mapping is used.
         await using (var context = server.NewContext())
         {
-            var template = await context.PermissionTemplates.FirstAsync(t => t.Name == "innocent-at-first");
+            var template = await context.PermissionRoles.FirstAsync(t => t.Name == "innocent-at-first");
             template.Permissions = """["activity:read","system:administrator"]""";
             await context.SaveChangesAsync();
         }
@@ -697,7 +697,7 @@ public class FederatedSignInTests(ServerFixture server)
             clientId = "algojudge",
             claimPath = "groups",
             deletionUrl = "https://auth.example.invalid/if/flow/unenrolment/",
-            mappingRules = new[] { new { claimValue = "lecturers", templateName = "manager" } },
+            mappingRules = new[] { new { claimValue = "lecturers", roleName = "manager" } },
         }));
 
         var after = await person.GetFromJsonAsync<JsonElement>("/api/v1/account/links");
@@ -801,7 +801,7 @@ public class FederatedSignInTests(ServerFixture server)
         string slug,
         (string Value, string Template)[] rules,
         string? unmapped = null,
-        string? defaultTemplate = null,
+        string? defaultRole = null,
         string claimPath = "groups")
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
@@ -815,8 +815,8 @@ public class FederatedSignInTests(ServerFixture server)
             clientSecret = "secret-for-the-suite",
             claimPath,
             unmappedBehavior = unmapped,
-            defaultTemplateName = defaultTemplate,
-            mappingRules = rules.Select(r => new { claimValue = r.Value, templateName = r.Template }),
+            defaultRoleName = defaultRole,
+            mappingRules = rules.Select(r => new { claimValue = r.Value, roleName = r.Template }),
         });
         await Sign.Succeeded(created);
 

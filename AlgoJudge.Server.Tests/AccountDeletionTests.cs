@@ -335,7 +335,7 @@ public class AccountDeletionTests(ServerFixture server)
             deletionSecret = Secret,
             deletionChannelEnabled = true,
             claimPath = "groups",
-            mappingRules = new[] { new { claimValue = "students", templateName = "participant" } },
+            mappingRules = new[] { new { claimValue = "students", roleName = "participant" } },
         });
         await Sign.Succeeded(created);
 

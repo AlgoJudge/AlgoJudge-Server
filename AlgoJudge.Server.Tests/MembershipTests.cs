@@ -41,8 +41,8 @@ public class MembershipTests(ServerFixture server)
         await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
         {
             userId = id,
-            permissions = Permissions.ParticipantTemplate,
-            createdFromTemplate = "participant",
+            permissions = Array.Empty<string>(),
+            roleId = await Build.RoleIdAsync(admin, "participant"),
         }));
 
         return client;

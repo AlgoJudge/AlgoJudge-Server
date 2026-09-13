@@ -322,6 +322,7 @@ namespace AlgoJudge.Server.Services
                         ActivityId = grant.ActivityId,
                         GroupId = grant.GroupId,
                         SourceProviderId = grant.SourceProviderId,
+                        RoleId = grant.RoleId,
                         IsSystem = grant.IsSystem,
                         OverrideSystem = grant.OverrideSystem,
                         State = (int)grant.State,
@@ -542,6 +543,7 @@ namespace AlgoJudge.Server.Services
                     ActivityId = dropped.ActivityId,
                     GroupId = dropped.GroupId,
                     SourceProviderId = dropped.SourceProviderId,
+                    RoleId = dropped.RoleId,
                     IsSystem = dropped.IsSystem,
                     OverrideSystem = dropped.OverrideSystem,
                     State = (GrantState)dropped.State,
@@ -643,6 +645,13 @@ namespace AlgoJudge.Server.Services
         public Guid? ActivityId { get; init; }
         public Guid? GroupId { get; init; }
         public Guid? SourceProviderId { get; init; }
+
+        /// <summary>
+        /// The role the dropped grant pointed at. Without it an undo hands back
+        /// a grant holding only its own additions, which is a quiet demotion.
+        /// </summary>
+        public Guid? RoleId { get; init; }
+
         public bool IsSystem { get; init; }
         public bool OverrideSystem { get; init; }
         public int State { get; init; }
