@@ -55,10 +55,16 @@ public class ManagerTemplateTests(ServerFixture server)
     /// nothing else.
     /// </para>
     /// <para>
-    /// It is asserted against a zone that is <b>not</b> the default, because the
-    /// projection falls back to <c>UTC</c> when the activity is not loaded, and
-    /// a test written against the fallback would pass on a missing
-    /// <c>Include</c>.
+    /// Both rows are asserted against a zone that is <b>not</b> the default, and
+    /// by equality, because each projection falls back to <c>UTC</c> when the
+    /// activity is not loaded: a test written against the fallback would pass on
+    /// a missing <c>Include</c>. Submissions and questions are two projections
+    /// with two <c>Include</c>s, so one of them proves nothing about the other.
+    /// </para>
+    /// <para>
+    /// The question is created here rather than looked for. Reading whatever the
+    /// shared world happens to hold made the assertion skip its own body in a
+    /// filtered run, which reads exactly like passing.
     /// </para>
     /// </summary>
     [Fact]
@@ -80,18 +86,22 @@ public class ManagerTemplateTests(ServerFixture server)
             timeZone = "Asia/Kolkata",
         }));
 
-        await Build.SubmitAsync(await Build.ParticipantAsync(server, slug), slug, "print(1)\n");
+        var participant = await Build.ParticipantAsync(server, slug);
+        await Build.SubmitAsync(participant, slug, "print(1)\n");
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{slug}/questions", new
+        {
+            topic = "Zone",
+            body = "Czy limit dotyczy jednego testu?",
+        }));
 
         var page = await Build.GetAsync(admin, $"/api/v1/submissions?page=1&pageSize=50&activitySlug={slug}");
         var row = page.GetProperty("items").EnumerateArray().First();
         Assert.Equal("Asia/Kolkata", row.GetProperty("timeZone").GetString());
 
-        var questions = await Build.GetAsync(admin, "/api/v1/questions?page=1&pageSize=50");
-        foreach (var question in questions.GetProperty("items").EnumerateArray())
-        {
-            Assert.False(string.IsNullOrWhiteSpace(question.GetProperty("timeZone").GetString()),
-                "a question row names a zone");
-        }
+        var questions = await Build.GetAsync(
+            admin, $"/api/v1/questions?page=1&pageSize=50&activityId={await ActivityIdAsync(slug)}");
+        var asked = questions.GetProperty("items").EnumerateArray().Single();
+        Assert.Equal("Asia/Kolkata", asked.GetProperty("timeZone").GetString());
     }
 
     /// <summary>
