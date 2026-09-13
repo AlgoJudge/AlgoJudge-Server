@@ -25,6 +25,10 @@ namespace AlgoJudge.Server.Services
             PageQuery paging, Guid? activityId, string? state, CancellationToken ct);
         Task<IReadOnlyList<PrintoutActivityDto>> ActivitiesAsync(CancellationToken ct);
         Task<PrintoutSheetDto> SheetAsync(Guid printoutId, CancellationToken ct);
+        /// <summary>Take it to a printer, so nobody else prints the same page.</summary>
+        Task<ManagedPrintoutDto> ClaimAsync(Guid printoutId, CancellationToken ct);
+        /// <summary>Hand it back without printing it.</summary>
+        Task<ManagedPrintoutDto> ReleaseAsync(Guid printoutId, CancellationToken ct);
         Task<ManagedPrintoutDto> ResolveAsync(
             Guid printoutId, ResolvePrintoutInputDto input, CancellationToken ct);
 
@@ -217,6 +221,7 @@ namespace AlgoJudge.Server.Services
             // grant is on an activity by construction — that is the whole point
             // of the delegation — so asking `RequireAsync(key, null)` here would
             // answer 403 to exactly the people this screen is for.
+            var reader = await currentUser.RequireAsync(ct);
             var allowed = await permissions.ListScopeAsync(Permissions.PrintoutManage, activityId, ct);
 
             var query = context.Printouts
@@ -224,6 +229,7 @@ namespace AlgoJudge.Server.Services
                 .Include(x => x.Activity)
                 .Include(x => x.RequestedBy)
                 .Include(x => x.ResolvedBy)
+                .Include(x => x.ClaimedBy)
                 .Include(x => x.Group)
                 .AsQueryable();
 
@@ -249,7 +255,7 @@ namespace AlgoJudge.Server.Services
 
             return new PageDto<ManagedPrintoutDto>
             {
-                Items = rows.Select(ProjectManaged).ToList(),
+                Items = rows.Select(row => ProjectManaged(row, reader.Id)).ToList(),
                 Total = total,
                 Page = paging.Page,
                 PageSize = paging.PageSize,
@@ -286,6 +292,7 @@ namespace AlgoJudge.Server.Services
         public async Task<PrintoutSheetDto> SheetAsync(Guid printoutId, CancellationToken ct)
         {
             var printout = await LoadForOperatorAsync(printoutId, tracked: false, ct);
+            var operatorId = (await currentUser.RequireAsync(ct)).Id;
 
             string? source = null;
             if (printout.SourceDisposedAt is null && await SourceFileAsync(printout.Id, ct) is { } file)
@@ -299,12 +306,60 @@ namespace AlgoJudge.Server.Services
 
             return new PrintoutSheetDto
             {
-                Printout = ProjectManaged(printout),
+                Printout = ProjectManaged(printout, operatorId),
                 TimeZone = printout.Activity!.TimeZone,
                 ProblemSlug = assignment?.Slug,
                 ProblemName = assignment?.Problem?.Name,
                 Source = source,
             };
+        }
+
+        /// <summary>
+        /// Take a waiting row, or take one over.
+        /// <para>
+        /// **Taking over is allowed and is not a race.** Two people at one
+        /// printer see each other; what the state prevents is each of them
+        /// opening a sheet believing they are alone. Somebody who walked away
+        /// with a row is a person the other can ask, and refusing the take-over
+        /// would leave the page stuck until an administrator edited a row.
+        /// </para>
+        /// </summary>
+        public async Task<ManagedPrintoutDto> ClaimAsync(Guid printoutId, CancellationToken ct)
+        {
+            var printout = await LoadForOperatorAsync(printoutId, tracked: true, ct);
+            var user = await currentUser.RequireAsync(ct);
+
+            if (printout.State is PrintoutState.Printed or PrintoutState.Discarded)
+            {
+                throw new ConflictException("This request is already resolved", "printout.resolved");
+            }
+
+            printout.State = PrintoutState.Printing;
+            printout.ClaimedByUserId = user.Id;
+            printout.ClaimedAt = clock.GetUtcNow().UtcDateTime;
+            await context.SaveChangesAsync(ct);
+
+            await AnnounceAsync(printout, ct);
+            return ProjectManaged(printout, user.Id);
+        }
+
+        public async Task<ManagedPrintoutDto> ReleaseAsync(Guid printoutId, CancellationToken ct)
+        {
+            var printout = await LoadForOperatorAsync(printoutId, tracked: true, ct);
+            var user = await currentUser.RequireAsync(ct);
+
+            if (printout.State != PrintoutState.Printing)
+            {
+                throw new ConflictException("Nobody is printing this", "printout.notClaimed");
+            }
+
+            printout.State = PrintoutState.Requested;
+            printout.ClaimedByUserId = null;
+            printout.ClaimedAt = null;
+            await context.SaveChangesAsync(ct);
+
+            await AnnounceAsync(printout, ct);
+            return ProjectManaged(printout, user.Id);
         }
 
         public async Task<ManagedPrintoutDto> ResolveAsync(
@@ -321,13 +376,13 @@ namespace AlgoJudge.Server.Services
                     "Say whether it printed or was discarded", "printout.outcome.invalid"),
             };
 
-            if (printout.State != PrintoutState.Requested)
+            if (printout.State is PrintoutState.Printed or PrintoutState.Discarded)
             {
                 throw new ConflictException("This request is already resolved", "printout.resolved");
             }
 
             await DisposeAsync(printout, outcome, user.Id, ct);
-            return ProjectManaged(printout);
+            return ProjectManaged(printout, user.Id);
         }
 
         public async Task<int> DisposeOfEveryOutstandingAsync(string userId, CancellationToken ct)
@@ -417,6 +472,7 @@ namespace AlgoJudge.Server.Services
                 .Include(x => x.Activity)
                 .Include(x => x.RequestedBy)
                 .Include(x => x.ResolvedBy)
+                .Include(x => x.ClaimedBy)
                 .Include(x => x.Group)
                 .Include(x => x.Submission!).ThenInclude(s => s.SeriesProblem!).ThenInclude(sp => sp.Problem)
                 .AsQueryable();
@@ -451,6 +507,7 @@ namespace AlgoJudge.Server.Services
 
         private static string StateName(PrintoutState state) => state switch
         {
+            PrintoutState.Printing => "printing",
             PrintoutState.Printed => "printed",
             PrintoutState.Discarded => "discarded",
             _ => "requested",
@@ -467,7 +524,7 @@ namespace AlgoJudge.Server.Services
             ResolvedAt = Wire.At(x.ResolvedAt),
         };
 
-        private static ManagedPrintoutDto ProjectManaged(Printout x) => new()
+        private static ManagedPrintoutDto ProjectManaged(Printout x, string? readerId) => new()
         {
             Id = x.Id.ToString(),
             ActivityId = x.ActivityId.ToString(),
@@ -483,6 +540,9 @@ namespace AlgoJudge.Server.Services
             Sha256 = x.Sha256,
             State = StateName(x.State),
             RequestedAt = Wire.At(x.RequestedAt)!,
+            ClaimedByName = x.ClaimedBy is null ? null : Projections.DisplayName(x.ClaimedBy),
+            ClaimedAt = Wire.At(x.ClaimedAt),
+            ClaimedByMe = x.ClaimedByUserId is { } held && held == readerId,
             ResolvedAt = Wire.At(x.ResolvedAt),
             ResolvedByName = x.ResolvedBy is null ? null : Projections.DisplayName(x.ResolvedBy),
             SourceDisposedAt = Wire.At(x.SourceDisposedAt),

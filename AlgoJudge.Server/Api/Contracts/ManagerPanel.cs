@@ -867,9 +867,18 @@ namespace AlgoJudge.Server.Api.Contracts
         public required long SizeBytes { get; init; }
         /// <summary>Printed in the sheet's footer, so paper matches a row.</summary>
         public required string Sha256 { get; init; }
-        /// <summary>`requested` | `printed` | `discarded`.</summary>
+        /// <summary>`requested` | `printing` | `printed` | `discarded`.</summary>
         public required string State { get; init; }
         public required string RequestedAt { get; init; }
+        /// <summary>Who has it open at a printer, while somebody does.</summary>
+        public string? ClaimedByName { get; init; }
+        public string? ClaimedAt { get; init; }
+        /// <summary>
+        /// Whether the reader is the one holding it. What tells "you are
+        /// printing this" from "somebody else is", which is the whole point of
+        /// the state.
+        /// </summary>
+        public required bool ClaimedByMe { get; init; }
         public string? ResolvedAt { get; init; }
         public string? ResolvedByName { get; init; }
         /// <summary>Set once the source has gone. The row outlives the bytes.</summary>

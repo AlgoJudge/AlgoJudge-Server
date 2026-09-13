@@ -70,6 +70,13 @@ namespace AlgoJudge.Server.Database.Models
 
         public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Who took it to a printer, and when. Cleared when they hand it back.
+        /// </summary>
+        public string? ClaimedByUserId { get; set; }
+        public User? ClaimedBy { get; set; }
+        public DateTime? ClaimedAt { get; set; }
+
         public DateTime? ResolvedAt { get; set; }
         public string? ResolvedByUserId { get; set; }
         public User? ResolvedBy { get; set; }

@@ -250,6 +250,29 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>
+        /// Take it to a printer, so nobody else prints the same page.
+        /// <para>
+        /// Called before the sheet is opened. Taking over a row somebody else
+        /// holds is allowed: two people at one printer can see each other, and
+        /// refusing would strand the page behind whoever walked away.
+        /// </para>
+        /// </summary>
+        [HttpPost("{id:guid}/claim")]
+        [ProducesResponseType<ManagedPrintoutDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<ManagedPrintoutDto> Claim(Guid id, CancellationToken ct) =>
+            printouts.ClaimAsync(id, ct);
+
+        /// <summary>Hand it back to the queue without printing it.</summary>
+        [HttpPost("{id:guid}/release")]
+        [ProducesResponseType<ManagedPrintoutDto>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
+        public Task<ManagedPrintoutDto> Release(Guid id, CancellationToken ct) =>
+            printouts.ReleaseAsync(id, ct);
+
+        /// <summary>
         /// It printed, or it did not. Either way the source goes.
         /// </summary>
         [HttpPost("{id:guid}/resolve")]

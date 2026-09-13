@@ -122,6 +122,21 @@ namespace AlgoJudge.Server.Database.Models
         Requested = 0,
         Printed = 1,
         Discarded = 2,
+        /// <summary>
+        /// Somebody has it open at a printer.
+        /// <para>
+        /// **Appended rather than ordered**, because the three above are already
+        /// in a database. It exists so two people working one queue do not print
+        /// the same page twice: taking a row out of <c>Requested</c> is what
+        /// makes it visibly somebody's.
+        /// </para>
+        /// <para>
+        /// Not a lease. Nothing expires it, because a queue is worked by people
+        /// in a room and the one who walked away is somebody the other can see —
+        /// taking it over is a decision, not a timeout.
+        /// </para>
+        /// </summary>
+        Printing = 3,
     }
 
     /// <summary>
