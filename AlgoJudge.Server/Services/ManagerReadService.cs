@@ -19,8 +19,7 @@ namespace AlgoJudge.Server.Services
     public interface IManagerReadService
     {
         Task<PageDto<ManagedSubmissionDto>> ListSubmissionsAsync(
-            PageQuery paging, Guid? activityId, Guid? seriesId, Guid? assignmentId,
-            string? userId, string? state, string? verdict, string? search, CancellationToken ct);
+            PageQuery paging, SubmissionQuery filter, CancellationToken ct);
         Task<ManagedSubmissionDetailDto> GetSubmissionAsync(Guid id, CancellationToken ct);
         Task<ManagedSubmissionDto> RejudgeAsync(Guid submissionId, CancellationToken ct);
         Task<int> RejudgeAssignmentAsync(Guid assignmentId, CancellationToken ct);
@@ -40,7 +39,7 @@ namespace AlgoJudge.Server.Services
         Task DeleteAnnouncementAsync(Guid id, CancellationToken ct);
 
         Task<PageDto<ManagedRunnerDto>> ListRunnersAsync(
-            PageQuery paging, string? state, string? search, CancellationToken ct);
+            PageQuery paging, IReadOnlyList<RunnerState>? states, string? search, CancellationToken ct);
         Task<ManagedRunnerDto> ApproveRunnerAsync(Guid id, CancellationToken ct);
         Task<ManagedRunnerDto> RevokeRunnerAsync(Guid id, string? reason, CancellationToken ct);
         Task<ManagedRunnerDto> SetTagsAsync(Guid id, IReadOnlyList<string> tags, CancellationToken ct);
@@ -108,8 +107,7 @@ namespace AlgoJudge.Server.Services
         // ── submissions ─────────────────────────────────────────────────────
 
         public async Task<PageDto<ManagedSubmissionDto>> ListSubmissionsAsync(
-            PageQuery paging, Guid? activityId, Guid? seriesId, Guid? assignmentId,
-            string? userId, string? state, string? verdict, string? search, CancellationToken ct)
+            PageQuery paging, SubmissionQuery filter, CancellationToken ct)
         {
             // **Required only where the caller named an activity.** Without one
             // the question is "everything I may read", and the answer to that is
@@ -119,7 +117,7 @@ namespace AlgoJudge.Server.Services
             // contributes nothing to a question asked with no activity in it.
             // That is the panel's unfiltered list, so the screen was unreachable
             // for exactly the people it is for.
-            var allowed = await permissions.ListScopeAsync(Permissions.SubmissionReadAll, activityId, ct);
+            var allowed = await permissions.ListScopeAsync(Permissions.SubmissionReadAll, filter.ActivityId, ct);
 
             var query = context.Submissions
                 .AsNoTracking()
@@ -132,7 +130,7 @@ namespace AlgoJudge.Server.Services
 
             // Narrowed to the activities the caller may read submissions in: a
             // manager of one course must not see another's.
-            if (activityId is { } scoped)
+            if (filter.ActivityId is { } scoped)
             {
                 query = query.Where(s => s.SeriesProblem!.ActivityId == scoped);
             }
@@ -142,67 +140,53 @@ namespace AlgoJudge.Server.Services
                 query = query.Where(s => ids.Contains(s.SeriesProblem!.ActivityId));
             }
 
-            if (seriesId is { } series) query = query.Where(s => s.SeriesProblem!.SeriesId == series);
-            if (assignmentId is { } assignment) query = query.Where(s => s.SeriesProblemId == assignment);
+            // **Null is every, empty is nothing** — the rule `Filter` applies on
+            // the way in. Words this Server has no name for narrow to nothing
+            // rather than to everything, because a filter it cannot honour must
+            // never widen what it answers with.
+            if (filter.SeriesIds is not null)
+            {
+                var rounds = filter.SeriesIds.ToList();
+                query = rounds.Count == 0
+                    ? query.Where(s => false)
+                    : query.Where(s => rounds.Contains(s.SeriesProblem!.SeriesId));
+            }
 
-            if (userId is not null)
+            if (filter.AssignmentIds is not null)
+            {
+                var assignments = filter.AssignmentIds.ToList();
+                query = assignments.Count == 0
+                    ? query.Where(s => false)
+                    : query.Where(s => assignments.Contains(s.SeriesProblemId));
+            }
+
+            if (filter.UserIds is not null)
             {
                 // A filter naming somebody is an authorization surface, not a
                 // convenience: it is already inside `submission:read:all`, so
-                // the narrowing above is what makes it safe.
-                query = query.Where(s => s.UserId == userId);
+                // the narrowing above is what makes it safe. Several names are
+                // several people and no wider a question than one.
+                var people = filter.UserIds.ToList();
+                query = people.Count == 0
+                    ? query.Where(s => false)
+                    : query.Where(s => people.Contains(s.UserId));
             }
 
-            if (!string.IsNullOrWhiteSpace(search))
+            if (!string.IsNullOrWhiteSpace(filter.Search))
             {
-                var needle = search.Trim().ToLower();
+                var needle = filter.Search.Trim().ToLower();
                 query = query.Where(s =>
                     s.SeriesProblem!.Slug.ToLower().Contains(needle)
                     || s.User!.UserName!.ToLower().Contains(needle));
             }
 
-            // **State and verdict are the newest attempt's, and they narrow the
-            // query rather than the page.** They were applied after paging until
-            // 2026-09-08, which meant a filter answered with whichever matches
-            // happened to fall on the page asked for: a single match sitting
-            // beyond the first page left that page empty, and `total` counted
-            // rows the filter would have removed, so the pager offered pages
-            // that were empty by construction.
-            //
-            // The subquery makes the same choice `Scoring.Current` does — the
-            // highest attempt number — and the two must not drift apart, or a
-            // row would be filtered on one attempt and rendered from another.
-            if (state is not null)
-            {
-                var wanted = state switch
-                {
-                    "queued" => EvaluationJobState.Queued,
-                    "running" => EvaluationJobState.Running,
-                    "completed" => EvaluationJobState.Completed,
-                    "failed" => EvaluationJobState.Failed,
-                    "cancelled" => EvaluationJobState.Cancelled,
-                    "superseded" => EvaluationJobState.Superseded,
-                    _ => (EvaluationJobState?)null,
-                };
-
-                // A submission with no job at all reads as queued, which is what
-                // `Project` reports for one; a state nothing can be in matches
-                // nothing rather than being read as the default.
-                query = wanted is { } value
-                    ? query.Where(s => (s.Jobs
-                        .OrderByDescending(j => j.Attempt)
-                        .Select(j => (EvaluationJobState?)j.State)
-                        .FirstOrDefault() ?? EvaluationJobState.Queued) == value)
-                    : query.Where(s => false);
-            }
-
-            if (verdict is not null)
-            {
-                query = query.Where(s => s.Jobs
-                    .OrderByDescending(j => j.Attempt)
-                    .Select(j => j.Result!.Verdict)
-                    .FirstOrDefault() == verdict);
-            }
+            // State and verdict are the newest attempt's, and they live in
+            // `CurrentAttempt` — beside `Scoring.Current`, which makes the same
+            // choice on a loaded row. Keeping the subquery here made it the
+            // second copy of that decision, and the participant's own list was
+            // about to want a third.
+            if (filter.States is not null) query = query.WithState(filter.States);
+            if (filter.Verdicts is not null) query = query.WithVerdict(filter.Verdicts);
 
             var total = await query.CountAsync(ct);
             var page = await query
@@ -792,21 +776,22 @@ namespace AlgoJudge.Server.Services
         // ── runners ─────────────────────────────────────────────────────────
 
         public async Task<PageDto<ManagedRunnerDto>> ListRunnersAsync(
-            PageQuery paging, string? state, string? search, CancellationToken ct)
+            PageQuery paging, IReadOnlyList<RunnerState>? states, string? search, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.RunnerRead, null, ct);
 
             var query = context.Runners.AsNoTracking().AsQueryable();
 
-            if (state is not null)
+            // A state this Server cannot read answers with nothing, not with the
+            // unapproved. The arm below fell back to `PendingApproval`, so
+            // `?state=nonsense` quietly answered a question nobody had asked —
+            // and an operator reading that list had no way to tell.
+            if (states is not null)
             {
-                var wanted = state switch
-                {
-                    "approved" => RunnerState.Approved,
-                    "revoked" => RunnerState.Revoked,
-                    _ => RunnerState.PendingApproval,
-                };
-                query = query.Where(r => r.State == wanted);
+                var wanted = states.ToList();
+                query = wanted.Count == 0
+                    ? query.Where(r => false)
+                    : query.Where(r => wanted.Contains(r.State));
             }
 
             if (!string.IsNullOrWhiteSpace(search))

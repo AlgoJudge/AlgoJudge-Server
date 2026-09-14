@@ -64,4 +64,35 @@ namespace AlgoJudge.Server.Services.Models
         /// </summary>
         public int Skip => (int)Math.Min((long)(Page - 1) * PageSize, int.MaxValue);
     }
+
+    /// <summary>
+    /// What narrows the manager's submissions list.
+    /// <para>
+    /// A record rather than eight more positional parameters. Two of the pairs
+    /// share a type and sit next to each other — rounds and assignments are both
+    /// <c>IReadOnlyList&lt;Guid&gt;?</c>, people and verdicts both
+    /// <c>IReadOnlyList&lt;string&gt;?</c> — and a transposed pair compiles
+    /// silently and filters the wrong column.
+    /// </para>
+    /// <para>
+    /// <b><see cref="ActivityId"/> is singular and stays singular.</b> It is the
+    /// scope the permission is asked at, not a filter: <c>ListScopeAsync</c>
+    /// takes it, and answering for several activities at once would be a new
+    /// authorization shape rather than a wider question.
+    /// </para>
+    /// <para>
+    /// Everywhere else <b>null is every and empty is nothing</b>, which is the
+    /// rule <c>Filter</c> establishes on the way in.
+    /// </para>
+    /// </summary>
+    public record SubmissionQuery
+    {
+        public Guid? ActivityId { get; init; }
+        public IReadOnlyList<Guid>? SeriesIds { get; init; }
+        public IReadOnlyList<Guid>? AssignmentIds { get; init; }
+        public IReadOnlyList<string>? UserIds { get; init; }
+        public IReadOnlyList<Database.Models.EvaluationJobState>? States { get; init; }
+        public IReadOnlyList<string>? Verdicts { get; init; }
+        public string? Search { get; init; }
+    }
 }

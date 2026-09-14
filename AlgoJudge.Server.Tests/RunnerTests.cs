@@ -983,4 +983,42 @@ public class RunnerTests(ServerFixture server)
             Assert.True(approved.TryGetProperty(member, out _), $"the row is missing {member}");
         }
     }
+
+    /// <summary>
+    /// <b>A state this Server cannot read shows nothing, not the unapproved.</b>
+    /// <para>
+    /// The parser behind this filter had no failing arm: anything it did not
+    /// recognise fell through to <c>PendingApproval</c>, so `?state=nonsense`
+    /// answered a question nobody had asked — and answered it with the one list
+    /// an operator is most likely to act on. The test needs a pending Runner to
+    /// exist, because without one the wrong answer and the right one are both
+    /// empty.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_runner_state_the_Server_cannot_read_shows_nothing_rather_than_the_unapproved()
+    {
+        var generator = new Ed25519KeyPairGenerator();
+        generator.Init(new Ed25519KeyGenerationParameters(new SecureRandom()));
+        var pub = Convert.ToBase64String(
+            ((Ed25519PublicKeyParameters)generator.GenerateKeyPair().Public).GetEncoded());
+
+        await Sign.Succeeded(await server.CreateClient().PostAsJsonAsync("/api/v1/runner/register", new
+        {
+            name = "waiting-for-approval",
+            product = "AlgoJudge-Runner-Stub",
+            version = "0.0.1",
+            publicKey = pub,
+            problemTypes = new[] { "standard-io@1" },
+        }));
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var pending = await Build.GetAsync(admin, "/api/v1/runners?page=1&pageSize=100&state=pendingApproval");
+        Assert.NotEqual(0, pending.GetProperty("total").GetInt32());
+
+        var nonsense = await Build.GetAsync(admin, "/api/v1/runners?page=1&pageSize=100&state=nonsense");
+        Assert.Empty(nonsense.GetProperty("items").EnumerateArray());
+        Assert.Equal(0, nonsense.GetProperty("total").GetInt32());
+    }
 }

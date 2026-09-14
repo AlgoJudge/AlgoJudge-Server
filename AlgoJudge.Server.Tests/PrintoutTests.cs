@@ -679,4 +679,53 @@ public class PrintoutTests(ServerFixture server)
         var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("printout.tooMany", problem.GetProperty("code").GetString());
     }
+
+    // -- narrowing the queue -------------------------------------------------
+    //
+    // `ParseState` had arms for requested, printed and discarded, and none for
+    // `printing` — a state this queue emits, because taking a row is what makes
+    // it visibly somebody's. An unreadable word skipped the filter entirely, so
+    // the one question an operator asks while standing at a printer answered
+    // with the whole queue. The reader now sits beside the writer in
+    // `Projections`, and `FilterVocabularyTests` walks the enum.
+
+    [Fact]
+    public async Task A_queue_narrowed_to_what_is_at_a_printer_shows_only_that()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+
+        await Sign.Succeeded(await AskAsync(await Build.ParticipantAsync(server, slug), slug));
+        await Sign.Succeeded(await AskAsync(await Build.ParticipantAsync(server, slug), slug, "print(2)\n"));
+
+        var printer = await OperatorOfAsync(slug);
+        var taken = await PrintoutInAsync(slug);
+        await Build.PostAsync(printer, $"/api/v1/printouts/{taken}/claim", new { });
+
+        var atAPrinter = await Build.GetAsync(printer, "/api/v1/printouts?page=1&pageSize=100&state=printing");
+
+        var row = Assert.Single(atAPrinter.GetProperty("items").EnumerateArray());
+        Assert.Equal(taken.ToString(), row.GetProperty("id").GetString());
+        Assert.Equal(1, atAPrinter.GetProperty("total").GetInt32());
+
+        // And two states answer with both, which is the whole queue here.
+        var either = await Build.GetAsync(
+            printer, "/api/v1/printouts?page=1&pageSize=100&state=printing&state=requested");
+
+        Assert.Equal(2, either.GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task A_printout_state_the_Server_cannot_read_shows_nothing_rather_than_everything()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+        await Sign.Succeeded(await AskAsync(await Build.ParticipantAsync(server, slug), slug));
+
+        var printer = await OperatorOfAsync(slug);
+        var page = await Build.GetAsync(printer, "/api/v1/printouts?page=1&pageSize=100&state=nonsense");
+
+        Assert.Empty(page.GetProperty("items").EnumerateArray());
+        Assert.Equal(0, page.GetProperty("total").GetInt32());
+    }
 }

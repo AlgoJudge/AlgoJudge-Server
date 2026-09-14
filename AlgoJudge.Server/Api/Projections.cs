@@ -102,6 +102,56 @@ namespace AlgoJudge.Server.Api
             _ => "pendingApproval",
         };
 
+        public static string Wire(PrintoutState s) => s switch
+        {
+            PrintoutState.Printing => "printing",
+            PrintoutState.Printed => "printed",
+            PrintoutState.Discarded => "discarded",
+            _ => "requested",
+        };
+
+        // -- and back ---------------------------------------------------------
+        //
+        // One reader per enum, beside the writer it has to agree with.
+        //
+        // `PrintoutService` kept its own parser three files from the function
+        // that writes the value, and the parser had no arm for `Printing` — a
+        // state this Server emits and could not read back. Asking the queue for
+        // what is at a printer returned the entire queue, because an unreadable
+        // word was treated as no filter at all. Side by side, a state added to
+        // an enum is a hole a reviewer sees rather than one a filter discovers.
+
+        public static IReadOnlyList<EvaluationJobState>? JobStates(string[]? raw) =>
+            Filter.Of(raw, word => word.ToLowerInvariant() switch
+            {
+                "queued" => EvaluationJobState.Queued,
+                "running" => EvaluationJobState.Running,
+                "completed" => EvaluationJobState.Completed,
+                "failed" => EvaluationJobState.Failed,
+                "cancelled" => EvaluationJobState.Cancelled,
+                "superseded" => EvaluationJobState.Superseded,
+                _ => (EvaluationJobState?)null,
+            });
+
+        public static IReadOnlyList<PrintoutState>? PrintoutStates(string[]? raw) =>
+            Filter.Of(raw, word => word.ToLowerInvariant() switch
+            {
+                "requested" => PrintoutState.Requested,
+                "printing" => PrintoutState.Printing,
+                "printed" => PrintoutState.Printed,
+                "discarded" => PrintoutState.Discarded,
+                _ => (PrintoutState?)null,
+            });
+
+        public static IReadOnlyList<RunnerState>? RunnerStates(string[]? raw) =>
+            Filter.Of(raw, word => word.ToLowerInvariant() switch
+            {
+                "pendingapproval" => RunnerState.PendingApproval,
+                "approved" => RunnerState.Approved,
+                "revoked" => RunnerState.Revoked,
+                _ => (RunnerState?)null,
+            });
+
         // ── people ────────────────────────────────────────────────────────────
 
         /// <summary>

@@ -215,4 +215,34 @@ public class FilteredListingTests(ServerFixture server)
         Assert.Empty(page.GetProperty("items").EnumerateArray());
         Assert.Equal(0, page.GetProperty("total").GetInt32());
     }
+
+    /// <summary>
+    /// <b>A verdict is one string however many commas are in it.</b>
+    /// <para>
+    /// The closed vocabularies beside it are comma-separated, so that every
+    /// address anybody has pasted into a message keeps working. This one cannot
+    /// be: the Server stores a verdict and never parses it, so that a problem
+    /// type may invent one without a Server release — and choosing a separator
+    /// for it would be parsing it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_verdict_carrying_a_comma_is_one_verdict()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var admin = await AdminAsync(server);
+
+        var wanted = await JudgedAsync(participant, slug, "Wrong answer, test 3");
+        await JudgedAsync(participant, slug, "Accepted");
+
+        var activityId = await ActivityIdAsync(slug);
+        var page = await Build.GetAsync(
+            admin,
+            $"/api/v1/submissions?activityId={activityId}&verdict=Wrong%20answer%2C%20test%203");
+
+        var row = Assert.Single(page.GetProperty("items").EnumerateArray());
+        Assert.Equal(wanted, row.GetProperty("id").GetString());
+        Assert.Equal(1, page.GetProperty("total").GetInt32());
+    }
 }

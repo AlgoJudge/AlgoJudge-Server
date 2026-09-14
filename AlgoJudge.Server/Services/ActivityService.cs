@@ -12,7 +12,9 @@ namespace AlgoJudge.Server.Services
 {
     public interface IActivityService
     {
-        Task<PageDto<ActivityDto>> ListAsync(PageQuery paging, string[]? states, CancellationToken ct);
+        Task<PageDto<ActivityDto>> ListAsync(
+            PageQuery paging, IReadOnlyList<string>? states, IReadOnlyList<string>? types,
+            CancellationToken ct);
         Task<ActivityDto> GetAsync(string idOrSlug, CancellationToken ct);
         Task<PageDto<ManagedActivityDto>> ListManagedAsync(PageQuery paging, string? search, bool includeArchived, CancellationToken ct);
         Task<ManagedActivityDto> GetManagedAsync(string idOrSlug, CancellationToken ct);
@@ -121,7 +123,8 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         public async Task<PageDto<ActivityDto>> ListAsync(
-            PageQuery paging, string[]? states, CancellationToken ct)
+            PageQuery paging, IReadOnlyList<string>? states, IReadOnlyList<string>? types,
+            CancellationToken ct)
         {
             var memberships = await MembershipsAsync(ct);
             var now = clock.GetUtcNow().UtcDateTime;
@@ -142,10 +145,27 @@ namespace AlgoJudge.Server.Services
                     || (!a.Unlisted && a.JoinPolicy != JoinPolicy.Closed))
                 .ToList();
 
-            if (states is { Length: > 0 })
+            // **Null is every, empty is nothing.** Words this product has no name
+            // for narrow to nothing rather than to everything: a filter that
+            // cannot be honoured must not widen what it answers with.
+            if (states is not null)
             {
                 var wanted = states.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 visible = visible.Where(a => wanted.Contains(Projections.ActivityState(a, now))).ToList();
+            }
+
+            // **The name, not the whole discriminator.** `Activity.Type` is
+            // `name@version` and the filter offers `contest`, so a literal
+            // comparison would match nothing at all — which is worse than the
+            // dead parameter it replaces, because the screen would look as
+            // though it were working. It is also what has to keep being true the
+            // day somebody publishes `contest@2`. The Client applies the same
+            // rule twice already: its fake here, and `typeName` when it picks an
+            // icon.
+            if (types is not null)
+            {
+                var wanted = types.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                visible = visible.Where(a => wanted.Contains(a.Type.Split('@')[0])).ToList();
             }
 
             // The decided default order, with a unique tiebreaker: without one,

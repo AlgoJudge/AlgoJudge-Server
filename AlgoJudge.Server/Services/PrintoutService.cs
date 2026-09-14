@@ -22,7 +22,8 @@ namespace AlgoJudge.Server.Services
 
         // The operator's half.
         Task<PageDto<ManagedPrintoutDto>> ListAsync(
-            PageQuery paging, Guid? activityId, string? state, CancellationToken ct);
+            PageQuery paging, Guid? activityId, IReadOnlyList<PrintoutState>? states,
+            CancellationToken ct);
         Task<IReadOnlyList<PrintoutActivityDto>> ActivitiesAsync(CancellationToken ct);
         Task<PrintoutSheetDto> SheetAsync(Guid printoutId, CancellationToken ct);
         /// <summary>Take it to a printer, so nobody else prints the same page.</summary>
@@ -229,7 +230,8 @@ namespace AlgoJudge.Server.Services
         // ── The operator's half ───────────────────────────────────────────────
 
         public async Task<PageDto<ManagedPrintoutDto>> ListAsync(
-            PageQuery paging, Guid? activityId, string? state, CancellationToken ct)
+            PageQuery paging, Guid? activityId, IReadOnlyList<PrintoutState>? states,
+            CancellationToken ct)
         {
             // **Narrowed, never required at no scope.** The printer operator's
             // grant is on an activity by construction — that is the whole point
@@ -257,7 +259,17 @@ namespace AlgoJudge.Server.Services
                 query = query.Where(x => ids.Contains(x.ActivityId));
             }
 
-            if (ParseState(state) is { } wanted) query = query.Where(x => x.State == wanted);
+            // **A state this Server cannot read answers with nothing.** This line
+            // skipped the filter entirely when the word did not parse, and the
+            // parser below had no arm for `printing` — a state the queue itself
+            // emits — so asking what was at a printer returned the whole queue.
+            if (states is not null)
+            {
+                var wanted = states.ToList();
+                query = wanted.Count == 0
+                    ? query.Where(x => false)
+                    : query.Where(x => wanted.Contains(x.State));
+            }
 
             var total = await query.CountAsync(ct);
             var rows = await query
@@ -510,30 +522,13 @@ namespace AlgoJudge.Server.Services
             return fileId is { } id ? await files.FindAsync(id, ct) : null;
         }
 
-        private static PrintoutState? ParseState(string? state) =>
-            (state ?? "").Trim().ToLowerInvariant() switch
-            {
-                "requested" => PrintoutState.Requested,
-                "printed" => PrintoutState.Printed,
-                "discarded" => PrintoutState.Discarded,
-                _ => null,
-            };
-
-        private static string StateName(PrintoutState state) => state switch
-        {
-            PrintoutState.Printing => "printing",
-            PrintoutState.Printed => "printed",
-            PrintoutState.Discarded => "discarded",
-            _ => "requested",
-        };
-
         private static PrintoutDto Project(Printout x) => new()
         {
             Id = x.Id.ToString(),
             Title = x.Title,
             FileName = x.FileName,
             SizeBytes = x.SizeBytes,
-            State = StateName(x.State),
+            State = Projections.Wire(x.State),
             RequestedAt = Wire.At(x.RequestedAt)!,
             ResolvedAt = Wire.At(x.ResolvedAt),
         };
@@ -552,7 +547,7 @@ namespace AlgoJudge.Server.Services
             FileName = x.FileName,
             SizeBytes = x.SizeBytes,
             Sha256 = x.Sha256,
-            State = StateName(x.State),
+            State = Projections.Wire(x.State),
             RequestedAt = Wire.At(x.RequestedAt)!,
             ClaimedByName = x.ClaimedBy is null ? null : Projections.DisplayName(x.ClaimedBy),
             ClaimedAt = Wire.At(x.ClaimedAt),

@@ -12,7 +12,10 @@ namespace AlgoJudge.Server.Services
 {
     public interface ISubmissionService
     {
-        Task<PageDto<SubmissionSummaryDto>> ListAsync(string activityIdOrSlug, PageQuery paging, CancellationToken ct);
+        Task<PageDto<SubmissionSummaryDto>> ListAsync(
+            string activityIdOrSlug, PageQuery paging,
+            IReadOnlyList<Guid>? problemIds, IReadOnlyList<Guid>? seriesIds,
+            IReadOnlyList<EvaluationJobState>? states, CancellationToken ct);
         Task<SubmissionDetailDto> GetAsync(string activityIdOrSlug, Guid submissionId, CancellationToken ct);
         Task<SubmissionSummaryDto> SubmitAsync(
             string activityIdOrSlug, string problemSlug, string? props, StagedBytes staged,
@@ -40,7 +43,9 @@ namespace AlgoJudge.Server.Services
     ) : ISubmissionService
     {
         public async Task<PageDto<SubmissionSummaryDto>> ListAsync(
-            string activityIdOrSlug, PageQuery paging, CancellationToken ct)
+            string activityIdOrSlug, PageQuery paging,
+            IReadOnlyList<Guid>? problemIds, IReadOnlyList<Guid>? seriesIds,
+            IReadOnlyList<EvaluationJobState>? states, CancellationToken ct)
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
             await permissions.RequireAsync(Permissions.SubmissionReadOwn, activity.Id, ct);
@@ -58,6 +63,36 @@ namespace AlgoJudge.Server.Services
             var query = context.Submissions
                 .Where(s => s.SeriesProblem!.ActivityId == activity.Id && s.UserId == user.Id
                     && !unreachable.Contains(s.SeriesProblem!.SeriesId));
+
+            // **Null is every, empty is nothing.** Nobody narrowed anything, or
+            // somebody narrowed by words this Server has no name for — and a
+            // filter it cannot honour must answer with nothing rather than with
+            // everything. A narrowing that widens is a screen that looks as
+            // though it is working.
+            //
+            // These three narrow the query, never the page: `total` has to count
+            // what matched, or the pager offers pages that are empty by
+            // construction. See `CurrentAttempt`.
+            if (seriesIds is not null)
+            {
+                var rounds = seriesIds.ToList();
+                query = rounds.Count == 0
+                    ? query.Where(s => false)
+                    : query.Where(s => rounds.Contains(s.SeriesProblem!.SeriesId));
+            }
+
+            // `problemId` is the **assignment**, not the library problem: it is
+            // what `Summary` writes as `ProblemId` below and what the screen's
+            // problem picker is built from, so the two agree by construction.
+            if (problemIds is not null)
+            {
+                var assignments = problemIds.ToList();
+                query = assignments.Count == 0
+                    ? query.Where(s => false)
+                    : query.Where(s => assignments.Contains(s.SeriesProblemId));
+            }
+
+            if (states is not null) query = query.WithState(states);
 
             var total = await query.CountAsync(ct);
             var page = await query

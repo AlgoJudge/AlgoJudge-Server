@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Services
     {
         Task<PageDto<QuestionDto>> ListAsync(
             string activityIdOrSlug, PageQuery paging, string? search, string? kind,
-            Guid? seriesId, Guid? problemId, CancellationToken ct);
+            Guid? seriesId, Guid? problemId, string? sortBy, string? order, CancellationToken ct);
         Task<QuestionDto> AskAsync(string activityIdOrSlug, AskQuestionInputDto input, CancellationToken ct);
         Task MarkReadAsync(string activityIdOrSlug, Guid questionId, CancellationToken ct);
     }
@@ -34,7 +34,7 @@ namespace AlgoJudge.Server.Services
     {
         public async Task<PageDto<QuestionDto>> ListAsync(
             string activityIdOrSlug, PageQuery paging, string? search, string? kind,
-            Guid? seriesId, Guid? problemId, CancellationToken ct)
+            Guid? seriesId, Guid? problemId, string? sortBy, string? order, CancellationToken ct)
         {
             var activity = await activities.ResolveAsync(activityIdOrSlug, ct);
             await activities.RequireVisibleAsync(activity, ct);
@@ -85,8 +85,37 @@ namespace AlgoJudge.Server.Services
 
             // Filtered, then sorted, then paged — in that order. Sorting in the
             // Client would order the twenty rows it happens to hold.
-            var page = await query
-                .OrderByDescending(q => q.CreatedAt).ThenByDescending(q => q.Id)
+            //
+            // Which is the argument this comment always made, above an ordering
+            // that was hard-coded while the screen asked for another one: the
+            // Client sent `sortBy` and `order`, nothing bound them, and the
+            // column headers moved their arrows over a list that never changed.
+            //
+            // **The id is the tiebreaker on every arm**, not only on the date.
+            // Two questions in one round compare equal on the round's name, and
+            // without a unique second key the order becomes the planner's — so a
+            // row can sit on two pages and another on none.
+            //
+            // **A sort is not a filter.** A word with no column behind it hides
+            // nothing and narrows nothing, so it falls back to the documented
+            // default rather than answering with an empty list.
+            //
+            // Where a round is absent, PostgreSQL's own default decides: nulls
+            // last ascending, first descending. A question about the activity at
+            // large is the least specific one there is and belongs at the far end
+            // of a scope sort, which is what that gives.
+            var ascending = string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase);
+            var ordered = (sortBy, ascending) switch
+            {
+                ("series", true) => query.OrderBy(q => q.Series!.Name).ThenBy(q => q.Id),
+                ("series", false) => query.OrderByDescending(q => q.Series!.Name).ThenByDescending(q => q.Id),
+                ("problem", true) => query.OrderBy(q => q.SeriesProblem!.Slug).ThenBy(q => q.Id),
+                ("problem", false) => query.OrderByDescending(q => q.SeriesProblem!.Slug).ThenByDescending(q => q.Id),
+                (_, true) => query.OrderBy(q => q.CreatedAt).ThenBy(q => q.Id),
+                (_, false) => query.OrderByDescending(q => q.CreatedAt).ThenByDescending(q => q.Id),
+            };
+
+            var page = await ordered
                 .Skip(paging.Skip).Take(paging.PageSize)
                 .Include(q => q.Author)
                 .Include(q => q.Series)
