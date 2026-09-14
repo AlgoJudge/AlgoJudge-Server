@@ -7,6 +7,7 @@ using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Services.Models;
 using AlgoJudge.Server.Utils;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AlgoJudge.Server.Services
 {
@@ -37,6 +38,15 @@ namespace AlgoJudge.Server.Services
         ISeriesLockdown lockdown,
         IEventHub events,
         IEventAudience audience,
+        /// <summary>
+        /// **Resolved rather than injected, and only for the manager's half of
+        /// an announcement.** `ManagerReadService` owns the panel's projection
+        /// of a submission and calls this service to send the participant's, so
+        /// constructor injection either way is a cycle the container refuses.
+        /// The alternative was ten call sites — every place a submission moves —
+        /// each free to forget, which is the defect this exists to close.
+        /// </summary>
+        IServiceProvider services,
         IRequestOrigin origin,
         IQueueSignal queue,
         ILogger<SubmissionService> log
@@ -576,6 +586,18 @@ namespace AlgoJudge.Server.Services
                     Result = result,
                 }, ct);
             }
+
+            // **And the panel's own row.** Everything above is the participant's
+            // view; the manager's list listens for a different name with a
+            // different shape, and heard nothing at all until 2026-09-14 unless
+            // somebody cancelled an attempt or ruled one out of the ranking. So
+            // a contest's submissions screen stood still while the contest ran.
+            //
+            // Here rather than at each caller because this is the one place every
+            // move passes through: created, claimed, judged, rejudged, unclaimed,
+            // released, or reclaimed from a Runner that died.
+            await services.GetRequiredService<IManagerReadService>()
+                .AnnounceSubmissionChangedAsync(submissionId, ct);
         }
     }
 }

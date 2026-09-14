@@ -29,6 +29,10 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         IActivityService activities,
         ISeriesLockdown lockdown,
+        // Asking is a participant's act with a manager's consequence: the
+        // clarifications list is the one screen whose whole purpose is to be
+        // watched during a contest, and nothing here woke it until 2026-09-14.
+        IManagerReadService managers,
         TimeProvider clock
     ) : IQuestionService
     {
@@ -254,6 +258,8 @@ namespace AlgoJudge.Server.Services
                 .Include(q => q.Series)
                 .Include(q => q.SeriesProblem).ThenInclude(sp => sp!.Problem)
                 .FirstAsync(q => q.Id == question.Id, ct);
+
+            await managers.AnnounceAskedAsync(question.Id, ct);
 
             return Project(stored, isRead: true, new Dictionary<string, string>());
         }

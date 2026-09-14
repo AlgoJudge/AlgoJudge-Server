@@ -4,6 +4,7 @@ using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Realtime;
 using AlgoJudge.Server.Services.Models;
 using AlgoJudge.Server.Utils;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +67,9 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         ISeriesLockdown lockdown,
+        IEventHub events,
+        IEventAudience audience,
+        IGrantService grants,
         TimeProvider clock
     ) : IActivityService
     {
@@ -411,6 +415,28 @@ namespace AlgoJudge.Server.Services
             }
 
             await context.SaveChangesAsync(ct);
+
+            // **Publication is when an activity begins to exist for a reader**,
+            // and unpublication is when it stops — which is exactly what the two
+            // names already mean to the Client, so neither needs inventing. This
+            // is also what wakes `activityCreated`: an activity has no members at
+            // the moment it is created, so there is nobody to tell until now.
+            var members = await audience.InActivityAsync(activity.Id, Permissions.ActivityRead, ct);
+            if (members.Count > 0)
+            {
+                await events.SendToUsersAsync(
+                    members,
+                    published ? EventTypes.ActivityCreated : EventTypes.ActivityDeleted,
+                    new { activityId = Wire.Id(activity.Id) }, ct);
+            }
+
+            var staff = await audience.InActivityAsync(activity.Id, Permissions.ActivityUpdate, ct);
+            if (staff.Count > 0)
+            {
+                await events.SendToUsersAsync(
+                    staff, EventTypes.ActivityChanged, new { activityId = Wire.Id(activity.Id) }, ct);
+            }
+
             return await ManagedAsync(activity, ct);
         }
 
@@ -806,6 +832,7 @@ namespace AlgoJudge.Server.Services
             {
                 existing.State = GrantState.Active;
                 await context.SaveChangesAsync(ct);
+                await grants.AnnounceEnrolmentAsync(existing, ct);
                 return await ProjectAsync(activity, ct);
             }
 
@@ -866,6 +893,7 @@ namespace AlgoJudge.Server.Services
                 Permissions.Effective(role?.Permissions, joined.Permissions));
             context.Grants.Add(joined);
             await context.SaveChangesAsync(ct);
+            await grants.AnnounceEnrolmentAsync(joined, ct);
 
             return await ProjectAsync(activity, ct);
         }

@@ -75,6 +75,10 @@ namespace AlgoJudge.Server.Services
         ApplicationDbContext context,
         ISubmissionService submissions,
         IMaintenanceService maintenance,
+        // What a manager sees of a Runner. Registration is the transition an
+        // operator actually waits at that screen for, and it announced nothing
+        // until 2026-09-14.
+        IManagerReadService managers,
         IQueueSignal queue,
         TimeProvider clock,
         ILogger<RunnerService> logger
@@ -241,6 +245,8 @@ namespace AlgoJudge.Server.Services
                 existing.Address = address;
                 existing.LastSeenAt = clock.GetUtcNow().UtcDateTime;
                 await context.SaveChangesAsync(ct);
+                // A restart changes the version and the address the list draws.
+                await managers.AnnounceRunnerRegisteredAsync(existing.Id, ct);
                 return Registered(existing);
             }
 
@@ -267,6 +273,7 @@ namespace AlgoJudge.Server.Services
             context.Runners.Add(runner);
             await context.SaveChangesAsync(ct);
             logger.LogInformation("Runner {Fingerprint} registered, awaiting approval", fingerprint);
+            await managers.AnnounceRunnerRegisteredAsync(runner.Id, ct);
             return Registered(runner);
         }
 
