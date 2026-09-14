@@ -293,7 +293,13 @@ namespace AlgoJudge.Server.Authorization
             Define(RankingReadUnfrozen, "ranking", PermissionScope.Both),
             Define(RankingUnfreeze, "ranking", PermissionScope.Both),
 
-            Define(UserReadAll, "user", PermissionScope.Global),
+            // **Both since 2026-09-14**, because the shipped `manager` role
+            // carries it and every path that makes a manager writes an activity
+            // grant. Searching the directory honours it wherever it is held;
+            // listing accounts and reading somebody's sessions still ask at
+            // system scope, which is what keeps `/manager/users` an
+            // administrator's screen.
+            Define(UserReadAll, "user", PermissionScope.Both),
             Define(UserCreate, "user", PermissionScope.Global),
             Define(UserUpdate, "user", PermissionScope.Global),
             Define(UserBlock, "user", PermissionScope.Global),
@@ -405,6 +411,14 @@ namespace AlgoJudge.Server.Authorization
             AnnouncementCreate,
             PrintoutManage,
             RankingReadUnfrozen, RankingUnfreeze,
+            // **Enrolling somebody by hand means naming them.** The role carries
+            // `activity:enroll` and `grant:update`, and the only lookup that can
+            // turn a person into an id — `GET /users` — asks for this, at system
+            // scope, because a directory is the installation's and not an
+            // activity's. Without it those two keys had no screen that could
+            // spend them: the picker in the participants panel and in the grant
+            // editor came back empty and there was nobody to choose.
+            UserReadAll,
             UserCreateTemporary,
             GrantReadAll, GrantUpdate,
             RoleRead, RoleManage,

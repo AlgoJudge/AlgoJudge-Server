@@ -39,7 +39,15 @@ namespace AlgoJudge.Server.Services
     {
         public async Task<IReadOnlyList<ManagedUserSummaryDto>> SearchAsync(string? query, CancellationToken ct)
         {
-            await permissions.RequireAsync(Permissions.UserReadAll, null, ct);
+            // **Anywhere, and only this one of the three.** The key is in the
+            // shipped `manager` role since 2026-09-14, and every path that makes
+            // a manager writes an *activity* grant — so asked at system scope it
+            // was a key nobody who held it could spend, and the enrolment picker
+            // it exists for stayed empty. Listing the installation's accounts and
+            // reading somebody's sessions are administration and still ask at
+            // system scope: `/manager/users` is not a manager's screen, and
+            // `managerAreas` withholds it on the same reasoning.
+            await permissions.RequireAnywhereAsync(Permissions.UserReadAll, ct);
 
             var needle = (query ?? "").Trim().ToLower();
             if (needle.Length == 0) return [];

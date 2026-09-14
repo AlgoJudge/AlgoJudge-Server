@@ -19,6 +19,24 @@ namespace AlgoJudge.Server.Services
         Task<ProblemDetailDto> GetForParticipantAsync(string activityIdOrSlug, string problemSlug, CancellationToken ct);
 
         Task<ManagedProblemDto> GetAsync(Guid id, CancellationToken ct);
+
+        /// <summary>
+        /// Refuses a problem this caller may not read, with the 404 the rest of
+        /// the library answers.
+        /// <para>
+        /// On the interface because attaching one to a round is the ninth entry
+        /// point into the library and was the only one that never asked. The
+        /// access list is one list, and a second copy of the predicate is a
+        /// second answer to who may see a problem.
+        /// </para>
+        /// </summary>
+        Task RequireReadableAsync(Guid id, CancellationToken ct);
+
+        /// <summary>
+        /// The same question asked rather than enforced, for a caller that has
+        /// to answer <c>false</c> instead of throwing.
+        /// </summary>
+        Task<bool> IsReadableAsync(Guid id, CancellationToken ct);
         Task<ManagedProblemDto> UpdateAsync(Guid id, ProblemInputDto input, CancellationToken ct);
         Task DeleteAsync(Guid id, CancellationToken ct);
         Task<ManagedProblemDto> SetArchivedAsync(Guid id, bool archived, CancellationToken ct);
@@ -103,7 +121,15 @@ namespace AlgoJudge.Server.Services
         private async Task AnnounceProblemAsync(
             ManagedProblemDto? problem, string? deletedId, CancellationToken ct)
         {
-            var readers = await audience.AnywhereAsync(Permissions.ProblemReadAll, ct);
+            // **Both reader keys, not the wider one alone.** The list admits
+            // whoever holds `problem:read:all` *or* `problem:read:own`
+            // (`ListAsync` above), and the shipped manager role carries only the
+            // second — so the one screen this event exists for never refreshed
+            // for the people it is for. What a recipient may actually see is
+            // still decided by the list they refetch.
+            var readers = (await audience.AnywhereAsync(Permissions.ProblemReadAll, ct))
+                .Union(await audience.AnywhereAsync(Permissions.ProblemReadOwn, ct))
+                .ToList();
             if (readers.Count == 0) return;
 
             await events.SendToUsersAsync(readers, EventTypes.ProblemChanged,
@@ -380,6 +406,28 @@ namespace AlgoJudge.Server.Services
         /// and anybody at all when it is instance-visible — or somebody holding
         /// <c>problem:read:all</c>.
         /// </summary>
+        public async Task RequireReadableAsync(Guid id, CancellationToken ct) =>
+            await RequireReadableAsync(await LoadAsync(id, ct), ct);
+
+        public async Task<bool> IsReadableAsync(Guid id, CancellationToken ct)
+        {
+            var problem = await context.Problems
+                .AsNoTracking()
+                .Include(p => p.SharedWith)
+                .FirstOrDefaultAsync(p => p.Id == id, ct);
+            if (problem is null) return false;
+
+            if (await permissions.HasAsync(Permissions.ProblemReadAll, null, ct)) return true;
+
+            var user = await currentUser.GetAsync(ct);
+            if (user is null) return false;
+
+            return problem.OwnerUserId == user.Id
+                || problem.Visibility == ProblemVisibility.Instance
+                || (problem.Visibility == ProblemVisibility.Shared
+                    && problem.SharedWith.Any(s => s.UserId == user.Id));
+        }
+
         private async Task RequireReadableAsync(Problem problem, CancellationToken ct)
         {
             if (await permissions.HasAsync(Permissions.ProblemReadAll, null, ct)) return;

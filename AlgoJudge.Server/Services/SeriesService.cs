@@ -24,6 +24,7 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IActivityService activities,
+        IProblemService problems,
         ISeriesGate gate,
         ISeriesLockdown lockdown
     ) : ISeriesService
@@ -548,6 +549,15 @@ namespace AlgoJudge.Server.Services
             var problem = await context.Problems.FirstOrDefaultAsync(p => p.Id == problemId, ct)
                 ?? throw new NotFoundException("Problem");
 
+            // **`problem:attach` says where, never which.** It is held in an
+            // activity and says this person may put problems into its rounds; it
+            // says nothing about the library, whose access list is the owner,
+            // whoever it was shared with, and everybody when it is
+            // instance-visible. Without this a manager could name any id and
+            // pull somebody else's private problem — statement, attachments and
+            // all — into a round their own participants read.
+            await problems.RequireReadableAsync(problemId, ct);
+
             if (problem.ArchivedAt is not null)
             {
                 throw new ConflictException("An archived problem cannot be attached", "problem.archived");
@@ -568,6 +578,16 @@ namespace AlgoJudge.Server.Services
             Guid? pinned = null;
             if (input.PinnedProblemVersionId is { } requested && Guid.TryParse(requested, out var explicitPin))
             {
+                // **A version id says which problem it belongs to; this never
+                // asked.** Pinning one from another problem is how a round ends
+                // up serving a statement nobody attached, addressed by an id the
+                // caller chose.
+                if (!await context.ProblemVersions
+                        .AnyAsync(v => v.Id == explicitPin && v.ProblemId == problemId, ct))
+                {
+                    throw new ValidationException(
+                        "That version belongs to another problem", "assignment.version.foreign");
+                }
                 pinned = explicitPin;
             }
             else

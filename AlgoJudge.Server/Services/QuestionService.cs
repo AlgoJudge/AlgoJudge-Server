@@ -139,40 +139,12 @@ namespace AlgoJudge.Server.Services
 
             return new PageDto<QuestionDto>
             {
-                Items = page.Select(q => Project(q, read.Contains(q.Id), answerAuthors)).ToList(),
+                Items = page.Select(q => Projections.QuestionFor(q, read.Contains(q.Id), answerAuthors)).ToList(),
                 Total = total,
                 Page = paging.Page,
                 PageSize = paging.PageSize,
             };
         }
-
-        private static QuestionDto Project(
-            Question question, bool isRead, IReadOnlyDictionary<string, string> answerAuthors) => new()
-            {
-                Id = Wire.Id(question.Id),
-                Kind = question.Kind == QuestionKind.Announcement ? "announcement" : "question",
-                Topic = question.Topic,
-                Body = question.Body,
-                AuthorName = question.Author is null
-                    ? question.AuthorUserId
-                    : Projections.DisplayName(question.Author),
-                CreatedAt = Wire.At(question.CreatedAt),
-                SeriesId = question.SeriesId is { } s ? Wire.Id(s) : null,
-                SeriesName = question.Series?.Name,
-                ProblemId = question.SeriesProblemId is { } p ? Wire.Id(p) : null,
-                ProblemSlug = question.SeriesProblem?.Slug,
-                ProblemName = question.SeriesProblem?.Name ?? question.SeriesProblem?.Problem?.Name,
-                IsPublished = question.IsPublished,
-                IsRead = isRead,
-                Answer = question.AnswerBody is null ? null : new QuestionAnswerDto
-                {
-                    Body = question.AnswerBody,
-                    AuthorName = question.AnswerAuthorUserId is { } id
-                        ? answerAuthors.GetValueOrDefault(id, id)
-                        : "",
-                    AnsweredAt = Wire.At(question.AnsweredAt ?? question.CreatedAt),
-                },
-            };
 
         public async Task<QuestionDto> AskAsync(
             string activityIdOrSlug, AskQuestionInputDto input, CancellationToken ct)
@@ -261,7 +233,7 @@ namespace AlgoJudge.Server.Services
 
             await managers.AnnounceAskedAsync(question.Id, ct);
 
-            return Project(stored, isRead: true, new Dictionary<string, string>());
+            return Projections.QuestionFor(stored, isRead: true, new Dictionary<string, string>());
         }
 
         /// <summary>

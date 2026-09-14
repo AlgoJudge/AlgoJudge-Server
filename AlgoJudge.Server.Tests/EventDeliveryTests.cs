@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Realtime;
@@ -241,5 +242,132 @@ public class EventDeliveryTests(ServerFixture server)
             $"/api/v1/users/{subject}/blocked", new { blocked = true, reason = "Na wniosek" }));
 
         Assert.Contains(await IdOfAsync(Seeder.DevAdminLogin), ToldOf(hub, EventTypes.UserChanged));
+    }
+
+    /// <summary>
+    /// A question asked by somebody in the activity, ready to be answered.
+    /// </summary>
+    private async Task<(string Id, string AskerId)> QuestionAsync(
+        WebApplicationFactory<Program> host, string slug)
+    {
+        var (asker, askerId) = await EnrolledAsync(host, slug);
+        using var _ = asker;
+        var asked = await Build.PostAsync(asker, $"/api/v1/activities/{slug}/questions", new
+        {
+            topic = "Czy wolno użyć biblioteki standardowej?",
+            body = "Pytam o STL.",
+        });
+        return (asked.GetProperty("id").GetString()!, askerId);
+    }
+
+    /// <summary>
+    /// <b><c>questionPublished</c> could never be sent.</b> The type was chosen
+    /// from whether an answer existed, and a question is only announced widely
+    /// once it is published — which is refused while it is unanswered. So every
+    /// wide frame took the <c>questionAnswered</c> arm, which the participant's
+    /// list <i>patches</i> rather than refetches: a row that was not on screen
+    /// stayed off it until the page was reloaded by hand.
+    /// </summary>
+    [Fact]
+    public async Task Publishing_an_answer_tells_the_activity_a_question_appeared()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var (host, hub) = Counting();
+        using var _ = host;
+
+        var (questionId, _) = await QuestionAsync(host, slug);
+        var (reader, readerId) = await EnrolledAsync(host, slug);
+        using var __ = reader;
+        var admin = await Sign.InAsync(host, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/questions/{questionId}/answer", new { body = "Tak, wolno.", publish = true }));
+
+        Assert.Contains(readerId, ToldOf(hub, EventTypes.QuestionPublished));
+    }
+
+    /// <summary>
+    /// <b>Withdrawing told nobody anything</b>, so an answer taken back during a
+    /// contest stayed on every screen that already had it. Everybody but the
+    /// asker loses the row; the asker keeps theirs, private again.
+    /// </summary>
+    [Fact]
+    public async Task Withdrawing_an_answer_takes_the_row_off_everybody_elses_screen()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var (host, hub) = Counting();
+        using var _ = host;
+
+        var (questionId, askerId) = await QuestionAsync(host, slug);
+        var (reader, readerId) = await EnrolledAsync(host, slug);
+        using var __ = reader;
+        var admin = await Sign.InAsync(host, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/questions/{questionId}/answer", new { body = "Tak, wolno.", publish = true }));
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/questions/{questionId}/published", new { published = false }));
+
+        // **Found by what it carries, not by when it arrived.** Publishing sends
+        // one frame per recipient — `isRead` is the reader's own — so several
+        // `questionPublished` frames are in flight and a bag has no order to
+        // read them in. The withdrawal is the one naming a row to drop.
+        var withdrawal = Assert.Single(hub.Frames, f =>
+            f.Type == EventTypes.QuestionPublished
+            && JsonSerializer.Serialize(f.Data).Contains("deletedId"));
+
+        Assert.Contains(readerId, withdrawal.To);
+        Assert.DoesNotContain(askerId, withdrawal.To);
+    }
+
+    /// <summary>
+    /// <b>The participant's frame carried the manager's projection</b> — how many
+    /// people had read the question, and the asker's user id — to every
+    /// participant in the activity.
+    /// </summary>
+    [Fact]
+    public async Task A_participants_question_frame_carries_none_of_the_staff_fields()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var (host, hub) = Counting();
+        using var _ = host;
+
+        var (questionId, _) = await QuestionAsync(host, slug);
+        var admin = await Sign.InAsync(host, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/questions/{questionId}/answer", new { body = "Tak, wolno.", publish = true }));
+
+        var frame = hub.Sent.First(s => s.Type == EventTypes.QuestionPublished).Data;
+        // **Lower-cased, because the default serializer keeps PascalCase.** The
+        // first version of this asserted on camelCase names that the text never
+        // held either way, so it passed whichever projection was sent — the
+        // sabotage proved it, not a reading.
+        var wire = JsonSerializer.Serialize(frame).ToLowerInvariant();
+
+        Assert.DoesNotContain("readcount", wire);
+        Assert.DoesNotContain("authoruserid", wire);
+        // And it is still the question, not an empty object.
+        Assert.Contains("biblioteki standardowej", wire);
+    }
+
+    /// <summary>
+    /// <b>Posting was the one write on this entity that told no manager.</b>
+    /// Asking, answering, publishing and deleting all announce to the staff;
+    /// a second manager's list stood still while announcements went out.
+    /// </summary>
+    [Fact]
+    public async Task An_announcement_reaches_the_panel_it_was_written_in()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var (host, hub) = Counting();
+        using var _ = host;
+
+        var admin = await Sign.InAsync(host, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/activities/{slug}/announcements",
+            new { topic = "Zajęcia odwołane", body = "W czwartek nie ma zajęć." }));
+
+        Assert.Contains(hub.Sent, s => s.Type == EventTypes.QuestionChanged);
     }
 }
