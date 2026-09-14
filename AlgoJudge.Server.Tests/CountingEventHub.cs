@@ -35,13 +35,29 @@ public sealed class CountingEventHub : IEventHub
     /// </summary>
     public IReadOnlyList<(string Type, IReadOnlyList<string> To)> Addressed => addressed.ToList();
 
+    private readonly ConcurrentBag<(string Type, object Data, IReadOnlyList<string> To)> frames = [];
+
+    /// <summary>
+    /// The frame and its recipients together.
+    /// <para>
+    /// The two bags above answer "how many" and "who", and a test that needs
+    /// <b>which</b> frame went to whom cannot join them: a bag has no order, so
+    /// pairing them by position is a coin toss. Withdrawing a published answer
+    /// is the case that needs it — several frames of the same type go out at
+    /// once, and only the one carrying <c>deletedId</c> is the withdrawal.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<(string Type, object Data, IReadOnlyList<string> To)> Frames => frames.ToList();
+
     public Task SendToUsersAsync(
         IEnumerable<string> userIds, string type, object data, CancellationToken ct = default)
     {
         // Once per send, not once per recipient: the question is how many times
         // the Server decided to announce something, not how many people heard it.
+        var recipients = userIds.ToList();
         sent.Add((type, data));
-        addressed.Add((type, userIds.ToList()));
+        addressed.Add((type, recipients));
+        frames.Add((type, data, recipients));
         return Task.CompletedTask;
     }
 

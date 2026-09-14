@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Database.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AlgoJudge.Server.Tests;
@@ -273,5 +274,201 @@ public class ManagerTemplateTests(ServerFixture server)
         var listed = await nobody.GetAsync("/api/v1/submissions?page=1&pageSize=20");
 
         Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
+    }
+
+    /// <summary>
+    /// A problem of the administrator's, with one version, at a stated visibility.
+    /// </summary>
+    private async Task<(string Id, string VersionId)> LibraryProblemAsync(string visibility)
+    {
+        var admin = await AdminAsync(server);
+        var problem = await Build.PostAsync(admin, "/api/v1/problems", new
+        {
+            slug = "lib-" + Guid.NewGuid().ToString("N")[..10],
+            name = "Somebody else's problem",
+            type = "standard-io@1",
+        });
+        var id = problem.GetProperty("id").GetString()!;
+
+        var statement = await Build.UploadAsync(admin, "/api/v1/files", "content.md", "# Not yours\n");
+        var version = await Build.PostAsync(admin, $"/api/v1/problems/{id}/versions", new
+        {
+            statements = new[] { new { fileId = statement } },
+        });
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/problems/{id}/visibility", new { visibility, sharedWith = Array.Empty<string>() }));
+
+        return (id, version.GetProperty("id").GetString()!);
+    }
+
+    /// <summary>
+    /// <b>Enrolling somebody by hand means naming them.</b> The role carries
+    /// <c>activity:enroll</c> and <c>grant:update</c>, and until 2026-09-14 it
+    /// could spend neither: the only lookup that turns a person into an id asks
+    /// <c>user:read:all</c> at system scope, which an activity grant never
+    /// reaches, so both pickers in the panel came back empty.
+    /// </summary>
+    [Fact]
+    public async Task A_manager_may_look_a_person_up_to_enrol_them()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var manager = await ManagerOfAsync(slug);
+
+        var found = await manager.GetAsync($"/api/v1/users?q={Seeder.DevParticipantLogin}");
+
+        Assert.Equal(HttpStatusCode.OK, found.StatusCode);
+        var people = (await found.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().ToList();
+        Assert.Contains(people, p => p.GetProperty("username").GetString() == Seeder.DevParticipantLogin);
+    }
+
+    /// <summary>
+    /// <b>Naming a role as what an activity enrols into hands out everything in
+    /// it</b>, to everybody who joins afterwards. Without the excess rule a
+    /// manager could point their own course's participant role at the shipped
+    /// <c>administrator</c> one and let the next person through the door take
+    /// the installation.
+    /// </summary>
+    [Fact]
+    public async Task An_activitys_enrolment_role_cannot_carry_what_the_manager_does_not_hold()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var manager = await ManagerOfAsync(slug);
+        var admin = await AdminAsync(server);
+        var current = await Build.GetAsync(manager, $"/api/v1/manager/activities/{slug}");
+
+        var refused = await manager.PutAsJsonAsync($"/api/v1/activities/{slug}", new
+        {
+            slug,
+            name = current.GetProperty("name").GetString(),
+            type = current.GetProperty("type").GetString(),
+            rankingType = current.GetProperty("rankingType").GetString(),
+            timeZone = current.GetProperty("timeZone").GetString(),
+            participantRoleId = await Build.RoleIdAsync(admin, "admin"),
+        });
+
+        // Refused by the first arm of the shared rule — `system:administrator`
+        // is installation-wide and a role reachable from an activity cannot
+        // carry it — which answers 422 rather than the excess rule's 403. What
+        // matters is that it did not take, so the activity is read back.
+        Assert.False(refused.IsSuccessStatusCode, await refused.Content.ReadAsStringAsync());
+
+        var after = await Build.GetAsync(manager, $"/api/v1/manager/activities/{slug}");
+        Assert.True(
+            after.TryGetProperty("participantRoleId", out var role) is false
+            || role.ValueKind == JsonValueKind.Null,
+            "the activity still enrols into the shipped role");
+    }
+
+    /// <summary>
+    /// <b><c>problem:attach</c> says where, never which.</b> It is held in an
+    /// activity and says this person may put problems into its rounds; the
+    /// library has its own access list, and attaching was the one entry point
+    /// that never asked — so any id would do.
+    /// </summary>
+    [Fact]
+    public async Task A_manager_cannot_attach_a_problem_they_may_not_read()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var manager = await ManagerOfAsync(slug);
+        var (theirs, _) = await LibraryProblemAsync("private");
+
+        var refused = await manager.PostAsJsonAsync($"/api/v1/series/{roundId}/problems", new
+        {
+            problemId = theirs, slug = "Z",
+        });
+
+        // 404 rather than 403: a problem somebody may not see must not be
+        // confirmed to exist by the shape of the refusal.
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// A version id says which problem it belongs to, and this never asked — so
+    /// a round could be pinned to a statement nobody attached.
+    /// </summary>
+    [Fact]
+    public async Task A_pin_must_name_a_version_of_the_problem_being_attached()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var manager = await ManagerOfAsync(slug);
+        var (mine, _) = await LibraryProblemAsync("instance");
+        var (_, foreignVersion) = await LibraryProblemAsync("instance");
+
+        var refused = await manager.PostAsJsonAsync($"/api/v1/series/{roundId}/problems", new
+        {
+            problemId = mine, slug = "Y", pinnedProblemVersionId = foreignVersion,
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// <b>A package is addressed by file id, and the arm that serves it asked
+    /// only for the verb.</b> Anybody who manages any activity holds
+    /// <c>problem:update</c> somewhere, so every package and every model
+    /// solution in the installation was readable to all of them — around the
+    /// library's own access list, which the package endpoint enforces.
+    /// </summary>
+    [Fact]
+    public async Task A_manager_cannot_read_the_package_of_a_problem_they_may_not_see()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var manager = await ManagerOfAsync(slug);
+        var admin = await AdminAsync(server);
+
+        // The activity's own seeded problem is the administrator's and private,
+        // which is what every hand-made problem starts as.
+        var packageId = await Build.PackageIdOfAsync(server, slug);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/v1/files/{packageId}")).StatusCode);
+
+        var refused = await manager.GetAsync($"/api/v1/files/{packageId}");
+
+        Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// And the other half of the same hole: a <b>model solution</b>.
+    /// <para>
+    /// The package and the manager-scoped files under a version are served by
+    /// two arms of one method, and each asked only whether the caller may edit
+    /// problems <i>somewhere</i>. This is the arm the package test does not
+    /// reach — a model solution is the file that decides a contest, and it was
+    /// readable by every manager in the installation.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_manager_cannot_read_the_model_solution_of_a_problem_they_may_not_see()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var manager = await ManagerOfAsync(slug);
+        var admin = await AdminAsync(server);
+
+        // Attached to the same version the round is pinned to, in the scope a
+        // model solution lives in.
+        var fileId = Guid.Parse(await Build.UploadAsync(
+            admin, "/api/v1/files", "model.cpp", "int main() { return 0; }"));
+
+        await using (var context = server.NewContext())
+        {
+            var assignment = await context.SeriesProblems
+                .Include(sp => sp.Activity)
+                .FirstAsync(sp => sp.Activity!.Slug == slug);
+            context.FileReferences.Add(new FileReference
+            {
+                FileId = fileId,
+                OwnerKind = FileOwnerKind.ProblemVersion,
+                ProblemVersionId = assignment.PinnedProblemVersionId,
+                Scope = FileScope.Manager,
+                Name = "model.cpp",
+            });
+            await context.SaveChangesAsync();
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+
+        var refused = await manager.GetAsync($"/api/v1/files/{fileId}");
+
+        Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
     }
 }

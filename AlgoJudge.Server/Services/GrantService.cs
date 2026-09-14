@@ -30,6 +30,18 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         Task AnnounceEnrolmentAsync(Grant grant, CancellationToken ct);
 
+        /// <summary>
+        /// Refuses a set the caller could not hand out at this scope.
+        /// <para>
+        /// On the interface because a role is chosen in two places: here, where
+        /// one is written, and in an activity's settings, where one is named as
+        /// what enrolment carries. A second copy of the rule is a second answer
+        /// to "may this person hand this out", and the copies drift.
+        /// </para>
+        /// </summary>
+        Task RequireGrantableRoleAsync(
+            Guid? activityId, IReadOnlyList<string> wanted, CancellationToken ct);
+
         Task<IReadOnlyList<RoleDto>> ListRolesAsync(Guid? activityId, CancellationToken ct);
         Task<RoleDto> CreateRoleAsync(RoleInputDto input, CancellationToken ct);
         Task<RoleDto> UpdateRoleAsync(Guid id, RoleInputDto input, CancellationToken ct);
@@ -554,7 +566,7 @@ namespace AlgoJudge.Server.Services
         /// to it.
         /// </para>
         /// </summary>
-        private async Task RefuseARoleTheCallerCouldNotGrantAsync(
+        public async Task RequireGrantableRoleAsync(
             Guid? activityId, IReadOnlyList<string> wanted, CancellationToken ct)
         {
             var unknown = Permissions.Unknown(wanted);
@@ -728,7 +740,7 @@ namespace AlgoJudge.Server.Services
             await RefuseADuplicateNameAsync(name, activityId, null, ct);
 
             var wanted = input.Permissions.Distinct().ToList();
-            await RefuseARoleTheCallerCouldNotGrantAsync(activityId, wanted, ct);
+            await RequireGrantableRoleAsync(activityId, wanted, ct);
 
             var role = new Role
             {
@@ -784,7 +796,7 @@ namespace AlgoJudge.Server.Services
             await RefuseADuplicateNameAsync(name, role.ActivityId, id, ct);
 
             var wanted = input.Permissions.Distinct().ToList();
-            await RefuseARoleTheCallerCouldNotGrantAsync(role.ActivityId, wanted, ct);
+            await RequireGrantableRoleAsync(role.ActivityId, wanted, ct);
 
             // **The other half of "unreachable through a mapping".** The provider
             // service refuses a rule pointing at a role that carries

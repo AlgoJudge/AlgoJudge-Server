@@ -436,6 +436,49 @@ namespace AlgoJudge.Server.Api
                     })
                     .ToList(),
             };
+
+        /// <summary>
+        /// A question as one participant sees it.
+        /// <para>
+        /// <b>Here rather than in either service, because two of them send it.</b>
+        /// <c>QuestionService</c> answers the list with it and
+        /// <c>ManagerReadService</c> puts it on the socket when an answer is
+        /// published — and until 2026-09-14 the second one sent the *manager's*
+        /// projection instead, which carries how many people have read the
+        /// question and the asker's user id. Neither is a participant's to know.
+        /// </para>
+        /// <para>
+        /// <paramref name="isRead"/> is the reader's own, so a frame addressed to
+        /// several people is projected once per recipient rather than once.
+        /// </para>
+        /// </summary>
+        public static QuestionDto QuestionFor(
+            Question question, bool isRead, IReadOnlyDictionary<string, string> answerAuthors) => new()
+        {
+            Id = Contracts.Wire.Id(question.Id),
+            Kind = question.Kind == QuestionKind.Announcement ? "announcement" : "question",
+            Topic = question.Topic,
+            Body = question.Body,
+            AuthorName = question.Author is null
+                ? question.AuthorUserId
+                : DisplayName(question.Author),
+            CreatedAt = Contracts.Wire.At(question.CreatedAt),
+            SeriesId = question.SeriesId is { } s ? Contracts.Wire.Id(s) : null,
+            SeriesName = question.Series?.Name,
+            ProblemId = question.SeriesProblemId is { } p ? Contracts.Wire.Id(p) : null,
+            ProblemSlug = question.SeriesProblem?.Slug,
+            ProblemName = question.SeriesProblem?.Name ?? question.SeriesProblem?.Problem?.Name,
+            IsPublished = question.IsPublished,
+            IsRead = isRead,
+            Answer = question.AnswerBody is null ? null : new QuestionAnswerDto
+            {
+                Body = question.AnswerBody,
+                AuthorName = question.AnswerAuthorUserId is { } id
+                    ? answerAuthors.GetValueOrDefault(id, id)
+                    : "",
+                AnsweredAt = Contracts.Wire.At(question.AnsweredAt ?? question.CreatedAt),
+            },
+        };
     }
 
     /// <summary>
@@ -492,5 +535,6 @@ namespace AlgoJudge.Server.Api
             && media.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)
                 ? "pdf"
                 : "md";
-    }
+    
+}
 }

@@ -413,8 +413,14 @@ namespace AlgoJudge.Server.Services
 
         public async Task<int> DisposeOfEveryOutstandingAsync(string userId, CancellationToken ct)
         {
+            // **Both unresolved states, not only the queue.** A request somebody
+            // at a printer had already taken is still that person's source code
+            // sitting in storage, and `printing` is exactly the state it is in
+            // for as long as anybody is working it. Until 2026-09-14 a deleted
+            // account left those behind.
             var outstanding = await context.Printouts
-                .Where(x => x.RequestedByUserId == userId && x.State == PrintoutState.Requested)
+                .Where(x => x.RequestedByUserId == userId
+                    && (x.State == PrintoutState.Requested || x.State == PrintoutState.Printing))
                 .ToListAsync(ct);
 
             foreach (var printout in outstanding)

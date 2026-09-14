@@ -761,6 +761,7 @@ namespace AlgoJudge.Server.Services
             var body = input.Body?.Trim() ?? "";
             if (body.Length == 0) throw new ValidationException("An answer is required", "answer.body.required");
 
+            var wasPublished = question.IsPublished;
             question.AnswerBody = body;
             question.AnswerAuthorUserId = author.Id;
             question.AnsweredAt = clock.GetUtcNow().UtcDateTime;
@@ -769,7 +770,7 @@ namespace AlgoJudge.Server.Services
             if (input.Publish == true) question.IsPublished = true;
 
             await context.SaveChangesAsync(ct);
-            await AnnounceQuestionAsync(question, ct);
+            await AnnounceQuestionAsync(question, wasPublished, ct);
             var answered = await ProjectQuestionAsync(await LoadQuestionAsync(id, ct), ct);
             await AnnounceManagedQuestionAsync(question.ActivityId, answered, null, ct);
             return answered;
@@ -785,38 +786,107 @@ namespace AlgoJudge.Server.Services
                 throw new ConflictException("Answer it before publishing it", "question.unanswered");
             }
 
+            var wasPublished = question.IsPublished;
             question.IsPublished = published;
             await context.SaveChangesAsync(ct);
-            if (published) await AnnounceQuestionAsync(question, ct);
+            // Both directions. Withdrawing is news too — see the announcer.
+            await AnnounceQuestionAsync(question, wasPublished, ct);
             var projectedQuestion = await ProjectQuestionAsync(await LoadQuestionAsync(id, ct), ct);
             await AnnounceManagedQuestionAsync(question.ActivityId, projectedQuestion, null, ct);
             return projectedQuestion;
         }
 
         /// <summary>
-        /// Tells the activity's participants. Everybody may read a published
-        /// question; an unpublished answer reaches only the person who asked.
+        /// Tells the activity's participants what changed for them.
+        /// <para>
+        /// <b>The type comes from the transition, not from whether an answer
+        /// exists.</b> Read the second way, <c>questionPublished</c> could never
+        /// be sent at all: a question is only ever announced widely once it is
+        /// published, and publishing an unanswered one is refused — so every
+        /// wide frame took the <c>questionAnswered</c> arm. The screen tells the
+        /// two apart for a reason: publishing makes a row appear that was not
+        /// there, which is a refetch, while answering patches one already drawn.
+        /// A publication therefore never reached an open list.
+        /// </para>
         /// </summary>
-        private async Task AnnounceQuestionAsync(Question question, CancellationToken ct)
+        private async Task AnnounceQuestionAsync(Question question, bool wasPublished, CancellationToken ct)
         {
-            var recipients = question.IsPublished
-                ? await context.Grants.AsNoTracking()
-                    .Where(g => g.ActivityId == question.ActivityId && g.State == GrantState.Active)
-                    .Select(g => g.UserId)
-                    .ToListAsync(ct)
-                : [question.AuthorUserId];
+            var members = await context.Grants.AsNoTracking()
+                .Where(g => g.ActivityId == question.ActivityId && g.State == GrantState.Active)
+                .Select(g => g.UserId)
+                .ToListAsync(ct);
 
-            var type = question.Kind == QuestionKind.Announcement
-                ? EventTypes.AnnouncementPublished
-                : question.AnswerBody is not null
-                    ? EventTypes.QuestionAnswered
-                    : EventTypes.QuestionPublished;
-
-            await events.SendToUsersAsync(recipients, type, new
+            // An announcement has no asker and no private half: it is on the
+            // board or it is not.
+            if (question.Kind == QuestionKind.Announcement)
             {
-                activityId = Wire.Id(question.ActivityId),
-                question = await ProjectQuestionAsync(question, ct),
-            }, ct);
+                await SendQuestionAsync(members, EventTypes.AnnouncementPublished, question, ct);
+                return;
+            }
+
+            // **Withdrawing said nothing to anybody until 2026-09-14**, so an
+            // answer taken back during a contest stayed on every screen that
+            // already had it. Everybody but the asker loses the row; the asker
+            // keeps theirs, back to being the private answer it was before.
+            if (!question.IsPublished && wasPublished)
+            {
+                await events.SendToUsersAsync(
+                    members.Where(id => id != question.AuthorUserId).ToList(),
+                    EventTypes.QuestionPublished,
+                    new
+                    {
+                        activityId = Wire.Id(question.ActivityId),
+                        deletedId = Wire.Id(question.Id),
+                    },
+                    ct);
+                await SendQuestionAsync(
+                    [question.AuthorUserId], EventTypes.QuestionAnswered, question, ct);
+                return;
+            }
+
+            var recipients = question.IsPublished ? members : [question.AuthorUserId];
+            var type = question.IsPublished && !wasPublished
+                ? EventTypes.QuestionPublished
+                : EventTypes.QuestionAnswered;
+            await SendQuestionAsync(recipients, type, question, ct);
+        }
+
+        /// <summary>
+        /// One frame per recipient, because <c>isRead</c> is the reader's own.
+        /// <para>
+        /// <b>And the participant's projection, not the manager's.</b> The wide
+        /// frame carried <c>ManagedQuestionDto</c> until 2026-09-14 — how many
+        /// people had read the question, and the asker's user id — to every
+        /// participant in the activity.
+        /// </para>
+        /// </summary>
+        private async Task SendQuestionAsync(
+            IReadOnlyList<string> recipients, string type, Question question, CancellationToken ct)
+        {
+            if (recipients.Count == 0) return;
+
+            var read = (await context.QuestionReads.AsNoTracking()
+                .Where(r => r.QuestionId == question.Id)
+                .Select(r => r.UserId)
+                .ToListAsync(ct))
+                .ToHashSet();
+
+            var answerAuthors = new Dictionary<string, string>();
+            if (question.AnswerAuthorUserId is { } authorId)
+            {
+                var author = await context.Users.AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == authorId, ct);
+                answerAuthors[authorId] = author is null ? authorId : Projections.DisplayName(author);
+            }
+
+            foreach (var recipient in recipients)
+            {
+                await events.SendToUserAsync(recipient, type, new
+                {
+                    activityId = Wire.Id(question.ActivityId),
+                    question = Projections.QuestionFor(question, read.Contains(recipient), answerAuthors),
+                }, ct);
+            }
         }
 
         public async Task<ManagedQuestionDto> AnnounceAsync(
@@ -856,8 +926,14 @@ namespace AlgoJudge.Server.Services
             await context.SaveChangesAsync(ct);
 
             var stored = await LoadQuestionAsync(announcement.Id, ct);
-            await AnnounceQuestionAsync(stored, ct);
-            return await ProjectQuestionAsync(stored, ct);
+            await AnnounceQuestionAsync(stored, wasPublished: false, ct);
+            // **And the panel it was written in.** Every other write on this
+            // entity tells the staff — asking, answering, publishing, deleting —
+            // and posting was the one that did not, so a second manager's list
+            // stood still while announcements went out.
+            var projected = await ProjectQuestionAsync(stored, ct);
+            await AnnounceManagedQuestionAsync(stored.ActivityId, projected, null, ct);
+            return projected;
         }
 
         /// <summary>

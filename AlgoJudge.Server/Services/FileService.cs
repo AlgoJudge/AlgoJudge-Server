@@ -169,7 +169,12 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         ISeriesLockdown lockdown,
         ISeriesGate gate,
-        IBlobStoreRegistry stores
+        IBlobStoreRegistry stores,
+        // **Resolved late, because the library depends on this service.**
+        // `ProblemService` takes `IFileService` to publish a version, so taking
+        // `IProblemService` here outright is a cycle the container refuses. The
+        // same shape `SubmissionService` uses for the same reason.
+        IServiceProvider services
     ) : IFileService
     {
         /// <summary>
@@ -461,6 +466,28 @@ namespace AlgoJudge.Server.Services
             return activity is not null && !activity.Unlisted && activity.JoinPolicy != JoinPolicy.Closed;
         }
 
+        /// <summary>
+        /// Whether the caller may read the problem this version belongs to.
+        /// <para>
+        /// <b>`problem:update` says what somebody may do, never to which
+        /// problem.</b> The library has one access list — the owner, whoever it
+        /// was shared with, and everybody when it is instance-visible — and the
+        /// package endpoint enforces it. Addressed by file id the two arms above
+        /// asked only for the verb, so anybody who manages any activity could
+        /// fetch any package and any model solution in the installation.
+        /// </para>
+        /// </summary>
+        private async Task<bool> ReadsTheProblemAsync(Guid versionId, CancellationToken ct)
+        {
+            var problemId = await context.ProblemVersions.AsNoTracking()
+                .Where(v => v.Id == versionId)
+                .Select(v => (Guid?)v.ProblemId)
+                .FirstOrDefaultAsync(ct);
+
+            return problemId is { } id
+                && await services.GetRequiredService<IProblemService>().IsReadableAsync(id, ct);
+        }
+
         private async Task<bool> CanReadProblemVersionAsync(FileReference reference, CancellationToken ct)
         {
             if (reference.ProblemVersionId is not { } versionId) return false;
@@ -474,7 +501,8 @@ namespace AlgoJudge.Server.Services
             // them open the screen and not the file.
             if (reference.Scope == FileScope.Manager)
             {
-                return await permissions.HasAnywhereAsync(Authorization.Permissions.ProblemUpdate, ct);
+                return await permissions.HasAnywhereAsync(Authorization.Permissions.ProblemUpdate, ct)
+                    && await ReadsTheProblemAsync(versionId, ct);
             }
 
             // Runner scope: the package. Readable by a Runner holding a job for
@@ -482,7 +510,8 @@ namespace AlgoJudge.Server.Services
             // a Runner — and by managers.
             if (reference.Scope == FileScope.Runner)
             {
-                return await permissions.HasAnywhereAsync(Authorization.Permissions.ProblemUpdate, ct);
+                return await permissions.HasAnywhereAsync(Authorization.Permissions.ProblemUpdate, ct)
+                    && await ReadsTheProblemAsync(versionId, ct);
             }
 
             // Participant scope: readable from **any assignment of this version

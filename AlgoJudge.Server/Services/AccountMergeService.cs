@@ -270,6 +270,19 @@ namespace AlgoJudge.Server.Services
                 moved.Files.Add(file.Id);
             }
 
+            // **Repointed rather than disposed.** The person still wants their
+            // page: a merge is one human with two accounts, not a deletion. Left
+            // behind until 2026-09-14, so a request vanished from the asker's own
+            // list and stayed in the operator's queue under a name nobody could
+            // reach any more.
+            var printouts = await context.Printouts
+                .Where(x => x.RequestedByUserId == source.Id).ToListAsync(ct);
+            foreach (var printout in printouts)
+            {
+                printout.RequestedByUserId = target.Id;
+                moved.Printouts.Add(printout.Id);
+            }
+
             var sessions = await context.UserSessions
                 .Where(s => s.UserId == source.Id).ToListAsync(ct);
             foreach (var session in sessions)
@@ -495,6 +508,11 @@ namespace AlgoJudge.Server.Services
             {
                 row.UploadedByUserId = source.Id;
             }
+            foreach (var row in await context.Printouts
+                .Where(x => moved.Printouts.Contains(x.Id)).ToListAsync(ct))
+            {
+                row.RequestedByUserId = source.Id;
+            }
             foreach (var row in await context.UserSessions
                 .Where(s => moved.Sessions.Contains(s.Id)).ToListAsync(ct))
             {
@@ -628,6 +646,7 @@ namespace AlgoJudge.Server.Services
         public List<Guid> QuestionReads { get; init; } = [];
         public List<Guid> Trials { get; init; } = [];
         public List<Guid> Files { get; init; } = [];
+        public List<Guid> Printouts { get; init; } = [];
         public List<Guid> Sessions { get; init; } = [];
         public List<Guid> Identities { get; init; } = [];
         public List<Guid> Grants { get; init; } = [];

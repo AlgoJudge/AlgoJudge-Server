@@ -45,6 +45,7 @@ namespace AlgoJudge.Server.Services
         IEventHub events,
         IEventAudience audience,
         ISeriesAnnouncer announcer,
+        IGrantService grants,
         IQueueSignal queue,
         TimeProvider clock
     ) : IManagerWriteService
@@ -564,7 +565,17 @@ namespace AlgoJudge.Server.Services
 
             if (input.PinnedProblemVersionId is { } rawPin)
             {
-                assignment.PinnedProblemVersionId = Guid.TryParse(rawPin, out var pin) ? pin : null;
+                var pinned = Guid.TryParse(rawPin, out var pin) ? (Guid?)pin : null;
+                // The same rule as attaching: a pin names a version of *this*
+                // problem, and an id from anywhere else is not a choice anybody
+                // made on this screen.
+                if (pinned is { } wanted && !await context.ProblemVersions
+                        .AnyAsync(v => v.Id == wanted && v.ProblemId == assignment.ProblemId, ct))
+                {
+                    throw new ValidationException(
+                        "That version belongs to another problem", "assignment.version.foreign");
+                }
+                assignment.PinnedProblemVersionId = pinned;
             }
 
             await context.SaveChangesAsync(ct);
@@ -656,6 +667,17 @@ namespace AlgoJudge.Server.Services
                 throw new ValidationException(
                     $"\"{role.Name}\" belongs to another activity", "activity.role.scope");
             }
+
+            // **Naming a role here hands out everything in it.** Every later
+            // enrolment carries it without anybody choosing again, so this is a
+            // grant written once and spent many times — and the rule that
+            // nobody hands out what they do not hold has to apply to it as it
+            // does to writing the role in the first place. Without this a
+            // manager could point their course's participant role at the shipped
+            // `administrator` one and let the next person through the door take
+            // the installation.
+            await grants.RequireGrantableRoleAsync(
+                activity.Id, Permissions.Parse(role.Permissions), ct);
 
             return role.Id;
         }
