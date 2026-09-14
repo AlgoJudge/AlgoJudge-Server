@@ -184,6 +184,38 @@ public class EventDeliveryTests(ServerFixture server)
             ToldOf(hub, EventTypes.QuestionChanged));
     }
 
+    // ── the panel's submissions list ─────────────────────────────────────────
+
+    /// <summary>
+    /// <b>A submission appearing reaches the screen that lists submissions.</b>
+    /// <para>
+    /// <c>submissionChanged</c> was sent from two places — cancelling an attempt
+    /// and ruling one out of the ranking — and from nowhere else. Everything
+    /// that actually moves a submission announced only the participant's
+    /// <c>submissionStateChanged</c>, which is routed to a different dispatcher,
+    /// so a contest's submissions screen sat still while the contest ran. The
+    /// Client had been built for the opposite: its handler patches the row in
+    /// place precisely so a rejudge walking through queued and running would not
+    /// reload the page three times.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_new_submission_reaches_the_panel_that_lists_them()
+    {
+        var (slug, _) = await Build.ActivityAsync(server);
+        var (host, hub) = Counting();
+        using var _ = host;
+
+        var (participant, _) = await EnrolledAsync(host, slug);
+        using var __ = participant;
+
+        await Build.SubmitAsync(participant, slug, "print(1)\n");
+
+        Assert.Contains(
+            await IdOfAsync(Seeder.DevAdminLogin),
+            ToldOf(hub, EventTypes.SubmissionChanged));
+    }
+
     // ── the people list ──────────────────────────────────────────────────────
 
     /// <summary>

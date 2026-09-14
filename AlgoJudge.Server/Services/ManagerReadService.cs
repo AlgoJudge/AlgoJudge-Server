@@ -56,6 +56,22 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         Task AnnounceRunnerRegisteredAsync(Guid runnerId, CancellationToken ct);
 
+        /// <summary>
+        /// A submission's row, as the panel draws it, told to whoever watches
+        /// this activity's submissions.
+        /// <para>
+        /// Public since 2026-09-14, and the reason is a gap rather than tidiness.
+        /// <c>submissionChanged</c> was sent from exactly two places — cancelling
+        /// an attempt and ruling one out of the ranking — while everything that
+        /// actually moves a submission (it being created, claimed, judged,
+        /// rejudged, or reclaimed from a dead Runner) announced only the
+        /// <b>participant's</b> <c>submissionStateChanged</c>. That name is
+        /// routed to a different dispatcher, so the manager's list heard none of
+        /// it: a contest's submissions screen sat still while the contest ran.
+        /// </para>
+        /// </summary>
+        Task AnnounceSubmissionChangedAsync(Guid submissionId, CancellationToken ct);
+
         Task<ManagedQuestionDto> AnswerAsync(Guid id, AnswerInputDto input, CancellationToken ct);
         Task<ManagedQuestionDto> SetPublishedAsync(Guid id, bool published, CancellationToken ct);
         Task<ManagedQuestionDto> AnnounceAsync(string activityIdOrSlug, AnnouncementInputDto input, CancellationToken ct);
@@ -105,7 +121,7 @@ namespace AlgoJudge.Server.Services
         /// <c>submissionStateChanged</c>, which is the author's own.
         /// </summary>
         private async Task AnnounceSubmissionAsync(
-            Guid activityId, ManagedSubmissionDetailDto submission, CancellationToken ct)
+            Guid activityId, ManagedSubmissionDto submission, CancellationToken ct)
         {
             var readers = await audience.InActivityAsync(activityId, Permissions.SubmissionReadAll, ct);
             if (readers.Count == 0) return;
@@ -516,12 +532,12 @@ namespace AlgoJudge.Server.Services
 
             await context.SaveChangesAsync(ct);
             // Two audiences, two facts: the author is told their submission
-            // stopped, and whoever watches the activity's submissions is told
-            // the row changed.
+            // stopped, and whoever watches the activity's submissions is told the
+            // row changed. Both come out of the one announcement now — it used to
+            // be the only place the second half was sent from, which is how every
+            // other way a submission moves came to send nothing.
             await submissions.AnnounceAsync(submissionId, ct);
-            var detail = await GetSubmissionAsync(submissionId, ct);
-            await AnnounceSubmissionAsync(job.Submission!.SeriesProblem!.ActivityId, detail, ct);
-            return detail;
+            return await GetSubmissionAsync(submissionId, ct);
         }
 
         /// <summary>
@@ -558,7 +574,6 @@ namespace AlgoJudge.Server.Services
             await submissions.AnnounceAsync(submissionId, ct);
 
             var detail = await GetSubmissionAsync(submissionId, ct);
-            await AnnounceSubmissionAsync(activityId, detail, ct);
 
             // **And every open board**, which the ordinary result push cannot
             // do: the Client merges by id and no merge removes a row. So the
@@ -690,6 +705,32 @@ namespace AlgoJudge.Server.Services
                 IsPublished = question.IsPublished,
                 ReadCount = reads,
             };
+        }
+
+        public async Task AnnounceSubmissionChangedAsync(Guid submissionId, CancellationToken ct)
+        {
+            var submission = await context.Submissions
+                .AsNoTracking()
+                .Include(x => x.User)
+                .Include(x => x.SeriesProblem)!.ThenInclude(sp => sp!.Problem)
+                .Include(x => x.SeriesProblem)!.ThenInclude(sp => sp!.Series)
+                .Include(x => x.SeriesProblem)!.ThenInclude(sp => sp!.Activity)
+                .Include(x => x.Jobs).ThenInclude(j => j.Result)
+                .FirstOrDefaultAsync(x => x.Id == submissionId, ct);
+            if (submission?.SeriesProblem is null) return;
+
+            // **The row the list draws, and no permission asked of the sender.**
+            // `GetSubmissionAsync` requires `submission:read:all` of whoever is
+            // calling, which is right for a fetch and wrong here: a Runner
+            // reporting a verdict holds nothing, so routing an announcement
+            // through it threw and took the report down with it — 84 tests at
+            // once. **Who may hear an event is decided by the audience below,
+            // never by the permissions of whatever caused it.**
+            //
+            // The summary rather than the detail, too: it is what the panel's
+            // list patches with, and it carries no address, session or device id.
+            await AnnounceSubmissionAsync(
+                submission.SeriesProblem.ActivityId, Project(submission), ct);
         }
 
         public async Task AnnounceRunnerRegisteredAsync(Guid runnerId, CancellationToken ct)
