@@ -33,6 +33,29 @@ namespace AlgoJudge.Server.Services
         Task<PageDto<ManagedQuestionDto>> ListQuestionsAsync(
             PageQuery paging, Guid? activityId, Guid? seriesId, string? kind,
             bool unansweredOnly, string? search, CancellationToken ct);
+        /// <summary>
+        /// A question somebody has just asked, told to the people who answer them.
+        /// <para>
+        /// Public because <c>QuestionService</c> owns asking while this owns the
+        /// manager's view of the result. The alternative was a second copy of
+        /// <c>ProjectQuestionAsync</c> somewhere neutral, and a projection
+        /// written twice is the thing that drifts.
+        /// </para>
+        /// </summary>
+        Task AnnounceAskedAsync(Guid questionId, CancellationToken ct);
+
+        /// <summary>
+        /// A Runner has just registered, or re-registered after a restart.
+        /// <para>
+        /// Public for the same reason as <see cref="AnnounceAskedAsync"/>:
+        /// <c>RunnerService</c> owns the handshake and this owns what a manager
+        /// sees of a Runner. A machine appearing in the list <b>awaiting
+        /// approval</b> is the single thing an operator stands over that screen
+        /// waiting for, and it was the one transition that announced nothing.
+        /// </para>
+        /// </summary>
+        Task AnnounceRunnerRegisteredAsync(Guid runnerId, CancellationToken ct);
+
         Task<ManagedQuestionDto> AnswerAsync(Guid id, AnswerInputDto input, CancellationToken ct);
         Task<ManagedQuestionDto> SetPublishedAsync(Guid id, bool published, CancellationToken ct);
         Task<ManagedQuestionDto> AnnounceAsync(string activityIdOrSlug, AnnouncementInputDto input, CancellationToken ct);
@@ -669,6 +692,20 @@ namespace AlgoJudge.Server.Services
             };
         }
 
+        public async Task AnnounceRunnerRegisteredAsync(Guid runnerId, CancellationToken ct)
+        {
+            var runner = await context.Runners.FirstOrDefaultAsync(r => r.Id == runnerId, ct);
+            if (runner is null) return;
+            await AnnounceRunnerAsync(await ProjectRunnerAsync(runner, ct), null, ct);
+        }
+
+        public async Task AnnounceAskedAsync(Guid questionId, CancellationToken ct)
+        {
+            var stored = await LoadQuestionAsync(questionId, ct);
+            await AnnounceManagedQuestionAsync(
+                stored.ActivityId, await ProjectQuestionAsync(stored, ct), null, ct);
+        }
+
         public async Task<ManagedQuestionDto> AnswerAsync(Guid id, AnswerInputDto input, CancellationToken ct)
         {
             var question = await LoadQuestionAsync(id, ct);
@@ -692,7 +729,9 @@ namespace AlgoJudge.Server.Services
 
             await context.SaveChangesAsync(ct);
             await AnnounceQuestionAsync(question, ct);
-            return await ProjectQuestionAsync(await LoadQuestionAsync(id, ct), ct);
+            var answered = await ProjectQuestionAsync(await LoadQuestionAsync(id, ct), ct);
+            await AnnounceManagedQuestionAsync(question.ActivityId, answered, null, ct);
+            return answered;
         }
 
         public async Task<ManagedQuestionDto> SetPublishedAsync(Guid id, bool published, CancellationToken ct)
@@ -797,9 +836,30 @@ namespace AlgoJudge.Server.Services
 
             var activityId = question.ActivityId;
             var removedQuestion = Wire.Id(question.Id);
+
+            // Resolved before the delete, for the reason `DeleteActivityAsync`
+            // gives for the same order: afterwards there is nothing to resolve
+            // an audience from.
+            var members = await context.Grants.AsNoTracking()
+                .Where(g => g.ActivityId == activityId && g.State == GrantState.Active)
+                .Select(g => g.UserId)
+                .ToListAsync(ct);
+
             context.Questions.Remove(question);
             await context.SaveChangesAsync(ct);
             await AnnounceManagedQuestionAsync(activityId, null, removedQuestion, ct);
+
+            // The people who were told it existed are told it is gone. Withdrawn
+            // announcements were staff-only news until 2026-09-14, so a notice
+            // corrected during a contest stayed on every screen that had it.
+            if (members.Count > 0)
+            {
+                await events.SendToUsersAsync(members, EventTypes.AnnouncementPublished, new
+                {
+                    activityId = Wire.Id(activityId),
+                    deletedId = removedQuestion,
+                }, ct);
+            }
         }
 
         private async Task<Question> LoadQuestionAsync(Guid id, CancellationToken ct) =>

@@ -94,17 +94,20 @@ namespace AlgoJudge.Server.Workers
             using var scope = scopes.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var events = scope.ServiceProvider.GetRequiredService<IEventHub>();
-            var gate = scope.ServiceProvider.GetRequiredService<ISeriesGate>();
             // The one rule for who hears an event. This worker had its own copy
             // until 2026-08-31; see `MembersAsync` in the history for what it
             // got wrong that this does not.
             var audience = scope.ServiceProvider.GetRequiredService<IEventAudience>();
+            // What a round's own event looks like. Shared with the manager's
+            // writes since 2026-09-14 — pausing and resuming send it too, and
+            // they could not reach it while it was a private method in here.
+            var announcer = scope.ServiceProvider.GetRequiredService<ISeriesAnnouncer>();
 
             var now = clock.GetUtcNow().UtcDateTime;
             var announced = 0;
 
-            announced += await OpenAsync(context, events, audience, gate, now, ct);
-            announced += await CloseAsync(context, events, audience, gate, now, ct);
+            announced += await OpenAsync(context, announcer, now, ct);
+            announced += await CloseAsync(context, announcer, now, ct);
             announced += await WindowsAsync(context, events, audience, now, ct);
             announced += await UnfreezeAsync(context, events, audience, now, ct);
 
@@ -112,12 +115,10 @@ namespace AlgoJudge.Server.Workers
         }
 
         private async Task<int> OpenAsync(
-            ApplicationDbContext context, IEventHub events, IEventAudience audience,
-            ISeriesGate gate, DateTime now, CancellationToken ct)
+            ApplicationDbContext context, ISeriesAnnouncer announcer,
+            DateTime now, CancellationToken ct)
         {
             var due = await context.Series
-                .Include(s => s.Activity)
-                .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
                 // A round with no start is already started, which is what
                 // `ManagerWriteService.Reconcile` has always said — an untimed
                 // activity runs rather than waiting for a date it does not have.
@@ -143,11 +144,6 @@ namespace AlgoJudge.Server.Workers
 
                 if (claimed == 0) continue;
 
-                // The copy in hand was read before that update, so it is brought
-                // level with what the database now holds — the announcement is
-                // built from it.
-                round.IsOpen = true;
-                round.StartAnnouncedAt = now;
                 opened++;
 
                 var late = round.StartDate is { } start && now - start > Slack;
@@ -157,19 +153,17 @@ namespace AlgoJudge.Server.Workers
                         "Series {Series} opened {Minutes:F0} minutes late",
                         round.Id, (now - round.StartDate!.Value).TotalMinutes);
                 }
-                await AnnounceAsync(events, audience, gate, round, "opened", late, ct);
+                await announcer.AnnounceAsync(round.Id, "opened", late, ct);
             }
 
             return opened;
         }
 
         private async Task<int> CloseAsync(
-            ApplicationDbContext context, IEventHub events, IEventAudience audience,
-            ISeriesGate gate, DateTime now, CancellationToken ct)
+            ApplicationDbContext context, ISeriesAnnouncer announcer,
+            DateTime now, CancellationToken ct)
         {
             var due = await context.Series
-                .Include(s => s.Activity)
-                .Include(s => s.SeriesProblems).ThenInclude(sp => sp.Problem)
                 .Where(s => s.Activity!.PublishedAt != null)
                 .Where(s => s.EndAnnouncedAt == null && s.EndDate != null && s.EndDate <= now)
                 .AsNoTracking()
@@ -190,13 +184,10 @@ namespace AlgoJudge.Server.Workers
 
                 if (claimed == 0) continue;
 
-                round.IsOpen = false;
-                round.EndAnnouncedAt = now;
-                round.StartAnnouncedAt ??= now;
                 closed++;
 
                 var late = round.EndDate is { } end && now - end > Slack;
-                await AnnounceAsync(events, audience, gate, round, "closed", late, ct);
+                await announcer.AnnounceAsync(round.Id, "closed", late, ct);
             }
 
             return closed;
@@ -264,64 +255,6 @@ namespace AlgoJudge.Server.Workers
             }
 
             return due.Count;
-        }
-
-        /// <summary>
-        /// Tells the activity's members, and nobody else.
-        /// <para>
-        /// The same disclosure the endpoint applies: a round that has opened
-        /// carries its problems, and one that has not does not — so the event
-        /// cannot leak what a fetch would have withheld.
-        /// </para>
-        /// </summary>
-        private static async Task AnnounceAsync(
-            IEventHub events, IEventAudience audience, ISeriesGate gate,
-            Series round, string change, bool late, CancellationToken ct)
-        {
-            var members = await audience.InActivityAsync(round.ActivityId, Permissions.ActivityRead, ct);
-            if (members.Count == 0) return;
-
-            var open = round.Activity is not null && gate.MayReadProblems(round, round.Activity);
-
-            var payload = new SeriesChangedData
-            {
-                ActivityId = Wire.Id(round.ActivityId),
-                Change = change,
-                Late = late ? true : null,
-                Series = new SeriesDto
-                {
-                    Id = Wire.Id(round.Id),
-                    Slug = round.Slug,
-                    Name = round.Name,
-                    StartDate = Wire.At(round.StartDate),
-                    EndDate = Wire.At(round.EndDate),
-                    IsOpen = round.IsOpen,
-                    PausedAt = Wire.At(round.PausedAt),
-                    RankingVisibleFrom = Wire.At(round.RankingVisibleFrom),
-                    RankingVisibleTo = Wire.At(round.RankingVisibleTo),
-                    ProblemCount = open || round.RevealProblemCount
-                        ? round.SeriesProblems.Count
-                        : null,
-                    Problems = open
-                        ? round.SeriesProblems
-                            .OrderBy(sp => sp.Order).ThenBy(sp => sp.Id)
-                            .Select(sp => new ProblemSummaryDto
-                            {
-                                Id = Wire.Id(sp.Id),
-                                Slug = sp.Slug,
-                                Name = sp.Name ?? sp.Problem?.Name ?? sp.Slug,
-                                // Nobody's own standing: this goes to everybody,
-                                // so it carries what is true of the problem and
-                                // nothing that is true of one reader.
-                                Status = "untouched",
-                                Attempts = 0,
-                            })
-                            .ToList()
-                        : null,
-                },
-            };
-
-            await events.SendToUsersAsync(members, EventTypes.SeriesChanged, payload, ct);
         }
 
         private static async Task RankingAsync(

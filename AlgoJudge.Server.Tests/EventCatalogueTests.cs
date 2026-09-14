@@ -75,7 +75,7 @@ public class EventCatalogueTests
     /// being a promise nobody keeps.
     /// </para>
     /// <para>
-    /// The four exceptions are named rather than tolerated, and each says why.
+    /// The three exceptions are named rather than tolerated, and each says why.
     /// </para>
     /// </summary>
     [Fact]
@@ -85,8 +85,13 @@ public class EventCatalogueTests
         {
             ["systemMessage"] = "raised by the Client's own transport when a call fails",
             ["sessionExpired"] = "raised by the Client's own transport on a 401",
-            ["activityCreated"] = "carries a per-reader `Activity`, which cannot be computed once",
-            ["activityUpdated"] = "the same, and for the same reason",
+            // `activityCreated` was exempted here for the same reason, and the
+            // reason was the payload rather than the sending. It carries an id
+            // now and is sent when an activity is published, which is when one
+            // begins to exist for a reader — an activity has no members at the
+            // moment it is created, so there was nobody to tell until then.
+            ["activityUpdated"] = "carries a per-reader `Activity`, which cannot be computed once; "
+                + "`activityTimesChanged` is its reader-independent slice",
         };
 
         var root = Root();

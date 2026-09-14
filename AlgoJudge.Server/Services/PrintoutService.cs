@@ -476,12 +476,33 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         private async Task AnnounceAsync(Printout printout, CancellationToken ct)
         {
+            var payload = new
+            {
+                printoutId = Wire.Id(printout.Id),
+                activityId = Wire.Id(printout.ActivityId),
+                // **Carried since 2026-09-14.** It was the id alone, so every
+                // transition — requested, printing, printed, discarded — arrived
+                // as an identical frame and the only way to learn which was to
+                // fetch the whole queue again.
+                state = Projections.Wire(printout.State),
+            };
+
             var readers = await audience.InActivityAsync(
                 printout.ActivityId, Permissions.PrintoutManage, ct);
-            if (readers.Count == 0) return;
+            if (readers.Count > 0)
+            {
+                await events.SendToUsersAsync(readers, EventTypes.PrintoutChanged, payload, ct);
+            }
 
-            await events.SendToUsersAsync(
-                readers, EventTypes.PrintoutChanged, new { printoutId = printout.Id.ToString() }, ct);
+            // And the person who asked for it. Their own request only: this is
+            // `SendToUserAsync`, so it cannot carry somebody else's page.
+            //
+            // **This reverses the decision recorded above** — that a participant
+            // learns their page printed when the paper arrives. It held while the
+            // participant's screen had no way to move; it stopped being true of a
+            // screen that lists the queue and never changed a row in it.
+            await events.SendToUserAsync(
+                printout.RequestedByUserId, EventTypes.PrintoutStateChanged, payload, ct);
         }
 
         // ── Loading and projecting ────────────────────────────────────────────

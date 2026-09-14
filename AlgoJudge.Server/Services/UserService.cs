@@ -32,6 +32,7 @@ namespace AlgoJudge.Server.Services
         IPermissionService permissions,
         ICurrentUserService currentUser,
         IEventHub events,
+        IEventAudience audience,
         IRequestOrigin origin,
         TimeProvider clock
     ) : IUserService
@@ -366,8 +367,30 @@ namespace AlgoJudge.Server.Services
 
             await context.SaveChangesAsync(ct);
             var projected = Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
-            await events.SendToUserAsync(id, EventTypes.UserChanged, new { user = projected }, ct);
+            await AnnounceUserAsync(id, projected, ct);
             return projected;
+        }
+
+        /// <summary>
+        /// Everyone who is looking at this person, which is not only this person.
+        /// <para>
+        /// <c>userChanged</c> went to the subject alone until 2026-09-14 — the
+        /// one account on the installation not looking at the users screen — so
+        /// blocking somebody moved no list, including the list it was done from.
+        /// </para>
+        /// <para>
+        /// Widening adds no disclosure: the payload is already the managed
+        /// projection and the subject already received it, and what is added are
+        /// holders of <c>user:read:all</c>, who may read strictly more than it
+        /// carries.
+        /// </para>
+        /// </summary>
+        private async Task AnnounceUserAsync(string id, ManagedUserDto projected, CancellationToken ct)
+        {
+            var readers = await audience.AnywhereAsync(Permissions.UserReadAll, ct);
+            await events.SendToUsersAsync(
+                readers.Append(id).Distinct().ToList(),
+                EventTypes.UserChanged, new { user = projected }, ct);
         }
 
         /// <summary>
@@ -389,7 +412,9 @@ namespace AlgoJudge.Server.Services
             user.LockoutEnabled = true;
 
             await context.SaveChangesAsync(ct);
-            return Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
+            var projected = Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
+            await AnnounceUserAsync(id, projected, ct);
+            return projected;
         }
 
         public async Task<ManagedUserDto> ApproveAsync(string id, CancellationToken ct)
@@ -403,7 +428,9 @@ namespace AlgoJudge.Server.Services
             // as a confirmed address.
             user.ApprovedAt ??= clock.GetUtcNow().UtcDateTime;
             await context.SaveChangesAsync(ct);
-            return Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
+            var projected = Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
+            await AnnounceUserAsync(id, projected, ct);
+            return projected;
         }
 
         public async Task<CreatedCredentialDto> ResetPasswordAsync(string id, CancellationToken ct)

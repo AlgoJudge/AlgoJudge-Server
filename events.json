@@ -12,6 +12,7 @@
     "maintenanceChanged",
     "managerSeriesChanged",
     "printoutChanged",
+    "printoutStateChanged",
     "problemChanged",
     "problemStatusChanged",
     "questionAnswered",

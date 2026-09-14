@@ -43,6 +43,19 @@ namespace AlgoJudge.Server.Api.Contracts
         public const string QuestionPublished = "questionPublished";
         public const string AnnouncementPublished = "announcementPublished";
 
+        /// <summary>
+        /// A print request of <b>one's own</b> moved. Participant audience, sent
+        /// with <c>SendToUserAsync</c> to the person who asked for it and nobody
+        /// else, so it cannot carry another contestant's page.
+        /// <para>
+        /// Added 2026-09-14, reversing the note on
+        /// <see cref="PrintoutChanged"/> that a participant learns their page
+        /// printed when the paper arrives. That was true of a screen with no way
+        /// to move; it is not true of one that lists the queue.
+        /// </para>
+        /// </summary>
+        public const string PrintoutStateChanged = "printoutStateChanged";
+
         // Manager.
         public const string RoleChanged = "roleChanged";
         public const string GrantChanged = "grantChanged";
@@ -70,9 +83,14 @@ namespace AlgoJudge.Server.Api.Contracts
         public const string SubmissionChanged = "submissionChanged";
         public const string QuestionChanged = "questionChanged";
         /// <summary>
-        /// A print request appeared or was resolved. **Manager only**: two people
-        /// at one printer, each looking at a list that has not moved, is how the
-        /// same page gets printed twice.
+        /// A print request appeared or was resolved, for whoever works the queue:
+        /// two people at one printer, each looking at a list that has not moved,
+        /// is how the same page gets printed twice.
+        /// <para>
+        /// <b>Manager audience.</b> It carries every request in the activity, so
+        /// it goes only to <c>printout:manage</c>. The requester hears about
+        /// their own through <see cref="PrintoutStateChanged"/> instead.
+        /// </para>
         /// </summary>
         public const string PrintoutChanged = "printoutChanged";
         public const string UserChanged = "userChanged";

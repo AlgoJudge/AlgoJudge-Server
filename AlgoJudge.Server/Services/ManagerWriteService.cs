@@ -44,6 +44,7 @@ namespace AlgoJudge.Server.Services
         ISeriesService series,
         IEventHub events,
         IEventAudience audience,
+        ISeriesAnnouncer announcer,
         IQueueSignal queue,
         TimeProvider clock
     ) : IManagerWriteService
@@ -368,6 +369,11 @@ namespace AlgoJudge.Server.Services
             // A round's pool overrides its activity's, so the same holds here.
             if (input.RunnerTags is not null) queue.Wake();
             await AnnounceSeriesAsync(round.ActivityId, round, ct);
+            // `Reconcile` above may have opened or shut the round outright, and
+            // either way its dates have moved. `rescheduled` is the honest word
+            // for both: the Client refetches rather than reading a transition
+            // out of it.
+            await announcer.AnnounceAsync(round.Id, "rescheduled", false, ct);
             return await OneAsync(round, ct);
         }
 
@@ -447,6 +453,7 @@ namespace AlgoJudge.Server.Services
             Reconcile(round);
             await context.SaveChangesAsync(ct);
             await AnnounceSeriesAsync(round.ActivityId, round, ct);
+            await announcer.AnnounceAsync(round.Id, "rescheduled", false, ct);
             return await OneAsync(round, ct);
         }
 
@@ -469,6 +476,7 @@ namespace AlgoJudge.Server.Services
 
             await context.SaveChangesAsync(ct);
             await AnnounceSeriesAsync(round.ActivityId, round, ct);
+            await announcer.AnnounceAsync(round.Id, "paused", false, ct);
             return await OneAsync(round, ct);
         }
 
@@ -502,6 +510,7 @@ namespace AlgoJudge.Server.Services
 
             await context.SaveChangesAsync(ct);
             await AnnounceSeriesAsync(round.ActivityId, round, ct);
+            await announcer.AnnounceAsync(round.Id, "resumed", false, ct);
             return await OneAsync(round, ct);
         }
 
@@ -559,6 +568,10 @@ namespace AlgoJudge.Server.Services
             }
 
             await context.SaveChangesAsync(ct);
+            // Its points and its limits are drawn on the round's own panel, and
+            // this was the one write in the file that announced nothing at all —
+            // not even to the staff editing beside each other.
+            await AnnounceSeriesAsync(assignment.ActivityId, assignment.Series!, ct);
             return await OneAsync(assignment.Series!, ct);
         }
 

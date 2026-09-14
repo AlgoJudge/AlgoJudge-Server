@@ -315,6 +315,10 @@ namespace AlgoJudge.Server
             // Who hears about a thing, resolved by the same rule that answers a
             // fetch for it. Scoped, because it reads the grants.
             builder.Services.AddScoped<Realtime.IEventAudience, Realtime.EventAudience>();
+            // What the people in a round are told when it moves. Scoped because
+            // it reads through the request's context, and shared because the
+            // scheduler and the manager's writes must send the same thing.
+            builder.Services.AddScoped<Realtime.ISeriesAnnouncer, Realtime.SeriesAnnouncer>();
 
             builder.Services.AddScoped<Seeder>();
 

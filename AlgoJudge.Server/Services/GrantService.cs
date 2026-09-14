@@ -18,6 +18,18 @@ namespace AlgoJudge.Server.Services
         Task<GrantDto> SetAsync(GrantInputDto input, CancellationToken ct);
         Task RevokeAsync(Guid id, CancellationToken ct);
 
+        /// <summary>
+        /// Somebody has just joined an activity, or accepted an invitation to.
+        /// <para>
+        /// Announced from here because this owns who hears a grant change — the
+        /// rule is four lines and a second copy of it in <c>ActivityService</c>
+        /// is a second answer to "who may see the roster". Enrolling was silent
+        /// until 2026-09-14, so a manager watching people arrive saw nothing
+        /// arrive.
+        /// </para>
+        /// </summary>
+        Task AnnounceEnrolmentAsync(Grant grant, CancellationToken ct);
+
         Task<IReadOnlyList<RoleDto>> ListRolesAsync(Guid? activityId, CancellationToken ct);
         Task<RoleDto> CreateRoleAsync(RoleInputDto input, CancellationToken ct);
         Task<RoleDto> UpdateRoleAsync(Guid id, RoleInputDto input, CancellationToken ct);
@@ -43,6 +55,9 @@ namespace AlgoJudge.Server.Services
         /// and their own screens read that.
         /// </para>
         /// </summary>
+        public Task AnnounceEnrolmentAsync(Grant grant, CancellationToken ct) =>
+            AnnounceGrantAsync(grant.ActivityId, grant.UserId, new { grant = Projected(grant) }, ct);
+
         private async Task AnnounceGrantAsync(
             Guid? activityId, string subjectUserId, object payload, CancellationToken ct)
         {
