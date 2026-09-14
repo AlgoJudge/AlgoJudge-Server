@@ -923,6 +923,45 @@ public class LockdownTests(ServerFixture server)
     }
 
     /// <summary>
+    /// <b>And the bytes, which the file address served straight past that
+    /// refusal.</b> `/files/{id}` is the one address the screens do not control:
+    /// the endpoint above answers 403 for the submission while its own source
+    /// answered 200 for anybody who had the file id — which the page they were
+    /// reading a minute earlier had given them.
+    /// <para>
+    /// The log goes with it. §8 says a displaced round loses the submissions
+    /// made in it, and an evaluation log naming the tests one failed is part of
+    /// one.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_source_of_a_displaced_rounds_submission_is_not_readable_by_file_id()
+    {
+        var (course, _) = await Build.ActivityAsync(server);
+        var examRound = await Build.SecondRoundAsync(server, course);
+
+        var login = "p-" + Guid.NewGuid().ToString("N")[..10];
+        var reader = await Sign.NewAccountAsync(server, login);
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+
+        var mine = await Build.SubmitAsync(reader, course, "print(1)\n");
+        var id = mine.GetProperty("id").GetString();
+
+        // Taken while the round is still reachable, which is how somebody comes
+        // to be holding it at all.
+        var detail = await Build.GetAsync(reader, $"/api/v1/activities/{course}/submissions/{id}");
+        var fileId = detail.GetProperty("files").EnumerateArray()
+            .Single(f => f.GetProperty("name").GetString() == "source")
+            .GetProperty("fileId").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await reader.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+
+        await RestrictAsync(examRound, SeriesImportance.Exam, scope: SeriesImportanceScope.Activity);
+        At(reader, Inside);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+    }
+
+    /// <summary>
     /// A question about a displaced round goes with the round. One about the
     /// activity stays: an announcement is how the organiser explains a lockdown.
     /// </summary>
