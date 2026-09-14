@@ -183,6 +183,47 @@ public class PrintoutTests(ServerFixture server)
     }
 
     /// <summary>
+    /// <b>A round that hides its content will not put it on paper either.</b>
+    /// <para>
+    /// This closes no read hole and is not pretending to: the text travels
+    /// <i>in</i> the request, so somebody with the code still on screen can
+    /// print it. What it refuses is a request naming a submission whose round
+    /// has taken its content back — the same act as opening it, and refusing one
+    /// while allowing the other is a line nobody could hold at the printer.
+    /// </para>
+    /// <para>
+    /// The running round is asserted first, so a refusal that happened to refuse
+    /// everything would not read as this rule working.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_print_request_is_refused_while_its_round_hides_its_content()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        await OpenPrintoutsAsync(slug);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var author = await Build.ParticipantAsync(server, slug);
+        var mine = await Build.SubmitAsync(author, slug, "print('mine')\n");
+        var submissionId = mine.GetProperty("id").GetString();
+
+        await Sign.Succeeded(await AskAsync(author, slug, submissionId: submissionId));
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/series/{roundId}/pause", new { hideProblems = true }));
+
+        var refused = await AskAsync(author, slug, submissionId: submissionId);
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("printout.series.hidden", problem.GetProperty("code").GetString());
+
+        // A paste that names no submission is untouched: hiding a round was
+        // never about printing arbitrary text.
+        await Sign.Succeeded(await AskAsync(author, slug, fileName: "notes.txt"));
+    }
+
+    /// <summary>
     /// The requester's list is their own. Every enrolled participant holds
     /// <c>printout:request</c>, so an unfiltered query would hand each of them
     /// everybody else's file names and titles.

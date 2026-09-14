@@ -152,13 +152,22 @@ namespace AlgoJudge.Server.Services
                 .Where(r => r.ActivityId == activity.Id)
                 .ToDictionaryAsync(r => r.Name, r => r.Visibility, ct);
 
+            // **A round that hides its content hides what was written for it.**
+            // The reference goes with the bytes: `FileService` refuses these by
+            // file id, and sending a row nobody may fetch would draw a button
+            // that opens onto a refusal. Staff are past this already.
+            var round = await context.Series.AsNoTracking()
+                .FirstAsync(s => s.Id == submission.SeriesProblem!.SeriesId, ct);
+            var hidden = !isManager && !gate.MayReadProblems(round, activity);
+
             // Filtering happens where the data leaves. Doing it when the answer
             // is assembled — rather than when a fixture is built — is what makes
             // a manager changing the table change what yesterday's submissions
             // show.
             bool Readable(FileReference reference) =>
                 isManager
-                || (rules.TryGetValue(reference.Name, out var visibility)
+                || ((!hidden || reference.Name != AttachmentNames.Source)
+                    && rules.TryGetValue(reference.Name, out var visibility)
                     && visibility == AttachmentVisibility.Participant);
 
             var summary = Summary(submission);

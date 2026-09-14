@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Storage;
@@ -543,7 +544,8 @@ namespace AlgoJudge.Server.Services
             Guid submissionId, string name, FileScope scope, string? userId, CancellationToken ct)
         {
             var submission = await context.Submissions.AsNoTracking()
-                .Include(s => s.SeriesProblem)
+                .Include(s => s.SeriesProblem)!.ThenInclude(sp => sp!.Series)
+                .Include(s => s.SeriesProblem)!.ThenInclude(sp => sp!.Activity)
                 .FirstOrDefaultAsync(s => s.Id == submissionId, ct);
             if (submission?.SeriesProblem is null) return false;
 
@@ -551,6 +553,27 @@ namespace AlgoJudge.Server.Services
 
             if (await permissions.HasAsync(Authorization.Permissions.SubmissionSourceReadAll, activityId, ct)) return true;
             if (scope == FileScope.Manager) return false;
+
+            // **A round that hides its content hides what was written for it.**
+            // The same gate the statement is judged by, one door along: a
+            // participant re-reading their own code during a pause called for a
+            // leak in the statement is the reading the hiding exists to stop.
+            //
+            // `Source` is the name `SubmitAsync` writes for everything a
+            // participant sends, an archive included, so gating on it takes the
+            // submitted bytes and leaves `log` and `details` — the log can quote
+            // a source line in a compiler error, and that is accepted rather
+            // than unnoticed.
+            if (name == AttachmentNames.Source)
+            {
+                // Refused rather than allowed if either is missing, the way the
+                // assignment above is: an unloaded navigation is a question this
+                // could not ask, and a read rule that answers "yes" to that is
+                // one `Include` away from serving everything.
+                var round = submission.SeriesProblem.Series;
+                var holder = submission.SeriesProblem.Activity;
+                if (round is null || holder is null || !gate.MayReadProblems(round, holder)) return false;
+            }
 
             // Under a submission, participant scope means its author — and only
             // if the activity's table admits this name.
