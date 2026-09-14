@@ -49,7 +49,10 @@ namespace AlgoJudge.Server.Services
                     u.UserName!.ToLower().Contains(needle)
                     || (u.Email != null && u.Email.ToLower().Contains(needle))
                     || (u.FirstName != null && u.FirstName.ToLower().Contains(needle))
-                    || (u.LastName != null && u.LastName.ToLower().Contains(needle))))
+                    || (u.LastName != null && u.LastName.ToLower().Contains(needle))
+                    // The typeahead and the list have to agree about who they
+                    // find; see the note on the same arm in `ListAsync`.
+                    || ((u.FirstName ?? "") + " " + (u.LastName ?? "")).ToLower().Contains(needle)))
                 .OrderBy(u => u.UserName)
                 .Take(20)
                 .ToListAsync(ct);
@@ -81,7 +84,15 @@ namespace AlgoJudge.Server.Services
                     u.UserName!.ToLower().Contains(needle)
                     || (u.Email != null && u.Email.ToLower().Contains(needle))
                     || (u.FirstName != null && u.FirstName.ToLower().Contains(needle))
-                    || (u.LastName != null && u.LastName.ToLower().Contains(needle)));
+                    || (u.LastName != null && u.LastName.ToLower().Contains(needle))
+                    // **And the two names together**, because that is what the
+                    // screen draws and therefore what somebody types. Tested
+                    // apart, "Anna Kowalska" matches neither column and the list
+                    // empties — which reads as "this person has nothing", the
+                    // wrong answer to give a manager looking somebody up.
+                    // Coalesced rather than guarded: in SQL a null on either side
+                    // of a concatenation takes the whole expression with it.
+                    || ((u.FirstName ?? "") + " " + (u.LastName ?? "")).ToLower().Contains(needle));
             }
 
             var total = await query.CountAsync(ct);
@@ -100,14 +111,14 @@ namespace AlgoJudge.Server.Services
 
             return new PageDto<ManagedUserDto>
             {
-                Items = page.Select(u => Project(u, grantCounts.GetValueOrDefault(u.Id))).ToList(),
+                Items = page.Select(u => Project(u, grantCounts.GetValueOrDefault(u.Id), now)).ToList(),
                 Total = total,
                 Page = paging.Page,
                 PageSize = paging.PageSize,
             };
         }
 
-        private static ManagedUserDto Project(User user, int grantCount) => new()
+        private static ManagedUserDto Project(User user, int grantCount, DateTimeOffset now) => new()
         {
             Id = user.Id,
             Username = user.UserName ?? user.Id,
@@ -122,7 +133,16 @@ namespace AlgoJudge.Server.Services
             ExpiresAt = Wire.At(user.ExpiresAt),
             // Blocking is LockoutEnd and nothing else. Reading it back as a date
             // rather than a boolean keeps the one fact in one place.
-            BlockedAt = user.LockoutEnd is { } end ? Wire.At(end.UtcDateTime) : null,
+            //
+            // **And it is the lockout still in force, not any lockout there has
+            // ever been.** This read `LockoutEnd is { } end` — every non-null
+            // value, elapsed or not — while the filter beside it and
+            // `User.IsBlocked` both ask whether the end is still ahead. So an
+            // account that got its password wrong ten times an hour ago came
+            // back badged red and offered an Unblock button, with **Include
+            // blocked** switched off: the switch looked broken because the rows
+            // it hides were never the rows the badge was drawn on.
+            BlockedAt = user.IsBlocked(now) ? Wire.At(user.LockoutEnd!.Value.UtcDateTime) : null,
             BlockedReason = user.BlockedReason,
             CreatedAt = Wire.At(user.CreatedAt),
             LastSeenAt = Wire.At(user.LastSeenAt),
@@ -345,7 +365,7 @@ namespace AlgoJudge.Server.Services
             if (input.Tags is not null) user.Tags = JsonSerializer.Serialize(input.Tags);
 
             await context.SaveChangesAsync(ct);
-            var projected = Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct));
+            var projected = Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
             await events.SendToUserAsync(id, EventTypes.UserChanged, new { user = projected }, ct);
             return projected;
         }
@@ -369,7 +389,7 @@ namespace AlgoJudge.Server.Services
             user.LockoutEnabled = true;
 
             await context.SaveChangesAsync(ct);
-            return Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct));
+            return Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
         }
 
         public async Task<ManagedUserDto> ApproveAsync(string id, CancellationToken ct)
@@ -383,7 +403,7 @@ namespace AlgoJudge.Server.Services
             // as a confirmed address.
             user.ApprovedAt ??= clock.GetUtcNow().UtcDateTime;
             await context.SaveChangesAsync(ct);
-            return Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct));
+            return Project(user, await context.Grants.CountAsync(g => g.UserId == id, ct), clock.GetUtcNow());
         }
 
         public async Task<CreatedCredentialDto> ResetPasswordAsync(string id, CancellationToken ct)

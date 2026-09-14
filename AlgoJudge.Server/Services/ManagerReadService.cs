@@ -175,9 +175,28 @@ namespace AlgoJudge.Server.Services
             if (!string.IsNullOrWhiteSpace(filter.Search))
             {
                 var needle = filter.Search.Trim().ToLower();
+                // **What the row shows is what somebody types.** The User column
+                // draws `Projections.DisplayName` — first and last name, the
+                // login only as a fallback — and this matched the login alone,
+                // so searching the name in front of you emptied the list. The
+                // Problem column draws the assignment's name and this matched
+                // only its one-letter slug.
+                //
+                // Written out column by column rather than through
+                // `DisplayName`, which is a C# method over a loaded row and does
+                // not translate. The names are coalesced before being joined
+                // because in SQL a null takes the whole concatenation with it.
                 query = query.Where(s =>
                     s.SeriesProblem!.Slug.ToLower().Contains(needle)
-                    || s.User!.UserName!.ToLower().Contains(needle));
+                    || (s.SeriesProblem!.Name != null
+                        && s.SeriesProblem!.Name!.ToLower().Contains(needle))
+                    || (s.SeriesProblem!.Problem != null
+                        && s.SeriesProblem!.Problem!.Name.ToLower().Contains(needle))
+                    || s.User!.UserName!.ToLower().Contains(needle)
+                    || (s.User!.FirstName != null && s.User!.FirstName!.ToLower().Contains(needle))
+                    || (s.User!.LastName != null && s.User!.LastName!.ToLower().Contains(needle))
+                    || ((s.User!.FirstName ?? "") + " " + (s.User!.LastName ?? ""))
+                        .ToLower().Contains(needle));
             }
 
             // State and verdict are the newest attempt's, and they live in
@@ -573,7 +592,26 @@ namespace AlgoJudge.Server.Services
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var needle = search.Trim().ToLower();
-                query = query.Where(q => q.Topic.ToLower().Contains(needle) || q.Body.ToLower().Contains(needle));
+                // **And the author, which the box has always offered.** Written
+                // out column by column because `Projections.DisplayName` is a
+                // method over a loaded row; `UserName` is in it because that is
+                // what the projection falls back to, so a manager searching the
+                // text actually drawn finds the row either way.
+                //
+                // **Announcements are excluded from the author arm on purpose.**
+                // The projection below withholds an announcement's author, so a
+                // predicate that matched it unconditionally would let a name be
+                // found that the answer does not carry — which is a disclosure
+                // difference and not a filtering one.
+                query = query.Where(q =>
+                    q.Topic.ToLower().Contains(needle)
+                    || q.Body.ToLower().Contains(needle)
+                    || (q.Kind != QuestionKind.Announcement && q.Author != null && (
+                        q.Author!.UserName!.ToLower().Contains(needle)
+                        || (q.Author!.FirstName != null && q.Author!.FirstName!.ToLower().Contains(needle))
+                        || (q.Author!.LastName != null && q.Author!.LastName!.ToLower().Contains(needle))
+                        || ((q.Author!.FirstName ?? "") + " " + (q.Author!.LastName ?? ""))
+                            .ToLower().Contains(needle))));
             }
 
             var total = await query.CountAsync(ct);
@@ -797,10 +835,17 @@ namespace AlgoJudge.Server.Services
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var needle = search.Trim().ToLower();
+                // **Including the tags**, which the box has always offered and
+                // which are the one thing on this screen an operator sets
+                // themselves — everything else is the Runner's self-report — and
+                // what decides which pool a machine serves. `Runner.Tags` is a
+                // native Postgres array, so this is a `WHERE EXISTS` and not a
+                // scan in memory.
                 query = query.Where(r =>
                     r.Name.ToLower().Contains(needle)
                     || r.Fingerprint.ToLower().Contains(needle)
-                    || (r.Address != null && r.Address.ToLower().Contains(needle)));
+                    || (r.Address != null && r.Address.ToLower().Contains(needle))
+                    || r.Tags.Any(tag => tag.ToLower().Contains(needle)));
             }
 
             var total = await query.CountAsync(ct);
