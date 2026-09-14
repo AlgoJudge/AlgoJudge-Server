@@ -38,6 +38,99 @@ namespace AlgoJudge.Server.Api.Contracts
             DateTime.SpecifyKind(value, DateTimeKind.Utc).ToString("O");
     }
 
+    /// <summary>
+    /// A filter value on the way in, and <see cref="Wire"/>'s twin: that one
+    /// decides how a value leaves, this one how a narrowing arrives.
+    /// <para>
+    /// Every multi-valued key binds as <c>string[]?</c>, which ASP.NET Core
+    /// fills from repeated keys (<c>?state=queued&amp;state=running</c>) and from
+    /// a single one alike. The closed vocabularies are additionally split on a
+    /// comma, so the form <c>ActivitiesController</c> already served and every
+    /// address a manager has pasted into a message keep working unchanged.
+    /// </para>
+    /// <para>
+    /// <b>Null is every, empty is nothing.</b> Somebody who sent no words is
+    /// asking an unnarrowed question. Somebody who sent words this product has
+    /// no name for is asking a question whose answer is empty — and a filter the
+    /// Server cannot honour must never <i>widen</i> what it answers with. That
+    /// distinction is the whole of this class: three places used to disagree
+    /// about it, and one of them returned an entire print queue to a request
+    /// that had asked for one row of it.
+    /// </para>
+    /// </summary>
+    public static class Filter
+    {
+        /// <summary>
+        /// Repeated keys and comma-separated values, flattened. A blank is not a
+        /// word, and a value made only of blanks is nobody having narrowed
+        /// anything — which is what a cleared control sends.
+        /// </summary>
+        public static IReadOnlyList<string>? Words(string[]? raw)
+        {
+            if (raw is null) return null;
+
+            // `?state=` binds as an array holding **one null**, not as an empty
+            // one — and the element type is not nullable, so nothing warns. It
+            // threw a NullReferenceException and the endpoint answered 500,
+            // which is what a cleared control on a screen sends.
+            var words = raw
+                .SelectMany(value => (value ?? string.Empty).Split(
+                    ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .ToList();
+
+            return words.Count == 0 ? null : words;
+        }
+
+        /// <summary>
+        /// The same, <b>without splitting on a comma</b>.
+        /// <para>
+        /// For a value whose vocabulary the Server does not own. A verdict is a
+        /// string this Server promises never to parse, so `Wrong answer, test 3`
+        /// is one verdict and not two — and choosing a separator for it would be
+        /// parsing it. See <c>Result.Verdict</c>.
+        /// </para>
+        /// </summary>
+        public static IReadOnlyList<string>? Exact(string[]? raw)
+        {
+            if (raw is null) return null;
+
+            var values = raw
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .ToList();
+
+            return values.Count == 0 ? null : values;
+        }
+
+        /// <summary>
+        /// Identifiers. One that is not a UUID is a word nobody named, and goes
+        /// the way every unnamed word goes: dropped, leaving the rest to narrow.
+        /// </summary>
+        public static IReadOnlyList<Guid>? Ids(string[]? raw) =>
+            Words(raw) is not { } words
+                ? null
+                : words
+                    .Select(word => Guid.TryParse(word, out var id) ? (Guid?)id : null)
+                    .Where(id => id is not null)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+        /// <summary>
+        /// A closed vocabulary. Words with no member behind them are dropped, so
+        /// asking for one state this Server knows and one it does not answers
+        /// with the first — and asking only for words it does not know answers
+        /// with nothing.
+        /// </summary>
+        public static IReadOnlyList<T>? Of<T>(string[]? raw, Func<string, T?> parse) where T : struct =>
+            Words(raw) is not { } words
+                ? null
+                : words
+                    .Select(parse)
+                    .Where(value => value is not null)
+                    .Select(value => value!.Value)
+                    .ToList();
+    }
+
     /// <summary>One page of a collection. Paging and filtering happen on the Server.</summary>
     public record PageDto<T>
     {

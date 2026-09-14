@@ -1,3 +1,4 @@
+using AlgoJudge.Server.Api;
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database.Models;
@@ -212,10 +213,11 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<PageDto<ManagedPrintoutDto>>(StatusCodes.Status200OK)]
         public Task<PageDto<ManagedPrintoutDto>> List(
             [FromQuery] int page, [FromQuery] int pageSize,
-            [FromQuery] Guid? activityId, [FromQuery] string? state,
+            [FromQuery] Guid? activityId, [FromQuery] string[]? state,
             CancellationToken ct) =>
             printouts.ListAsync(
-                new PageQuery { Page = page, PageSize = pageSize }, activityId, state, ct);
+                new PageQuery { Page = page, PageSize = pageSize },
+                activityId, Projections.PrintoutStates(state), ct);
 
         /// <summary>
         /// What the activity filter offers.
@@ -335,13 +337,33 @@ namespace AlgoJudge.Server.Controllers
         [HttpGet]
         [ProducesResponseType<PageDto<ManagedSubmissionDto>>(StatusCodes.Status200OK)]
         public Task<PageDto<ManagedSubmissionDto>> List(
-            [FromQuery] int page, [FromQuery] int pageSize, [FromQuery] Guid? activityId,
-            [FromQuery] Guid? seriesId, [FromQuery] Guid? seriesProblemId, [FromQuery] string? userId,
-            [FromQuery] string? state, [FromQuery] string? verdict, [FromQuery] string? search,
+            [FromQuery] int page,
+            [FromQuery] int pageSize,
+            // Singular, and staying singular: this is the scope the permission is
+            // asked at rather than a filter. See `SubmissionQuery`.
+            [FromQuery] Guid? activityId,
+            [FromQuery] string[]? seriesId,
+            [FromQuery] string[]? seriesProblemId,
+            [FromQuery] string[]? userId,
+            [FromQuery] string[]? state,
+            // **Not split on a comma.** A verdict is a label this Server stores
+            // and never parses, so `Wrong answer, test 3` is one of them and
+            // choosing a separator for it would be parsing it.
+            [FromQuery] string[]? verdict,
+            [FromQuery] string? search,
             CancellationToken ct) =>
             panel.ListSubmissionsAsync(
                 new PageQuery { Page = page, PageSize = pageSize },
-                activityId, seriesId, seriesProblemId, userId, state, verdict, search, ct);
+                new SubmissionQuery
+                {
+                    ActivityId = activityId,
+                    SeriesIds = Filter.Ids(seriesId),
+                    AssignmentIds = Filter.Ids(seriesProblemId),
+                    UserIds = Filter.Words(userId),
+                    States = Projections.JobStates(state),
+                    Verdicts = Filter.Exact(verdict),
+                    Search = search,
+                }, ct);
 
         [HttpGet("{id:guid}")]
         [ProducesResponseType<ManagedSubmissionDetailDto>(StatusCodes.Status200OK)]
@@ -384,8 +406,10 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<PageDto<ManagedRunnerDto>>(StatusCodes.Status200OK)]
         public Task<PageDto<ManagedRunnerDto>> List(
             [FromQuery] int page, [FromQuery] int pageSize,
-            [FromQuery] string? state, [FromQuery] string? search, CancellationToken ct) =>
-            panel.ListRunnersAsync(new PageQuery { Page = page, PageSize = pageSize }, state, search, ct);
+            [FromQuery] string[]? state, [FromQuery] string? search, CancellationToken ct) =>
+            panel.ListRunnersAsync(
+                new PageQuery { Page = page, PageSize = pageSize },
+                Projections.RunnerStates(state), search, ct);
 
         /// <summary>
         /// Nothing is evaluated until a manager approves the fingerprint.

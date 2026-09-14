@@ -106,7 +106,13 @@ namespace AlgoJudge.Server.Services
         public static double? Rescale(double? fraction, double? maxPoints) =>
             maxPoints is null ? null : Rescale(fraction, maxPoints.Value);
 
-        /// <summary>The newest job decides what a submission currently says.</summary>
+        /// <summary>
+        /// The newest job decides what a submission currently says.
+        /// <para>
+        /// Its twin is <see cref="CurrentAttempt"/> below, which makes the same
+        /// choice in SQL. Read them together.
+        /// </para>
+        /// </summary>
         public static EvaluationJob? Current(Submission submission) =>
             submission.Jobs.OrderByDescending(j => j.Attempt).FirstOrDefault();
 
@@ -172,6 +178,71 @@ namespace AlgoJudge.Server.Services
             if (best is null) return "attempted";
             if (best >= 1d) return "solved";
             return best > 0 ? "partial" : "attempted";
+        }
+    }
+
+    /// <summary>
+    /// The same choice <see cref="Scoring.Current"/> makes — the highest attempt
+    /// number — <b>as a predicate the database evaluates</b>.
+    /// <para>
+    /// <b>Two expressions of one rule, and there cannot be one.</b> The one
+    /// above runs on a loaded submission when a row is projected; this one runs
+    /// in SQL when rows are counted and paged, and neither can be written as the
+    /// other. They are one screen apart so that changing either is a change a
+    /// reviewer sees beside the other: filtering on one attempt and rendering
+    /// from a different one is the defect this pairing exists to prevent.
+    /// </para>
+    /// <para>
+    /// <b>And they narrow the query rather than the page.</b> State and verdict
+    /// were applied after paging until 2026-09-08, which meant a filter answered
+    /// with whichever matches happened to fall on the page asked for: one match
+    /// beyond the first page left that page empty, and <c>total</c> counted rows
+    /// the filter would have removed, so the pager offered pages that were empty
+    /// by construction.
+    /// </para>
+    /// <para>
+    /// Methods rather than an <c>Expression</c> held in a field: EF Core does
+    /// not expand <c>Expression.Invoke</c>, so a shared predicate has to write
+    /// its own <c>Where</c> or it stops translating and starts happening in
+    /// memory over every row in the table.
+    /// </para>
+    /// </summary>
+    public static class CurrentAttempt
+    {
+        public static IQueryable<Submission> WithState(
+            this IQueryable<Submission> submissions, IReadOnlyList<EvaluationJobState> wanted)
+        {
+            // A list rather than the interface it arrives as: EF translates
+            // `Contains` on a concrete collection and not on the interface.
+            var states = wanted.ToList();
+
+            // Nothing to be in is nothing to answer with. Never everything —
+            // a narrowing that widens is a screen that looks as though it works.
+            if (states.Count == 0) return submissions.Where(s => false);
+
+            // A submission with no job at all reads as queued, which is what
+            // both projections report for one.
+            return submissions.Where(s => states.Contains(
+                s.Jobs
+                    .OrderByDescending(j => j.Attempt)
+                    .Select(j => (EvaluationJobState?)j.State)
+                    .FirstOrDefault() ?? EvaluationJobState.Queued));
+        }
+
+        public static IQueryable<Submission> WithVerdict(
+            this IQueryable<Submission> submissions, IReadOnlyList<string> wanted)
+        {
+            var verdicts = wanted.ToList();
+            if (verdicts.Count == 0) return submissions.Where(s => false);
+
+            // Matched exactly, and never parsed: a verdict is a label the Runner
+            // produced and this Server stores, so that a problem type may invent
+            // one without a Server release.
+            return submissions.Where(s => verdicts.Contains(
+                s.Jobs
+                    .OrderByDescending(j => j.Attempt)
+                    .Select(j => j.Result!.Verdict)
+                    .FirstOrDefault()!));
         }
     }
 }

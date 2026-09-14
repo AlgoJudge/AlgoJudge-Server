@@ -1,3 +1,4 @@
+using AlgoJudge.Server.Api;
 using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Services;
 using AlgoJudge.Server.Services.Models;
@@ -131,10 +132,12 @@ namespace AlgoJudge.Server.Controllers
             [FromQuery] string? kind,
             [FromQuery] Guid? seriesId,
             [FromQuery] Guid? problemId,
+            [FromQuery] string? sortBy,
+            [FromQuery] string? order,
             CancellationToken ct) =>
             questions.ListAsync(
                 idOrSlug, new PageQuery { Page = page, PageSize = pageSize },
-                search, kind, seriesId, problemId, ct);
+                search, kind, seriesId, problemId, sortBy, order, ct);
 
         [HttpPost("{idOrSlug}/questions")]
         [ProducesResponseType<QuestionDto>(StatusCodes.Status201Created)]
@@ -260,11 +263,14 @@ namespace AlgoJudge.Server.Controllers
         [HttpGet]
         [ProducesResponseType<PageDto<ActivityDto>>(StatusCodes.Status200OK)]
         public Task<PageDto<ActivityDto>> List(
-            [FromQuery] int page, [FromQuery] int pageSize, [FromQuery] string? state, CancellationToken ct) =>
+            [FromQuery] int page,
+            [FromQuery] int pageSize,
+            [FromQuery] string[]? state,
+            [FromQuery] string[]? type,
+            CancellationToken ct) =>
             activities.ListAsync(
                 new PageQuery { Page = page, PageSize = pageSize },
-                state?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-                ct);
+                Filter.Words(state), Filter.Words(type), ct);
 
         /// <summary>Accepts an id or a slug, and answers for somebody not enrolled too.</summary>
         [HttpGet("{idOrSlug}")]
@@ -287,8 +293,16 @@ namespace AlgoJudge.Server.Controllers
         [HttpGet("{idOrSlug}/submissions")]
         [ProducesResponseType<PageDto<SubmissionSummaryDto>>(StatusCodes.Status200OK)]
         public Task<PageDto<SubmissionSummaryDto>> Submissions(
-            string idOrSlug, [FromQuery] int page, [FromQuery] int pageSize, CancellationToken ct) =>
-            submissions.ListAsync(idOrSlug, new PageQuery { Page = page, PageSize = pageSize }, ct);
+            string idOrSlug,
+            [FromQuery] int page,
+            [FromQuery] int pageSize,
+            [FromQuery] string[]? problemId,
+            [FromQuery] string[]? seriesId,
+            [FromQuery] string[]? state,
+            CancellationToken ct) =>
+            submissions.ListAsync(
+                idOrSlug, new PageQuery { Page = page, PageSize = pageSize },
+                Filter.Ids(problemId), Filter.Ids(seriesId), Projections.JobStates(state), ct);
 
         [HttpGet("{idOrSlug}/submissions/{submissionId:guid}")]
         [ProducesResponseType<SubmissionDetailDto>(StatusCodes.Status200OK)]
