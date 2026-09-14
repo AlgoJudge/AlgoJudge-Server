@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
 using AlgoJudge.Server.Storage;
@@ -543,7 +544,8 @@ namespace AlgoJudge.Server.Services
             Guid submissionId, string name, FileScope scope, string? userId, CancellationToken ct)
         {
             var submission = await context.Submissions.AsNoTracking()
-                .Include(s => s.SeriesProblem)
+                .Include(s => s.SeriesProblem)!.ThenInclude(sp => sp!.Series)
+                .Include(s => s.SeriesProblem)!.ThenInclude(sp => sp!.Activity)
                 .FirstOrDefaultAsync(s => s.Id == submissionId, ct);
             if (submission?.SeriesProblem is null) return false;
 
@@ -552,17 +554,65 @@ namespace AlgoJudge.Server.Services
             if (await permissions.HasAsync(Authorization.Permissions.SubmissionSourceReadAll, activityId, ct)) return true;
             if (scope == FileScope.Manager) return false;
 
+            // Refused rather than allowed if either is missing, the way the
+            // assignment above is: an unloaded navigation is a question this
+            // could not ask, and a read rule that answers "yes" to that is one
+            // `Include` away from serving everything.
+            var round = submission.SeriesProblem.Series;
+            var holder = submission.SeriesProblem.Activity;
+            if (round is null || holder is null) return false;
+
+            // **What the lockdown puts out of reach**, asked of a submission's
+            // bytes for the first time. `SubmissionService.GetAsync` refuses a
+            // displaced or address-restricted round's own submission outright,
+            // and `SERIES_LOCKDOWN.md` §8 says a displaced round loses the
+            // submissions made in it — but the file id walked past that refusal,
+            // so the bytes of the thing the endpoint refused were one request
+            // away.
+            if (await OutOfReachAsync(round, activityId, ct)) return false;
+
+            // **A round that hides its content hides what was written for it.**
+            // The same gate the statement is judged by, one door along: a
+            // participant re-reading their own code during a pause called for a
+            // leak in the statement is the reading the hiding exists to stop.
+            //
+            // **Narrower than the lockdown above, on purpose.** A displaced round
+            // takes everything; hiding the content takes the submitted bytes and
+            // leaves `log` and `details`, which in a course are the feedback.
+            // `Source` is the name `SubmitAsync` writes for everything a
+            // participant sends, an archive included. The log can quote a source
+            // line in a compiler error, and that is accepted rather than
+            // unnoticed.
+            if (name == AttachmentNames.Source && !gate.MayReadProblems(round, holder)) return false;
+
             // Under a submission, participant scope means its author — and only
             // if the activity's table admits this name.
             if (submission.UserId != userId) return false;
             return await NameIsPublicAsync(activityId, name, ct);
         }
 
+        /// <summary>
+        /// Whether the reader's lockdown puts this round out of reach, hidden by
+        /// an address rule or displaced by something more important.
+        /// <para>
+        /// The same two questions <see cref="CanReadProblemVersionAsync"/> asks
+        /// of a statement's holder, in the one place both submission arms can
+        /// reach it. Answered per round rather than per activity, because an
+        /// activity stays reachable while a round inside it does not.
+        /// </para>
+        /// </summary>
+        private async Task<bool> OutOfReachAsync(Series round, Guid activityId, CancellationToken ct)
+        {
+            var state = await lockdown.ForReaderAsync(ct);
+            return !state.Quiet
+                && (state.IsHidden(round.Id) || state.IsLocked(activityId, round.Importance));
+        }
+
         private async Task<bool> CanReadAttemptFileAsync(
             Guid jobId, string name, FileScope scope, string? userId, CancellationToken ct)
         {
             var job = await context.EvaluationJobs.AsNoTracking()
-                .Include(j => j.Submission)!.ThenInclude(s => s!.SeriesProblem)
+                .Include(j => j.Submission)!.ThenInclude(s => s!.SeriesProblem)!.ThenInclude(sp => sp!.Series)
                 .FirstOrDefaultAsync(j => j.Id == jobId, ct);
             var submission = job?.Submission;
             if (submission?.SeriesProblem is null) return false;
@@ -571,6 +621,15 @@ namespace AlgoJudge.Server.Services
 
             if (await permissions.HasAsync(Authorization.Permissions.ResultLogReadAll, activityId, ct)) return true;
             if (scope == FileScope.Manager) return false;
+
+            // **The lockdown reaches an attempt's documents too.** A displaced
+            // round loses the submissions made in it, and a log naming the tests
+            // it failed is part of one. The content gate is deliberately not
+            // asked here: hiding a round's statements takes the source and
+            // leaves the feedback.
+            var round = submission.SeriesProblem.Series;
+            if (round is null || await OutOfReachAsync(round, activityId, ct)) return false;
+
             if (submission.UserId != userId) return false;
             return await NameIsPublicAsync(activityId, name, ct);
         }

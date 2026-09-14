@@ -179,4 +179,174 @@ public class FileAccessTests(ServerFixture server)
         var refusal = await published.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("file.missing", refusal.GetProperty("code").GetString());
     }
+
+    /// <summary>The source of one submission, and the id it is fetched by.</summary>
+    private static async Task<(string Id, string FileId)> SubmittedAsync(
+        HttpClient participant, string slug)
+    {
+        var created = await Build.SubmitAsync(participant, slug, "int main() { return 0; }\n");
+        var id = created.GetProperty("id").GetString()!;
+        var detail = await Build.GetAsync(participant, $"/api/v1/activities/{slug}/submissions/{id}");
+        var source = detail.GetProperty("files").EnumerateArray()
+            .Single(f => f.GetProperty("name").GetString() == "source");
+        return (id, source.GetProperty("fileId").GetString()!);
+    }
+
+    private static async Task<int> SourceRowsAsync(HttpClient client, string slug, string id) =>
+        (await Build.GetAsync(client, $"/api/v1/activities/{slug}/submissions/{id}"))
+            .GetProperty("files").EnumerateArray()
+            .Count(f => f.GetProperty("name").GetString() == "source");
+
+    /// <summary>
+    /// <b>A round paused with its statements taken away takes the source with
+    /// them.</b> A participant re-reading their own code during a pause called
+    /// for a leak in the statement is the reading the hiding exists to stop, one
+    /// door along.
+    /// <para>
+    /// Asserted at <b>both</b> doors, because either alone is a hole: the detail
+    /// stops naming the file, and the file id stops answering. The reference is
+    /// what the screen draws a button from; the bytes are what the button
+    /// fetches, and a remembered id walks past the screen entirely.
+    /// </para>
+    /// <para>
+    /// <b>Resuming gives it back</b>, which is what proves this is the gate
+    /// asked at read time rather than a decision written down when the round
+    /// stopped.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_paused_rounds_hidden_content_takes_its_source_with_it()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var admin = await AdminAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var (id, fileId) = await SubmittedAsync(participant, slug);
+
+        Assert.Equal(1, await SourceRowsAsync(participant, slug, id));
+        Assert.Equal(HttpStatusCode.OK, (await participant.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/series/{roundId}/pause", new { hideProblems = true }));
+
+        Assert.Equal(0, await SourceRowsAsync(participant, slug, id));
+        // 404 and not 403, as every other refusal at this address is: a file id
+        // is opaque, and a 403 would confirm that the bytes exist.
+        Assert.Equal(HttpStatusCode.NotFound, (await participant.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/series/{roundId}/resume", new { extendEnd = false }));
+
+        Assert.Equal(1, await SourceRowsAsync(participant, slug, id));
+        Assert.Equal(HttpStatusCode.OK, (await participant.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+    }
+
+    /// <summary>
+    /// <b>The other half of the same rule</b>, and a different field: an
+    /// activity that hides the problems of finished rounds hides what was
+    /// written for them too. Nothing about the submission changed — the round
+    /// ended.
+    /// </summary>
+    [Fact]
+    public async Task An_ended_rounds_source_goes_where_the_activity_hides_finished_rounds()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var (id, fileId) = await SubmittedAsync(participant, slug);
+
+        await using (var context = server.NewContext())
+        {
+            var round = await context.Series.Include(s => s.Activity)
+                .FirstAsync(s => s.Id == Guid.Parse(roundId));
+            round.IsOpen = false;
+            round.EndDate = DateTime.UtcNow.AddMinutes(-1);
+            round.Activity!.HideEndedSeriesProblems = true;
+            await context.SaveChangesAsync();
+        }
+
+        Assert.Equal(0, await SourceRowsAsync(participant, slug, id));
+        Assert.Equal(HttpStatusCode.NotFound, (await participant.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+    }
+
+    /// <summary>
+    /// <b>Staff are exempt, and by the key they already hold.</b> Whoever hid
+    /// the round is the person who has to be able to see what happened in it —
+    /// a manager who paused a contest for a leak and then could not read the
+    /// answers already sent would have to resume it to investigate.
+    /// </summary>
+    [Fact]
+    public async Task A_hidden_round_keeps_its_source_readable_by_staff()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var admin = await AdminAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var (_, fileId) = await SubmittedAsync(participant, slug);
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/series/{roundId}/pause", new { hideProblems = true }));
+
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/v1/files/{fileId}")).StatusCode);
+    }
+
+    /// <summary>
+    /// <b>The evaluation log stays, and that is chosen rather than overlooked.</b>
+    /// The rule is scoped to the name a submission's own bytes are stored under,
+    /// so an attempt's log and per-test document are untouched — in a course
+    /// they are the feedback, and the round ending is when somebody reads them.
+    /// <para>
+    /// A compiler error can quote a line of the source, so this is not airtight;
+    /// it is the line the owner drew, and this test is where it is written down.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_hidden_round_keeps_the_evaluation_log_readable()
+    {
+        var (slug, roundId) = await Build.ActivityAsync(server);
+        var admin = await AdminAsync(server);
+        var participant = await Build.ParticipantAsync(server, slug);
+        var (id, sourceId) = await SubmittedAsync(participant, slug);
+
+        Guid logId;
+        await using (var context = server.NewContext())
+        {
+            var job = await context.EvaluationJobs.FirstAsync(j => j.SubmissionId == Guid.Parse(id));
+            var log = new Database.Models.File
+            {
+                Id = Guid.NewGuid(),
+                Name = "log.txt",
+                MimeType = "text/plain",
+                SizeBytes = 7,
+                Sha256 = new string('b', 64),
+                StorageId = "pg",
+            };
+            context.Files.Add(log);
+            context.FileReferences.Add(new FileReference
+            {
+                FileId = log.Id,
+                OwnerKind = FileOwnerKind.Attempt,
+                EvaluationJobId = job.Id,
+                Scope = FileScope.Participant,
+                Name = "log",
+            });
+            // The activity shares it, the way a course does.
+            var activity = await context.Activities.FirstAsync(a => a.Slug == slug);
+            context.AttachmentRules.Add(new AttachmentRule
+            {
+                ActivityId = activity.Id,
+                Name = "log",
+                Visibility = AttachmentVisibility.Participant,
+            });
+            await context.SaveChangesAsync();
+            logId = log.Id;
+        }
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync(
+            $"/api/v1/series/{roundId}/pause", new { hideProblems = true }));
+
+        // Asked at `/meta`, which applies the identical rule and reads the row
+        // rather than the bytes: this log is a reference planted without a blob
+        // behind it, so the download would fail on storage and say nothing about
+        // who may read it.
+        Assert.Equal(HttpStatusCode.NotFound, (await participant.GetAsync($"/api/v1/files/{sourceId}/meta")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await participant.GetAsync($"/api/v1/files/{logId}/meta")).StatusCode);
+    }
 }

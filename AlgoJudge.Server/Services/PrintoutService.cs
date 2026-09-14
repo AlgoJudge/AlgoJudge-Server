@@ -58,6 +58,7 @@ namespace AlgoJudge.Server.Services
         IFileService files,
         IEventHub events,
         IEventAudience audience,
+        ISeriesGate gate,
         TimeProvider clock
     ) : IPrintoutService
     {
@@ -146,7 +147,7 @@ namespace AlgoJudge.Server.Services
             {
                 var submission = await context.Submissions
                     .AsNoTracking()
-                    .Include(s => s.SeriesProblem)
+                    .Include(s => s.SeriesProblem)!.ThenInclude(sp => sp!.Series)
                     .FirstOrDefaultAsync(s => s.Id == id, ct)
                     ?? throw new NotFoundException("Submission");
 
@@ -155,6 +156,19 @@ namespace AlgoJudge.Server.Services
                     throw new ForbiddenActionException(
                         "A print request may only name your own submission",
                         "printout.submission.notYours");
+                }
+
+                // **A round that hides its content will not put it on paper.**
+                // Not a read hole being closed — the text is in the request, not
+                // fetched — but a request naming a submission whose round has
+                // taken its content back is the same act as opening it, and
+                // refusing one while allowing the other is a distinction nobody
+                // could defend at the printer.
+                if (!await permissions.HasAsync(Permissions.SubmissionSourceReadAll, activity.Id, ct)
+                    && !gate.MayReadProblems(submission.SeriesProblem!.Series!, activity))
+                {
+                    throw new ForbiddenActionException(
+                        "This round's content is hidden", "printout.series.hidden");
                 }
             }
 
