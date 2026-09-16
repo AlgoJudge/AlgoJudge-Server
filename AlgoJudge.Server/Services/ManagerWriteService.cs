@@ -154,10 +154,14 @@ namespace AlgoJudge.Server.Services
             activity.TimeZone = input.TimeZone ?? activity.TimeZone;
             activity.StartDate = ActivityService.ParseInstant(input.StartDate);
             activity.EndDate = ActivityService.ParseInstant(input.EndDate);
+            // **A member at a time**, like every optional field around it. Both
+            // were assigned together while the members were required, so a
+            // request naming only `questions` could not be written at all; now
+            // that it can, writing it must not turn printouts off.
             if (input.Modules is { } modules)
             {
-                activity.HasQuestions = modules.Questions;
-                activity.HasPrintouts = modules.Printouts;
+                if (modules.Questions is { } questions) activity.HasQuestions = questions;
+                if (modules.Printouts is { } printouts) activity.HasPrintouts = printouts;
             }
             if (input.ScoreVisibility is { } visibility) activity.ScoreVisibility = ParseScoreVisibility(visibility);
             if (input.HideEndedSeriesProblems is { } hide) activity.HideEndedSeriesProblems = hide;

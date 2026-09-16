@@ -133,6 +133,32 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? ManagerRoleId { get; init; }
     }
 
+    /// <summary>
+    /// The modules an activity turns on, as a <b>request</b> names them.
+    /// <para>
+    /// Its own record because a request and an answer are asked different
+    /// things. <see cref="ActivityModulesDto"/> names both members and requires
+    /// both, which is right for an answer: an activity always has a position on
+    /// every module. A request may name one, or neither, or be written before a
+    /// module existed — so every member here is optional, and a member nobody
+    /// names is not the same as one named <c>false</c>.
+    /// </para>
+    /// <para>
+    /// <b>This was <c>required</c> until 2026-09-16, and it made every archive
+    /// exported before <c>printouts</c> existed un-importable.</b> A partial
+    /// object was refused by the serialiser with a 400 before any handler ran,
+    /// while omitting the object entirely was always accepted — so the contract
+    /// was strict about the one shape an older export actually writes, and
+    /// lenient about the one it never writes. Both call sites already had a
+    /// per-member answer for "not named" ready and unreachable.
+    /// </para>
+    /// </summary>
+    public record ActivityModulesInputDto
+    {
+        public bool? Questions { get; init; }
+        public bool? Printouts { get; init; }
+    }
+
     public record ActivityInputDto
     {
         public required string Slug { get; init; }
@@ -142,7 +168,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string TimeZone { get; init; }
         public string? StartDate { get; init; }
         public string? EndDate { get; init; }
-        public ActivityModulesDto? Modules { get; init; }
+        public ActivityModulesInputDto? Modules { get; init; }
         public string? ScoreVisibility { get; init; }
         public IReadOnlyList<AttachmentRuleDto>? AttachmentVisibility { get; init; }
         /// <summary>
