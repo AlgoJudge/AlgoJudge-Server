@@ -743,6 +743,11 @@ namespace AlgoJudge.Server.Services
                 TimeZone = input.TimeZone ?? "Europe/Warsaw",
                 StartDate = ParseInstant(input.StartDate),
                 EndDate = ParseInstant(input.EndDate),
+                // **A module nobody named takes its own default, and the two
+                // differ.** Questions predate the modules object, so an archive
+                // written without one meant an activity that had them; printouts
+                // are opt-in. Reachable per member since 2026-09-16 — until then
+                // a partial object was refused before this line.
                 HasQuestions = input.Modules?.Questions ?? true,
                 HasPrintouts = input.Modules?.Printouts ?? false,
                 ScoreVisibility = ParseScoreVisibility(input.ScoreVisibility),

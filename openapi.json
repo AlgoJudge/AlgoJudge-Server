@@ -12526,7 +12526,7 @@
             "nullable": true
           },
           "modules": {
-            "$ref": "#/components/schemas/ActivityModulesDto"
+            "$ref": "#/components/schemas/ActivityModulesInputDto"
           },
           "scoreVisibility": {
             "type": "string",
@@ -12607,6 +12607,20 @@
           },
           "printouts": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ActivityModulesInputDto": {
+        "type": "object",
+        "properties": {
+          "questions": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "printouts": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false
