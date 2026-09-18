@@ -409,21 +409,6 @@ CI says the full-stack check waits on the first release because
 
 The documentation site cuts its `/server/` snapshot on release day, from
 `AlgoJudge-Docs`.
-### A tag is not a release
-
-`release.yml` holds `contents: read`. It **creates no GitHub Release and writes
-no release notes** — nothing in CI does, and **nothing goes red when a Release
-is missing**. A tag with no Release looks exactly like a tag with one, from
-every angle except the releases page.
-
-It is therefore a step somebody takes by hand, and the evidence that it gets
-missed is `AlgoJudge-Docs`: it carried `v0.1.0` with no Release beside it until
-that was found on 2026-09-18, eleven days later.
-
-- [ ] `gh release list -R AlgoJudge/AlgoJudge-Server` names the tag just pushed.
-
-The note's shape is `/release` in the workspace, `reference/release-notes.md`.
-
 ### The public website states this component's version
 
 `algojudge.pl` prints **`Server v0.1.0`** in four places — a card badge and
