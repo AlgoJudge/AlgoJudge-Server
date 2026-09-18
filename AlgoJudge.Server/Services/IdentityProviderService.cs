@@ -240,26 +240,27 @@ namespace AlgoJudge.Server.Services
                     "provider.deletionSecret.required");
             }
 
-            var defaultTemplate = string.IsNullOrWhiteSpace(input.DefaultRoleName)
+            var defaultRole = string.IsNullOrWhiteSpace(input.DefaultRoleName)
                 ? null
                 : input.DefaultRoleName.Trim();
 
             if (provider.UnmappedBehavior == UnmappedBehavior.DefaultRole)
             {
-                if (defaultTemplate is null)
+                if (defaultRole is null)
                 {
                     throw new ValidationException(
-                        "defaultTemplate needs a template to grant", "provider.defaultTemplate.required");
+                        "unmappedBehavior is defaultRole, so defaultRoleName must name a role",
+                        "provider.defaultRole.required");
                 }
-                await RequireMappableAsync(defaultTemplate, ct);
+                await RequireMappableAsync(defaultRole, ct);
             }
-            else if (defaultTemplate is not null)
+            else if (defaultRole is not null)
             {
                 // Under `deny` there is nothing to grant, and a name left behind
                 // in the row would be a setting that looks live and is not.
-                defaultTemplate = null;
+                defaultRole = null;
             }
-            provider.DefaultRoleName = defaultTemplate;
+            provider.DefaultRoleName = defaultRole;
 
             if (input.MappingRules is { } wanted)
             {
