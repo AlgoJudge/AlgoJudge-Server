@@ -1,5 +1,5 @@
 {
-  "$comment": "Every `code` this Server puts in a problem+json body. `/en/server/api` promises the member is stable across releases and tells an integrator to switch on it, so the set is committed rather than left scattered through the services. ErrorCodeCensusTests fails when the code emits one that is not here, or when a name here is emitted nowhere. Generated from the source; regenerate rather than editing by hand.",
+  "$comment": "Every `code` this Server puts in a problem+json body. `/en/server/api` promises the member is stable within a release line and tells an integrator to switch on it, so the set is committed rather than left scattered through the services. ErrorCodeCensusTests fails when the code emits one that is not here, or when a name here is emitted nowhere, and names which.",
   "codes": [
     "account.password",
     "account.password.wrong",
