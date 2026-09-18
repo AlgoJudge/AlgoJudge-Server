@@ -1,0 +1,29 @@
+name: CodeQL
+
+# The steps are in AlgoJudge/.github, shared by every public repository.
+# This file decides when they run and which languages they analyze.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    uses: AlgoJudge/.github/.github/workflows/codeql.yml@main
+    with:
+      languages: '["csharp", "actions"]'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
