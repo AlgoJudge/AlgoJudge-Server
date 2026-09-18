@@ -111,7 +111,7 @@ namespace AlgoJudge.Server.Authorization
 
             foreach (var key in Keys.GetAllKeys().OrderBy(k => k.CreationDate))
             {
-                // **Reading the descriptor is the test.** It deserialises, which
+                // **Reading the descriptor is the test.** It deserializes, which
                 // decrypts — so a key encrypted with a certificate nobody
                 // supplies any more fails exactly here, which is the failure
                 // this report exists to find before an operator meets it as

@@ -70,7 +70,7 @@ namespace AlgoJudge.Server.Lti.Data
         /// per placement, and the reconciling worker runs long after the launch
         /// that carried it. Null means the platform offered no line-item
         /// container — a course with grading switched off, or a tool registered
-        /// without the AGS scopes — and grade synchronisation then has nowhere to
+        /// without the AGS scopes — and grade synchronization then has nowhere to
         /// go, which is a state to report rather than an error to retry.
         /// </para>
         /// </summary>
@@ -120,7 +120,7 @@ namespace AlgoJudge.Server.Lti.Data
         /// Decided 2026-08-13: a second placement of the same activity is allowed
         /// — a shared problem set across two groups is real — but it is not
         /// allowed to happen quietly. One activity's grades then reach two
-        /// gradebooks and §7's enrolment has two rosters, which is a thing to
+        /// gradebooks and §7's enrollment has two rosters, which is a thing to
         /// find out from a screen rather than from a gradebook that disagrees
         /// with itself.
         /// </para>

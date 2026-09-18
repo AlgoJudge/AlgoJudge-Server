@@ -49,7 +49,7 @@ namespace AlgoJudge.Server
             // **`FormOptions` is left at the framework defaults, deliberately.**
             // It used to raise `ValueLengthLimit` to `int.MaxValue`, which let an
             // anonymous caller post one form value of `MaxRequestBytes` to the two
-            // LTI endpoints that read a form — `ReadFormAsync` materialises each
+            // LTI endpoints that read a form — `ReadFormAsync` materializes each
             // value as a string, so 128 MB of body is 256 MB of managed memory,
             // and nothing here rate-limits. Nothing needs it: form parsing is
             // reached only by `Lti/Controllers/LtiLaunchController`, and every
@@ -81,7 +81,7 @@ namespace AlgoJudge.Server
 
             builder.Services.AddHttpContextAccessor();
 
-            // Where the request came from, with the address normalised in one
+            // Where the request came from, with the address normalized in one
             // place. See `Services/RequestOrigin.cs`.
             builder.Services.AddScoped<Services.IRequestOrigin, Services.RequestOrigin>();
 
@@ -104,7 +104,7 @@ namespace AlgoJudge.Server
             // so out loud. `EndpointCensusTests` holds the list.
             //
             // This is a floor, not the rule: what a caller may *do* is decided
-            // by the permission model, and several open endpoints authorise
+            // by the permission model, and several open endpoints authorize
             // themselves in the handler because a policy cannot express what
             // they check — a file readable through any reference, a socket
             // handshake, a platform's signed launch.
@@ -149,7 +149,7 @@ namespace AlgoJudge.Server
                 // is `AllowedUserNameCharacters`, which is left at the framework
                 // default — ASCII — deliberately: widening it would admit
                 // non-ASCII logins through `POST /users`, the reserved-login
-                // check and every normalisation path. `FederatedSignInService`
+                // check and every normalization path. `FederatedSignInService`
                 // folds a provider's name to fit rather than the set being moved.
                 .AddUserValidator<OptionalEmailValidator>()
                 // The one login this product reserves. A validator because it is
@@ -491,7 +491,7 @@ namespace AlgoJudge.Server
                     # The one exception is a stored file: an installation's logo and
                     # its published documents are drawn by pages on the application's
                     # own host, and a crawler that may not fetch them renders those
-                    # pages without them. Every id is authorised and answers 404 to a
+                    # pages without them. Every id is authorized and answers 404 to a
                     # caller who may not read it, so this opens nothing.
                     #
                     # Everything reachable here also carries `X-Robots-Tag: noindex`.
@@ -587,7 +587,7 @@ namespace AlgoJudge.Server
             // Client reads a 401 as *your session ended* and sends the reader to
             // the sign-in screen, so a typo in an address would look like being
             // signed out. Answered in front of authorization because there is
-            // nothing there to authorise; `UseStatusCodePages` above shapes it.
+            // nothing there to authorize; `UseStatusCodePages` above shapes it.
             app.Use(async (context, next) =>
             {
                 if (context.GetEndpoint() is null)
@@ -613,7 +613,7 @@ namespace AlgoJudge.Server
             // has closed itself can still be reopened.
             app.UseAdminSurfaceRules();
 
-            // After authorisation, so the refusal is the last word rather than
+            // After authorization, so the refusal is the last word rather than
             // an anonymous 503 hiding a 401 — and after the exception handler,
             // so throwing gets `application/problem+json` for free.
             app.UseMaintenanceGate();
@@ -639,7 +639,7 @@ namespace AlgoJudge.Server
             // anonymous. What may be reached at all is `UseIdentitySurfaceRules`
             // above; this decides only who has to be signed in first.
             // **`Finally`, not `Add`.** `MapIdentityApi` puts `manage/*` in a
-            // nested group and authorises that group, and a convention on the
+            // nested group and authorizes that group, and a convention on the
             // outer group runs *before* the inner one — so `Add` saw no
             // `IAuthorizeData` on `manage/2fa` and `manage/info`, opened all
             // three, and `EndpointCensusTests` is where that was caught rather

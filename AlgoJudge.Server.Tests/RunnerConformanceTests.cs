@@ -407,13 +407,13 @@ public class RunnerConformanceTests(ServerFixture server)
         Assert.Null(stored.FinishedAt);
         Assert.Contains("checksum", stored.FailureReason ?? "", StringComparison.OrdinalIgnoreCase);
 
-        // And it does not count towards what this Runner has got through.
+        // And it does not count toward what this Runner has got through.
         var runnerRow = await context.Runners.FirstAsync(r => r.Id == Guid.Parse(runner.Id));
         Assert.Equal(0, runnerRow.CompletedJobs);
     }
 
     /// <summary>
-    /// **And it stops travelling once the deliveries run out.** Retrying for
+    /// **And it stops traveling once the deliveries run out.** Retrying for
     /// ever is how one bad package stops an installation, which is what the cap
     /// in §5 is for; the last reason given is the one recorded. §6.
     /// </summary>
@@ -621,7 +621,7 @@ public class RunnerConformanceTests(ServerFixture server)
     /// The other half, and the reason the fix is in two parts. A queued sibling
     /// can simply be superseded, because a queued job is by construction one
     /// nobody holds. A running one cannot: the sandboxing Runner's keeper never
-    /// aborts an evaluation, so cancelling it would mean a sandbox finishing and
+    /// aborts an evaluation, so canceling it would mean a sandbox finishing and
     /// discarding its work, and on an External Runner a real submission already
     /// spent on somebody else's account. So the *new* attempt waits, on the
     /// claim's own filter.
@@ -1029,7 +1029,7 @@ public class RunnerConformanceTests(ServerFixture server)
     /// queued it silently — and it is the one a manager uses, since a corrected
     /// package is tried on a single entry before a whole round.
     /// <para>
-    /// The assertion is latency, like its neighbours: without the nudge the job
+    /// The assertion is latency, like its neighbors: without the nudge the job
     /// is still handed over, twenty seconds later, when the wait runs out. A
     /// test that only checked the <c>200</c> would pass against the defect.
     /// </para>

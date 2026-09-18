@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Utils
         /// allowed, and that is the wrong way round for a security control — but
         /// the allowed set here is "the public internet", which has no
         /// enumeration. The refusals are therefore exhaustive by range rather
-        /// than by example, and an address family this does not recognise is
+        /// than by example, and an address family this does not recognize is
         /// refused outright.
         /// </para>
         /// </summary>

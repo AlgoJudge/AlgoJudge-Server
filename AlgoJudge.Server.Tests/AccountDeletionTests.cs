@@ -173,7 +173,7 @@ public class AccountDeletionTests(ServerFixture server)
         Assert.False(user.Anonymized);
         Assert.Equal("important-person", user.UserName);
 
-        // The link is gone all the same — the provider's statement is honoured
+        // The link is gone all the same — the provider's statement is honored
         // as far as it goes — and the rest is somebody's decision.
         Assert.False(await context.UserIdentities.AnyAsync(i => i.UserId == person));
 
@@ -185,7 +185,7 @@ public class AccountDeletionTests(ServerFixture server)
     /// Two providers vouching for one person are two accounts here — <b>today</b>.
     /// <para>
     /// This records what the Server does, and it is deliberately <i>not</i>
-    /// called correct. The behaviour is right on its own terms: a second
+    /// called correct. The behavior is right on its own terms: a second
     /// directory saying "this is jan.kowalski" must not be handed the account the
     /// first one made, which is why the key is issuer plus <c>sub</c>. But the
     /// owner required on 2026-08-10 that <b>one person has one account whichever

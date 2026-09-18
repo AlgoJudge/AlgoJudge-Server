@@ -28,14 +28,14 @@ namespace AlgoJudge.Server.Services
         /// arrive.
         /// </para>
         /// </summary>
-        Task AnnounceEnrolmentAsync(Grant grant, CancellationToken ct);
+        Task AnnounceEnrollmentAsync(Grant grant, CancellationToken ct);
 
         /// <summary>
         /// Refuses a set the caller could not hand out at this scope.
         /// <para>
         /// On the interface because a role is chosen in two places: here, where
         /// one is written, and in an activity's settings, where one is named as
-        /// what enrolment carries. A second copy of the rule is a second answer
+        /// what enrollment carries. A second copy of the rule is a second answer
         /// to "may this person hand this out", and the copies drift.
         /// </para>
         /// </summary>
@@ -67,7 +67,7 @@ namespace AlgoJudge.Server.Services
         /// and their own screens read that.
         /// </para>
         /// </summary>
-        public Task AnnounceEnrolmentAsync(Grant grant, CancellationToken ct) =>
+        public Task AnnounceEnrollmentAsync(Grant grant, CancellationToken ct) =>
             AnnounceGrantAsync(grant.ActivityId, grant.UserId, new { grant = Projected(grant) }, ct);
 
         private async Task AnnounceGrantAsync(
@@ -228,7 +228,7 @@ namespace AlgoJudge.Server.Services
         /// reads them: an invited grant confers nothing, and the key means
         /// nothing in an activity grant. The source column is deliberately not
         /// filtered — a managed contribution can never carry this key, and one
-        /// that somehow did would still be honoured by the resolver, so counting
+        /// that somehow did would still be honored by the resolver, so counting
         /// it errs the safe way.
         /// </para>
         /// </summary>
@@ -365,7 +365,7 @@ namespace AlgoJudge.Server.Services
 
             // **`system:administrator` is a system grant's key, and only ever
             // one.** `PermissionService.IsAdministratorAsync` requires
-            // `ActivityId is null` before honouring it, so written into an
+            // `ActivityId is null` before honoring it, so written into an
             // activity grant it confers nothing at all — and the danger is
             // exactly that it looks as though it does: the panel shows somebody
             // holding it while every check disagrees, silently.
@@ -375,7 +375,7 @@ namespace AlgoJudge.Server.Services
             // better reason — they do not hold it. The one actor that rule
             // exempts is an administrator, and this is the case it leaves.
             //
-            // **Only this key; the general rule is not enforced.** The catalogue
+            // **Only this key; the general rule is not enforced.** The catalog
             // declares a scope for all 52, but five of the shipped `manager`
             // template's are `Global` — the `problem:*` ones — and the panel
             // applies that template to activity grants. Refusing every misplaced
@@ -577,7 +577,7 @@ namespace AlgoJudge.Server.Services
             }
 
             // The same reason an activity grant may not carry it: the key is only
-            // honoured at system scope, so a role scoped to one activity that
+            // honored at system scope, so a role scoped to one activity that
             // held it would show a right that every check disagrees with.
             if (activityId is not null && wanted.Contains(Permissions.SystemAdministrator))
             {
@@ -650,7 +650,7 @@ namespace AlgoJudge.Server.Services
             // **Anywhere, not at the installation scope.** Every path that makes
             // a manager writes an *activity* grant — the seeder,
             // `ActivityService.CreateAsync` for whoever created it, the panel and
-            // LTI enrolment alike — so asking for this key with a null activity
+            // LTI enrollment alike — so asking for this key with a null activity
             // refused the Grants page and the Participants tab to every manager
             // there is.
             //
@@ -763,7 +763,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// <b>This is the method the whole change exists for, and the one that
         /// fails open.</b> Three things stand between it and an accident: the
-        /// scope it is authorised at, the excess rule, and the recompute of every
+        /// scope it is authorized at, the excess rule, and the recompute of every
         /// linked grant's staff flag. The count the panel shows before saving is
         /// the fourth, and the only one a person sees.
         /// </para>

@@ -79,7 +79,7 @@ namespace AlgoJudge.Server.Api
             EvaluationJobState.Running => "running",
             EvaluationJobState.Completed => "completed",
             EvaluationJobState.Failed => "failed",
-            EvaluationJobState.Cancelled => "cancelled",
+            EvaluationJobState.Canceled => "canceled",
             EvaluationJobState.Superseded => "superseded",
             _ => "queued",
         };
@@ -128,7 +128,7 @@ namespace AlgoJudge.Server.Api
                 "running" => EvaluationJobState.Running,
                 "completed" => EvaluationJobState.Completed,
                 "failed" => EvaluationJobState.Failed,
-                "cancelled" => EvaluationJobState.Cancelled,
+                "canceled" => EvaluationJobState.Canceled,
                 "superseded" => EvaluationJobState.Superseded,
                 _ => (EvaluationJobState?)null,
             });
@@ -171,12 +171,12 @@ namespace AlgoJudge.Server.Api
             TargetUserId = merge.TargetUserId,
             MergedAt = Contracts.Wire.At(merge.MergedAt),
             MergedByUserId = merge.MergedByUserId,
-            AnonymiseAfter = Contracts.Wire.At(merge.AnonymiseAfter),
-            SourceAnonymisedAt = Contracts.Wire.At(merge.SourceAnonymisedAt),
+            AnonymizeAfter = Contracts.Wire.At(merge.AnonymizeAfter),
+            SourceAnonymizedAt = Contracts.Wire.At(merge.SourceAnonymizedAt),
             UndoneAt = Contracts.Wire.At(merge.UndoneAt),
             // Once, and only while the account it would give back is still
-            // whole — an anonymised one has nothing left to hand over.
-            CanUndo = merge.UndoneAt is null && merge.SourceAnonymisedAt is null,
+            // whole — an anonymized one has nothing left to hand over.
+            CanUndo = merge.UndoneAt is null && merge.SourceAnonymizedAt is null,
         };
 
         public static string DisplayName(User user)
@@ -210,7 +210,7 @@ namespace AlgoJudge.Server.Api
         /// gave it a credential of its own.
         /// </para>
         /// <para>
-        /// Defined once, here, because the Client greys its inputs on this and
+        /// Defined once, here, because the Client grays its inputs on this and
         /// the Server refuses on it — and two definitions of "local" would be two
         /// answers to whose the account is.
         /// </para>

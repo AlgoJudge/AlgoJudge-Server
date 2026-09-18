@@ -42,7 +42,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <summary>
         /// Which pools this Runner belongs to, from its own configuration.
         /// <para>
-        /// <b>A seed, honoured on the first registration only.</b> Every other
+        /// <b>A seed, honored on the first registration only.</b> Every other
         /// field here is refreshed whenever a Runner registers again, which is
         /// how it reports a restart; this one is not. Afterwards the operator
         /// owns it, because a Runner that could re-declare its tags on restart
@@ -189,7 +189,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// It was a `language` field the Server read, so the allowed set was
         /// checked here and a file extension for pasted source came from a table
         /// of seven languages compiled into a controller. The Runner decides both
-        /// now — it is what knows a language catalogue — and the Server needs no
+        /// now — it is what knows a language catalog — and the Server needs no
         /// release when one is added.
         /// </para>
         /// </summary>

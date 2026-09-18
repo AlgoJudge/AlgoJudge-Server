@@ -126,7 +126,7 @@ public class DownloadPathTests(ServerFixture server)
 
     /// <summary>
     /// A statement is read in an <c>&lt;object data&gt;</c>, and a browser
-    /// honours <c>attachment</c> even there — so the one type that has to be
+    /// honors <c>attachment</c> even there — so the one type that has to be
     /// shown in place says so.
     /// </summary>
     [Fact]

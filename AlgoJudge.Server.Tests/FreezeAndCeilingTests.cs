@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AlgoJudge.Server.Tests;
 
 /// <summary>
-/// Two behaviours nobody had seen work.
+/// Two behaviors nobody had seen work.
 ///
 /// <para>
 /// Both were in the code and neither was exercised: a ranking freeze that lifts
@@ -91,7 +91,7 @@ public class FreezeAndCeilingTests(ServerFixture server)
     /// <para>
     /// The whole mechanism is that disclosure is decided from <c>now</c> at read
     /// time — no job flips a flag, nothing is cached, and nothing has to be
-    /// restarted. That is easy to write and easy to lose: one memoised board and
+    /// restarted. That is easy to write and easy to lose: one memoized board and
     /// a contest's results stay hidden past the moment they were promised.
     /// </para>
     /// </summary>

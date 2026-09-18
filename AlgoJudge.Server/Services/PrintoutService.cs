@@ -35,7 +35,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// Dispose of everything still outstanding for one person, used when an
-        /// account is deleted or merged away. Anonymising a name leaves the
+        /// account is deleted or merged away. Anonymizing a name leaves the
         /// source sitting in the queue; this is the other half.
         /// </summary>
         Task<int> DisposeOfEveryOutstandingAsync(string userId, CancellationToken ct);
@@ -515,7 +515,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// The row, and the permission asked at <b>its own</b> activity before
-        /// anything is projected. Nothing in this codebase authorises by
+        /// anything is projected. Nothing in this codebase authorizes by
         /// attribute, so a method that forgets this line is authenticated-only.
         /// </summary>
         private async Task<Printout> LoadForOperatorAsync(

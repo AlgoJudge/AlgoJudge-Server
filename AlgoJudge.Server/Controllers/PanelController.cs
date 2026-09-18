@@ -385,7 +385,7 @@ namespace AlgoJudge.Server.Controllers
             panel.CancelAttemptAsync(submissionId, attemptId, ct);
 
         /// <summary>
-        /// Rules that this counts towards no standing, or lifts the ruling.
+        /// Rules that this counts toward no standing, or lifts the ruling.
         /// Neither a rejudge nor a cancellation — those are about evaluating,
         /// this about what the evaluation counts for. The submission keeps
         /// everything it had, its place against the ceiling included.
@@ -782,7 +782,7 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>
-        /// A redirect setting, normalised and refused.
+        /// A redirect setting, normalized and refused.
         /// <para>
         /// <b>One check, and it is existence rather than shape.</b> A slug that is
         /// not a slug cannot be in the table — the provider service saw to that on
@@ -799,7 +799,7 @@ namespace AlgoJudge.Server.Controllers
         /// </para>
         /// <para>
         /// <b>It is not what keeps a visitor off a dead end</b>, and saying so
-        /// would be a claim this Server does not honour: pre-configuration
+        /// would be a claim this Server does not honor: pre-configuration
         /// writes the column with no check at all, deliberately, because at a
         /// first start no provider exists yet. What keeps the screen usable is
         /// the filter at the read — a slug reaches a visitor only while its
@@ -854,7 +854,7 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>
-        /// Sets the operator's colours and typeface, by either of its two doors.
+        /// Sets the operator's colors and typeface, by either of its two doors.
         /// <para>
         /// <b>One thing is in force and one thing can be downloaded.</b> The
         /// panel's form sends values and this Server writes the canonical YAML;
@@ -889,7 +889,7 @@ namespace AlgoJudge.Server.Controllers
                 if (file.SizeBytes > ThemeDocument.MaxBytes)
                 {
                     throw new ValidationException(
-                        $"A theme is a few hundred bytes of colours; this file is "
+                        $"A theme is a few hundred bytes of colors; this file is "
                         + $"{file.SizeBytes} and the ceiling is {ThemeDocument.MaxBytes}.",
                         "theme.size");
                 }
@@ -905,8 +905,8 @@ namespace AlgoJudge.Server.Controllers
                 // other door goes through, then written again from what came out.
                 // The round trip is what makes the stored document canonical —
                 // and what stops the form having a validation path of its own.
-                var stated = ThemeDocument.Serialise(Root(input.Theme!));
-                var canonical = ThemeDocument.Serialise(ThemeDocument.Parse(stated, faces));
+                var stated = ThemeDocument.Serialize(Root(input.Theme!));
+                var canonical = ThemeDocument.Serialize(ThemeDocument.Parse(stated, faces));
 
                 var bytes = System.Text.Encoding.UTF8.GetBytes(canonical);
                 var stored = await files.StoreAsync(
@@ -1009,7 +1009,7 @@ namespace AlgoJudge.Server.Controllers
         /// <b>Refused rather than allowed to break the theme.</b> A theme naming a
         /// face that is not stored cannot be read, and a theme that cannot be read
         /// is no theme at all: withdrawing this quietly would turn one deletion
-        /// into every colour on the installation reverting.
+        /// into every color on the installation reverting.
         /// </para>
         /// </summary>
         [HttpDelete("fonts/{name}")]
@@ -1065,7 +1065,7 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>The form's values, as the document they are about to be written as.</summary>
-        private static ThemeRoot Root(ThemeColoursInputDto input) => new()
+        private static ThemeRoot Root(ThemeColorsInputDto input) => new()
         {
             Format = ThemeDocument.Format,
             Version = ThemeDocument.Version,
@@ -1082,23 +1082,23 @@ namespace AlgoJudge.Server.Controllers
             }).ToList(),
         };
 
-        private static ThemeColours? Scheme(ThemeColoursDto? colours) => colours is null ? null : new()
+        private static ThemeColors? Scheme(ThemeColorsDto? colors) => colors is null ? null : new()
         {
-            Primary = colours.Primary,
-            Secondary = colours.Secondary,
-            Accent = colours.Accent,
-            Link = colours.Link,
-            Body = colours.Body,
-            Surface = colours.Surface,
-            Text = colours.Text,
-            Dimmed = colours.Dimmed,
-            Border = colours.Border,
-            NavBackground = colours.NavBackground,
-            NavText = colours.NavText,
-            NavActiveBackground = colours.NavActiveBackground,
-            NavActiveText = colours.NavActiveText,
-            HeaderBackground = colours.HeaderBackground,
-            HeaderText = colours.HeaderText,
+            Primary = colors.Primary,
+            Secondary = colors.Secondary,
+            Accent = colors.Accent,
+            Link = colors.Link,
+            Body = colors.Body,
+            Surface = colors.Surface,
+            Text = colors.Text,
+            Dimmed = colors.Dimmed,
+            Border = colors.Border,
+            NavBackground = colors.NavBackground,
+            NavText = colors.NavText,
+            NavActiveBackground = colors.NavActiveBackground,
+            NavActiveText = colors.NavActiveText,
+            HeaderBackground = colors.HeaderBackground,
+            HeaderText = colors.HeaderText,
         };
 
         /// <summary>

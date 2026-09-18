@@ -9,10 +9,10 @@ namespace AlgoJudge.Server.Database.Models
     /// </para>
     /// <para>
     /// <b>Both accounts keep their rows.</b> Deletion in this product has always
-    /// meant anonymising in place — `docs/specs/AUTHENTICATION.md`, "deletion is
+    /// meant anonymizing in place — `docs/specs/AUTHENTICATION.md`, "deletion is
     /// always anonymization" — because `Submission` and `Result` name a user id
     /// and it has to stay resolvable. A merge is no exception: the emptied
-    /// account is anonymised when the undo window closes, and the rows that
+    /// account is anonymized when the undo window closes, and the rows that
     /// record what it once <i>did</i> still resolve to something.
     /// </para>
     /// </summary>
@@ -30,13 +30,13 @@ namespace AlgoJudge.Server.Database.Models
         public required string MergedByUserId { get; set; }
 
         /// <summary>
-        /// When the emptied account is anonymised, and with that the last moment
+        /// When the emptied account is anonymized, and with that the last moment
         /// an undo is offered. Until then the account is untouched under its
         /// block, which is what lets an undo give it back whole.
         /// </summary>
-        public DateTime AnonymiseAfter { get; set; }
+        public DateTime AnonymizeAfter { get; set; }
 
-        public DateTime? SourceAnonymisedAt { get; set; }
+        public DateTime? SourceAnonymizedAt { get; set; }
 
         public DateTime? UndoneAt { get; set; }
 
@@ -46,7 +46,7 @@ namespace AlgoJudge.Server.Database.Models
         /// What moved, as `{"submissions":["…"],"grants":[…],…}`.
         /// <para>
         /// Includes the grants that were <b>dropped</b> rather than moved,
-        /// because a collision resolved in the target's favour is still
+        /// because a collision resolved in the target's favor is still
         /// something the source had and an undo owes back.
         /// </para>
         /// </summary>
@@ -55,9 +55,9 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>
         /// Optimistic concurrency. <b>The undo and the sweeper both read this
         /// row, decide on what they read, and write it back</b> — one checks
-        /// that nothing has been anonymised, the other that nothing has been
+        /// that nothing has been anonymized, the other that nothing has been
         /// undone. Without a token both checks pass at once and the merge ends
-        /// up undone *and* anonymised, which is not a state an undo can offer.
+        /// up undone *and* anonymized, which is not a state an undo can offer.
         /// </summary>
         public uint RowVersion { get; set; }
 

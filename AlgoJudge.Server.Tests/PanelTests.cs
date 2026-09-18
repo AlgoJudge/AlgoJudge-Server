@@ -23,7 +23,7 @@ public class PanelTests(ServerFixture server)
     /// for <c>template:read</c> at the installation scope while every path that
     /// makes a manager writes an <i>activity</i> grant — the seeder,
     /// <c>ActivityService.CreateAsync</c> for whoever created it, the panel and
-    /// LTI enrolment alike — so it could never pass for one. Both screens that
+    /// LTI enrollment alike — so it could never pass for one. Both screens that
     /// offer templates died on the 403, including the Participants tab, whose
     /// roster the same account may read perfectly well.
     /// </summary>
@@ -422,7 +422,7 @@ public class PanelTests(ServerFixture server)
     /// Nothing checked the value going in, so a manager could store a ceiling
     /// above <c>UploadLimits.Submission</c> — which the endpoint refuses before
     /// that check is ever reached, so the panel showed a number the product
-    /// could not honour — or a zero that closes the problem while reporting
+    /// could not honor — or a zero that closes the problem while reporting
     /// that somebody has no submissions left.
     /// </para>
     /// <para>
@@ -431,7 +431,7 @@ public class PanelTests(ServerFixture server)
     /// </para>
     /// </summary>
     [Fact]
-    public async Task An_activity_limit_the_product_cannot_honour_is_refused()
+    public async Task An_activity_limit_the_product_cannot_honor_is_refused()
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 

@@ -8,7 +8,7 @@ using AlgoJudge.Server.Database;
 namespace AlgoJudge.Server.Tests;
 
 /// <summary>
-/// An installation's own colours and typeface.
+/// An installation's own colors and typeface.
 /// <para>
 /// <b>Most of what is here is a refusal, and that is the point.</b> Every value
 /// in a theme ends up inside a stylesheet the Client builds, and every face is a
@@ -27,21 +27,21 @@ public class ThemeTests(ServerFixture server)
         [.. "wOF2"u8.ToArray(), .. Enumerable.Repeat((byte)0, 60)];
 
     [Fact]
-    public async Task A_colour_that_is_not_six_hexadecimal_digits_is_refused()
+    public async Task A_color_that_is_not_six_hexadecimal_digits_is_refused()
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
-        // A keyword is a valid CSS colour and is refused anyway: the narrow rule
+        // A keyword is a valid CSS color and is refused anyway: the narrow rule
         // is what makes the wider one — that nothing else can get through —
         // possible to state at all.
         var keyword = await Put(admin, Values(light: """{ "primary": "red" }"""));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, keyword.StatusCode);
-        Assert.Equal("theme.colour", await Code(keyword));
+        Assert.Equal("theme.color", await Code(keyword));
 
         // And the reason the rule exists.
         var css = await Put(admin, Values(light: """{ "primary": "#ffffff; } body { display: none" }"""));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, css.StatusCode);
-        Assert.Equal("theme.colour", await Code(css));
+        Assert.Equal("theme.color", await Code(css));
     }
 
     [Fact]
@@ -161,19 +161,19 @@ public class ThemeTests(ServerFixture server)
         var info = await fromForm.Content.ReadFromJsonAsync<JsonElement>();
         var theme = info.GetProperty("theme");
 
-        // Normalised on the way in: a colour is stored in one case, so two
-        // spellings of one colour cannot read as two values.
+        // Normalized on the way in: a color is stored in one case, so two
+        // spellings of one color cannot read as two values.
         Assert.Equal("#0050a9", theme.GetProperty("light").GetProperty("primary").GetString());
         Assert.Equal("#ffffff", theme.GetProperty("light").GetProperty("navText").GetString());
         Assert.Equal("#4d94dc", theme.GetProperty("dark").GetProperty("primary").GetString());
 
         // Untouched keys are **absent from the answer**, not null and not black:
-        // the serialiser omits them, so a reader sees nothing where a key was
+        // the serializer omits them, so a reader sees nothing where a key was
         // never set and draws the product's own. Thirty of the thirty-two were
         // never mentioned here.
         Assert.False(
             theme.GetProperty("light").TryGetProperty("body", out _),
-            "a colour nobody set is not in the answer at all");
+            "a color nobody set is not in the answer at all");
 
         // The file behind it is the one the panel offers back, and it says the
         // same thing.
@@ -195,7 +195,7 @@ public class ThemeTests(ServerFixture server)
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
         await Sign.Succeeded(await Put(admin, Values(light: """{ "primary": "#116644" }""")));
 
-        // The sign-in screen is drawn in the operator's colours, so this answer
+        // The sign-in screen is drawn in the operator's colors, so this answer
         // has to carry them to somebody who has not signed in.
         using var anonymous = server.CreateClient();
         var info = await anonymous.GetFromJsonAsync<JsonElement>(Instance);
@@ -224,7 +224,7 @@ public class ThemeTests(ServerFixture server)
     /// <summary>
     /// A theme naming a face that is not stored cannot be read, and a theme that
     /// cannot be read is no theme — so withdrawing one that is in use would turn
-    /// deleting a file into every colour on the installation reverting.
+    /// deleting a file into every color on the installation reverting.
     /// </summary>
     [Fact]
     public async Task A_face_the_published_theme_draws_with_cannot_be_withdrawn()

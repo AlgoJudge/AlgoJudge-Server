@@ -539,7 +539,7 @@ public class FederatedSignInTests(ServerFixture server)
     // ── the login a provider's name becomes ──────────────────────────────────
 
     /// <summary>
-    /// <b>A Polish name used to be a 500.</b> <c>Sanitise</c> kept every Unicode
+    /// <b>A Polish name used to be a 500.</b> <c>Sanitize</c> kept every Unicode
     /// letter, because <c>char.IsLetterOrDigit</c> says yes to all of them, while
     /// Identity's default <c>AllowedUserNameCharacters</c> is ASCII — and
     /// <c>AddUserValidator</c> adds to that chain rather than replacing it. So
@@ -554,7 +554,7 @@ public class FederatedSignInTests(ServerFixture server)
     [InlineData("Paweł", "pawel")]
     [InlineData("Zażółć gęślą jaźń", "zazolc-gesla-jazn")]
     [InlineData("Grüße", "grusse")]
-    public async Task A_polish_name_becomes_a_login_that_is_still_recognisable(
+    public async Task A_polish_name_becomes_a_login_that_is_still_recognizable(
         string claimed, string expected)
     {
         var provider = await NewProviderAsync(
@@ -574,7 +574,7 @@ public class FederatedSignInTests(ServerFixture server)
 
     /// <summary>
     /// And when nothing survives the fold there is still an account.
-    /// <c>Sanitise</c> answered an empty string rather than refusing, and
+    /// <c>Sanitize</c> answered an empty string rather than refusing, and
     /// <c>CreateAsync("")</c> is the same 500 by another road.
     /// </summary>
     [Fact]
@@ -627,7 +627,7 @@ public class FederatedSignInTests(ServerFixture server)
 
         var browser = server.CreateClient(new() { AllowAutoRedirect = false });
 
-        // Unset: today's behaviour, a local path, unchanged.
+        // Unset: today's behavior, a local path, unchanged.
         var here = await browser.GetAsync(
             $"/api/v1/identity/providers/{slug}/signed-in?returnUrl=%2Factivities");
         Assert.Equal(HttpStatusCode.Redirect, here.StatusCode);

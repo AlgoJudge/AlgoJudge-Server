@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Tests;
 /// <see cref="RevokeWhileApproving"/>, <see cref="ReclaimWhileSaving"/> — do
 /// their sabotage on a connection of their own, which is right for a race
 /// against a conditional write. It would be wrong here: an advisory lock only
-/// serialises code that <i>takes</i> it, so an <c>INSERT</c> on another
+/// serializes code that <i>takes</i> it, so an <c>INSERT</c> on another
 /// connection models a writer that bypasses the lock, and the test would fail
 /// against a correct implementation. What is wanted is two real requests, one
 /// parked inside its transaction so the other has to arrive while it is there.

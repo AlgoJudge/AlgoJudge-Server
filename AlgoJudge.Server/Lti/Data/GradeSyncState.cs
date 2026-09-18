@@ -33,7 +33,7 @@ namespace AlgoJudge.Server.Lti.Data
 
         /// <summary>
         /// Whose grade. A string because that is what ASP.NET Identity's key is,
-        /// and it stays resolvable after an account has been anonymised.
+        /// and it stays resolvable after an account has been anonymized.
         /// </summary>
         public required string UserId { get; set; }
 
@@ -78,7 +78,7 @@ namespace AlgoJudge.Server.Lti.Data
 
         /// <summary>
         /// Why the last attempt failed, in whatever the platform said. Shown to a
-        /// manager, because "not synchronised" without a reason is a support
+        /// manager, because "not synchronized" without a reason is a support
         /// ticket rather than an answer.
         /// </summary>
         public string? LastError { get; set; }
@@ -93,7 +93,7 @@ namespace AlgoJudge.Server.Lti.Data
         Pending = 0,
 
         /// <summary>Posted, and the platform holds what we intended.</summary>
-        Synchronised = 1,
+        Synchronized = 1,
 
         /// <summary>
         /// Held back on purpose — the participant may not see this score yet, so

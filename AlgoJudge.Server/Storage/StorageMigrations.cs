@@ -9,9 +9,9 @@ namespace AlgoJudge.Server.Storage
     public interface IStorageMigrations
     {
         /// <summary>
-        /// Asks for one, towards whichever store takes new writes.
+        /// Asks for one, toward whichever store takes new writes.
         /// <para>
-        /// <b>Refuses a second while one is live.</b> Two migrations towards two
+        /// <b>Refuses a second while one is live.</b> Two migrations toward two
         /// targets would each move files the other had just moved, and the loser
         /// would delete a copy the winner's rows point at.
         /// </para>
@@ -62,7 +62,7 @@ namespace AlgoJudge.Server.Storage
             var live = await LiveAsync(ct);
             if (live is null) return null;
 
-            live.State = StorageMigrationState.Cancelled;
+            live.State = StorageMigrationState.Canceled;
             live.FinishedAt = clock.GetUtcNow().UtcDateTime;
             live.Detail = "called off by an operator";
 
@@ -98,7 +98,7 @@ namespace AlgoJudge.Server.Storage
         /// second live migration by reading and then inserting, which two
         /// requests at once can walk through — so there can be two. Unordered,
         /// this and the worker's identical query could return <i>different</i>
-        /// rows, and `storage cancel` would report cancelling a migration while
+        /// rows, and `storage cancel` would report canceling a migration while
         /// the one actually moving files carried on. `LatestAsync` already
         /// orders, the other way, because "what happened last" is a different
         /// question from "what is running".

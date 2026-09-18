@@ -90,7 +90,7 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>
-        /// Anonymises the account and ends the session. Immediate and
+        /// Anonymizes the account and ends the session. Immediate and
         /// irreversible: submissions and results survive under an identifier that
         /// no longer names anybody.
         /// <para>
@@ -189,7 +189,7 @@ namespace AlgoJudge.Server.Controllers
         }
     }
 
-    /// <summary>The permission catalogue, and what the caller holds.</summary>
+    /// <summary>The permission catalog, and what the caller holds.</summary>
     [ApiController]
     [Route("permissions")]
     [Authorize]
@@ -202,8 +202,8 @@ namespace AlgoJudge.Server.Controllers
         /// </summary>
         [HttpGet]
         [ProducesResponseType<IReadOnlyList<PermissionDefinitionDto>>(StatusCodes.Status200OK)]
-        public IReadOnlyList<PermissionDefinitionDto> Catalogue() =>
-            Permissions.Catalogue.Select(d => new PermissionDefinitionDto
+        public IReadOnlyList<PermissionDefinitionDto> Catalog() =>
+            Permissions.Catalog.Select(d => new PermissionDefinitionDto
             {
                 Key = d.Key,
                 Scope = d.Scope switch

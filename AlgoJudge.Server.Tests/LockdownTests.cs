@@ -211,8 +211,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         At(participant, Outside);
 
@@ -238,8 +238,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         Nowhere(participant);
 
@@ -270,8 +270,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         At(participant, Inside);
 
@@ -307,8 +307,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{first}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{second}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{first}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{second}/enrollment", new { }));
 
         At(participant, Inside);
 
@@ -364,8 +364,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var staff = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await staff.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await staff.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await staff.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await staff.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         var who = (await staff.GetFromJsonAsync<JsonElement>("/api/v1/account"))
             .GetProperty("userId").GetString()!;
@@ -407,8 +407,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         At(participant, Outside);
         Assert.DoesNotContain("r1", await SeriesSlugsAsync(participant, contest));
@@ -455,7 +455,7 @@ public class LockdownTests(ServerFixture server)
     /// when none is.
     /// <para>
     /// The sharp one. A problem is often attached in several places and the file
-    /// is authorised by "any holder", so without this the statement of a locked
+    /// is authorized by "any holder", so without this the statement of a locked
     /// examination is served through whichever open course also holds it —
     /// addressed by file id, past every list that hides it.
     /// </para>
@@ -496,8 +496,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         // Two rooms, one problem. The examination is in this one; the course's
         // own round is restricted to another building.
@@ -532,8 +532,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var participant = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrolment", new { }));
-        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{contest}/enrollment", new { }));
+        await Sign.Succeeded(await participant.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         At(participant, Inside);
 
@@ -689,7 +689,7 @@ public class LockdownTests(ServerFixture server)
     //
     // **The shape nothing tested.** Every activity these tests build ran one
     // round, so the question an activity-scoped rank answers — what a round does
-    // to its neighbours — was never asked. Everything below stands two rounds in
+    // to its neighbors — was never asked. Everything below stands two rounds in
     // one activity and one activity beside it.
 
     /// <summary>The rounds of an activity, by their slug.</summary>
@@ -732,8 +732,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{other}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{other}/enrollment", new { }));
         At(reader, Inside);
 
         return (course, other, reader, login);
@@ -744,7 +744,7 @@ public class LockdownTests(ServerFixture server)
     /// activity itself stays open — it is running the examination.
     /// </summary>
     [Fact]
-    public async Task An_activity_scoped_round_locks_its_neighbours_and_not_its_activity()
+    public async Task An_activity_scoped_round_locks_its_neighbors_and_not_its_activity()
     {
         var (course, _, reader, _) = await TwoRoundsAsync(SeriesImportanceScope.Activity);
 
@@ -817,7 +817,7 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
         At(reader, Inside);
 
         var rounds = await RoundsAsync(reader, course);
@@ -868,7 +868,7 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         // Both rounds have something in them before anything is out of reach.
         Assert.True((await Build.TrySubmitAsync(reader, course, "print(1)\n")).IsSuccessStatusCode);
@@ -899,7 +899,7 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         var old = await Build.SubmitAsync(reader, course, "print(1)\n");
         Assert.True((await Build.TrySubmitAsync(reader, course, "print(2)\n", "B")).IsSuccessStatusCode);
@@ -942,7 +942,7 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         var mine = await Build.SubmitAsync(reader, course, "print(1)\n");
         var id = mine.GetProperty("id").GetString();
@@ -963,7 +963,7 @@ public class LockdownTests(ServerFixture server)
 
     /// <summary>
     /// A question about a displaced round goes with the round. One about the
-    /// activity stays: an announcement is how the organiser explains a lockdown.
+    /// activity stays: an announcement is how the organizer explains a lockdown.
     /// </summary>
     [Fact]
     public async Task Questions_about_a_displaced_round_are_withheld_and_asking_is_refused()
@@ -973,7 +973,7 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
 
         await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/questions", new
         {
@@ -1041,8 +1041,8 @@ public class LockdownTests(ServerFixture server)
 
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var reader = await Sign.NewAccountAsync(server, login);
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrolment", new { }));
-        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{open}/enrolment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{course}/enrollment", new { }));
+        await Sign.Succeeded(await reader.PostAsJsonAsync($"/api/v1/activities/{open}/enrollment", new { }));
 
         await RestrictAsync(examRound, SeriesImportance.Exam, scope: SeriesImportanceScope.Activity);
         At(reader, Inside);

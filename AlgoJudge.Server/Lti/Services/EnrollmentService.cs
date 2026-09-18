@@ -7,13 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AlgoJudge.Server.Lti.Services
 {
-    public interface ILtiEnrolmentService
+    public interface ILtiEnrollmentService
     {
         /// <summary>
         /// Puts this person in this activity, at the strength the platform's
         /// roles point at. Never removes anything.
         /// </summary>
-        Task EnrolAsync(
+        Task EnrollAsync(
             ResourceLink link, Guid providerId, string userId,
             IReadOnlyList<string> roles, CancellationToken ct);
     }
@@ -36,9 +36,9 @@ namespace AlgoJudge.Server.Lti.Services
     /// scope for an OIDC provider.
     /// </para>
     /// </summary>
-    public class EnrolmentService(ApplicationDbContext core) : ILtiEnrolmentService
+    public class EnrollmentService(ApplicationDbContext core) : ILtiEnrollmentService
     {
-        public async Task EnrolAsync(
+        public async Task EnrollAsync(
             ResourceLink link, Guid providerId, string userId,
             IReadOnlyList<string> roles, CancellationToken ct)
         {
@@ -62,7 +62,7 @@ namespace AlgoJudge.Server.Lti.Services
             // decides membership; what that membership carries is a role an
             // operator chose, and a correction to it reaches everybody the course
             // ever launched without waiting for them to launch again.
-            var role = await DefaultRoles.ForEnrolmentAsync(core, link.ActivityId, runsIt, ct);
+            var role = await DefaultRoles.ForEnrollmentAsync(core, link.ActivityId, runsIt, ct);
             if (role is null)
             {
                 return;

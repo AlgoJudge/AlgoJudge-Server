@@ -439,7 +439,7 @@ public class PreconfigurationTests(ServerFixture server) : IDisposable
     }
 
     /// <summary>
-    /// The colours and the faces they are drawn with, from the same directory.
+    /// The colors and the faces they are drawn with, from the same directory.
     /// <para>
     /// <b>Faces before the theme</b>, and the assertion below is what proves it:
     /// a theme is read by resolving every face it names against what is stored,
@@ -669,7 +669,7 @@ public class PreconfigurationTests(ServerFixture server) : IDisposable
     /// A file may take the home introduction down at a first start.
     /// <para>
     /// <b>The direction that can be wrong without anybody noticing.</b> The flag
-    /// ships <c>true</c>, so a <c>Flag</c> call wired to the neighbouring
+    /// ships <c>true</c>, so a <c>Flag</c> call wired to the neighboring
     /// property leaves this one on — and the installation looks correct
     /// everywhere except the one page nobody checks before opening the doors.
     /// </para>

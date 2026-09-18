@@ -62,6 +62,8 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
 
 ## Rules
 
+- Write American English, including on the wire: routes, error codes, JSON
+  fields and enum values. `scripts/check-american-english.py` in the workspace finds a British spelling.
 - The Server does not compile or execute code.
 - The Server does not implement a sandbox or checker.
 - The Server does not require one concrete execution engine.
@@ -173,9 +175,9 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     spellings — and Kestrel on a dual-stack socket hands back
     `::ffff:10.0.5.17`, which PostgreSQL calls family 6, so `<<=` against any
     IPv4 network is silently `false`. `Services/RequestOrigin` is the one place
-    that normalises it.
+    that normalizes it.
   - **It is not hashed, and that was decided rather than skipped.** A hash cannot
-    answer a subnet question; a keyed one is pseudonymisation and removes no
+    answer a subnet question; a keyed one is pseudonymization and removes no
     obligation; an unkeyed one of an IPv4 address is reversible in seconds.
   - **A submission's origin rides `submission:read:all`** — already scoped per
     activity — and is on the detail, never the list. `Workers/AddressSweeper`
@@ -218,7 +220,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
   - **An address the Server cannot read admits nobody and locks nobody.** The
     second half is what keeps a proxy failure from stopping every course at once,
     and nothing is gained by stripping the header.
-  - **`Services/FileService` was a live hole.** A statement is authorised through
+  - **`Services/FileService` was a live hole.** A statement is authorized through
     *any* activity holding its version, so a locked round's problem was reachable
     through whichever open course also held it. The narrowing is per **round**.
   - **Two switches, either lifting both filters and keeping the configuration**:
@@ -255,7 +257,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
   - **A system grant never moves, and an account holding one is refused.**
     Grants move with the work, so otherwise anybody holding `user:merge` merges
     an administrator into their own account and inherits their permissions.
-  - **It ends in anonymisation, never a delete.** `AUTHENTICATION.md` settled
+  - **It ends in anonymization, never a delete.** `AUTHENTICATION.md` settled
     that before this existed and **nothing here hard-deletes a user row** — the
     rows recording what an account once did have to keep resolving.
     `MergeSweeper` empties it a day later, and until then an undo gives it back
@@ -394,7 +396,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     had it read a moment later. An unhandled one is a 500, which is what
     `RunnerService.ExtendAsync` was written to stop.
   - **Both sweepers were already atomic, and that is why they needed no
-    reordering.** `AnonymiseAsync` writes nothing of its own — it moves tracked
+    reordering.** `AnonymizeAsync` writes nothing of its own — it moves tracked
     entities — so the emptying and its marker land in one `SaveChanges`. An undo
     or a halt that committed first therefore stops the account being emptied
     rather than merely losing a marker.
@@ -432,7 +434,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     that are already there. Development stacks are disposable — `down -v`.
   - **Verified by diffing two schemas**, not by reading the generated file: the
     full old chain and the squashed pair were applied to two databases and
-    `pg_dump --schema-only` compared. Once column order is normalised the only
+    `pg_dump --schema-only` compared. Once column order is normalized the only
     differences are the defaults above. Done again on 2026-09-07.
   - **It found a stale snapshot.** `ApplicationDbContextModelSnapshot.cs` still
     declared `Runner.RowVersion` — the token that was tried and taken off the
@@ -444,9 +446,9 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
 
 - **.NET 10 since 2026-08-29**, `net10.0` with `aspnet:10.0` and `sdk:10.0`.
   .NET 8 leaves support on 2026-11-10; 10 is the LTS.
-  - **Two framework behaviours changed under the product, and tests caught both
+  - **Two framework behaviors changed under the product, and tests caught both
     — nobody read a release note.**
-    - **`IPNetwork.TryParse` accepts host bits now**, and silently normalises:
+    - **`IPNetwork.TryParse` accepts host bits now**, and silently normalizes:
       .NET 8 refused `10.0.5.17/24`, .NET 10 makes it `10.0.5.0/24`. A typo
       meaning one machine becomes a laboratory, so `SeriesService` compares the
       written address against `BaseAddress` itself. The rule is unchanged; what
@@ -463,7 +465,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     OpenIdConnect depends on 8.19.2 and anything lower is an NU1605 downgrade.
   - **`openapi.json` grew 749 leaves without the contract changing**: 157 paths
     and 189 schemas before and after, nothing removed. Swashbuckle 6 dropped the
-    C# `required` modifier and 10 honours it, so the document is more faithful
+    C# `required` modifier and 10 honors it, so the document is more faithful
     rather than different.
   - **Warnings went 5 → 15, and none was fixed here** — the owner asked for them
     measured rather than cleaned. CI and a local build report the **same fifteen
@@ -480,12 +482,12 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
 
 - **The suite runs in 2 m 10 s, and it took 4 m 49 s until 2026-08-29.** Nothing
   was deleted and nothing was skipped: 640 tests before and after.
-  - **A collection is xUnit's unit of serialisation, and fifty classes sat in
+  - **A collection is xUnit's unit of serialization, and fifty classes sat in
     one.** `[Collection("server")]` shared one fixture, so 476 tests — 192 s of
     work — ran strictly one at a time. They are now three collections with a
     database each; inside a group the old rule is untouched.
   - **`DisableParallelization` means more than it reads**, and it was the larger
-    half. It does not serialise a collection internally — being one collection
+    half. It does not serialize a collection internally — being one collection
     already does that — it takes the **whole runner**. Measured on a timeline:
     the storage suites did not start until **113 s** into a 199 s run and added
     **86 s to the end**. Removing it was a one-word change worth more than the
@@ -592,7 +594,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
   - **Trusted proxies moved to `System.Net.IPNetwork` and `KnownIPNetworks`, and
     got stricter on purpose.** The deprecated type accepted `172.20.0.5/16` and
     quietly meant `172.20.0.0/16`. **The replacement does the same** — measured:
-    on .NET 10 the constructor normalises without a word, exactly as `TryParse`
+    on .NET 10 the constructor normalizes without a word, exactly as `TryParse`
     does — so the refusal is written by hand, comparing what was declared with
     `BaseAddress`. A deployment with a sloppy CIDR now stops at startup and is
     told what to write instead. The stakes are the reason: this list decides
@@ -635,14 +637,14 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     one, each admitting and an address outside all three not; and the API write,
     which is what found the 500 above.
 
-- **An installation carries its own colours and typeface** (2026-08-30),
+- **An installation carries its own colors and typeface** (2026-08-30),
   specified in `docs/specs/INSTANCE_BRANDING.md` in the workspace. A theme is a
   stored file — `FileOwnerKind.InstanceTheme`, with `InstanceFont` beside it —
   and `Services/ThemeDocument.cs` is the whole of reading, refusing and writing
   one. **Six** things are easy to get wrong:
   - **The validation is a security boundary, not tidiness.** Every value ends up
-    inside a stylesheet the Client builds, so a colour is `^#[0-9a-fA-F]{6}$` and
-    nothing else. A keyword is a valid CSS colour and is refused anyway: the
+    inside a stylesheet the Client builds, so a color is `^#[0-9a-fA-F]{6}$` and
+    nothing else. A keyword is a valid CSS color and is refused anyway: the
     narrow rule is what makes the wide one — that nothing else gets through —
     possible to state at all. **The operator never writes a URL**; a face's
     address is built from a stored file id.
@@ -663,7 +665,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     stored, so one published ahead of its own fonts is unreadable — which is the
     whole installation silently back on the default. **A theme that cannot be
     read is served as no theme and logged as an error**, because an installation
-    on the default colours beats one whose every screen answers 500.
+    on the default colors beats one whose every screen answers 500.
   - The `FileReferences` check constraint enumerates the owner kinds, so the two
     new ones needed a migration — `InstanceThemeFiles`, the second in this
     context after the squash, and it changes one constraint and nothing else.

@@ -12,7 +12,7 @@ namespace AlgoJudge.Server.Tests;
 /// <c>int.MaxValue</c>, uncommented and unexplained, while the request body
 /// ceiling stayed at 128 MB for the sake of problem packages. The two LTI
 /// endpoints that read a form are anonymous and read it <b>before</b> anything
-/// authenticates, and <c>ReadFormAsync</c> materialises every value as a string
+/// authenticates, and <c>ReadFormAsync</c> materializes every value as a string
 /// — so one unauthenticated request could ask the Server to hold a quarter of a
 /// gigabyte, and nothing in this product rate-limits.
 /// </para>

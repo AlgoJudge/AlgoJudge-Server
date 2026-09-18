@@ -11,7 +11,7 @@ namespace AlgoJudge.Server.Authorization
     }
 
     /// <summary>
-    /// One entry in the catalogue: what it is called, where it applies, and
+    /// One entry in the catalog: what it is called, where it applies, and
     /// whether an ordinary participant holds it.
     /// </summary>
     /// <param name="Key">The stored string, e.g. <c>problem:read:all</c>.</param>
@@ -27,7 +27,7 @@ namespace AlgoJudge.Server.Authorization
     /// <para>
     /// Two flags rather than one, because they are two questions and the answer
     /// differs for <c>trial:run</c>: outside the default role, yet held
-    /// without ceasing to be a competitor. While the catalogue said only
+    /// without ceasing to be a competitor. While the catalog said only
     /// <see cref="Participant"/>, the Client had to infer this one by negating
     /// it — and inferred it wrongly the moment such a permission existed.
     /// </para>
@@ -40,7 +40,7 @@ namespace AlgoJudge.Server.Authorization
         bool Systemic);
 
     /// <summary>
-    /// The permission catalogue: the whole vocabulary, in one place, because the
+    /// The permission catalog: the whole vocabulary, in one place, because the
     /// Server is what enforces it.
     /// <para>
     /// Mirrors <c>docs/specs/PERMISSIONS.md</c> in the workspace repository,
@@ -112,7 +112,7 @@ namespace AlgoJudge.Server.Authorization
         public const string SubmissionCancel = "submission:cancel";
 
         /// <summary>
-        /// Rules that a submission counts towards no standing. Its own
+        /// Rules that a submission counts toward no standing. Its own
         /// permission: <see cref="SubmissionRejudge"/> asks the Runner to look
         /// again, this decides an outcome by hand, and an installation may
         /// delegate the first without the second.
@@ -241,13 +241,13 @@ namespace AlgoJudge.Server.Authorization
 
         /// <summary>
         /// Both flags come from the same two lists <see cref="IsStaff"/> uses,
-        /// so the catalogue cannot drift from what is enforced. Asserted in
+        /// so the catalog cannot drift from what is enforced. Asserted in
         /// <c>StaffTests</c> rather than left to reading.
         /// </summary>
         private static PermissionDefinition Define(string key, string group, PermissionScope scope) =>
             new(key, group, scope, ParticipantKeys.Contains(key), !NotStaffConferring.Contains(key));
 
-        public static readonly IReadOnlyList<PermissionDefinition> Catalogue =
+        public static readonly IReadOnlyList<PermissionDefinition> Catalog =
         [
             Define(ActivityRead, "activity", PermissionScope.Activity),
             Define(ActivityCreate, "activity", PermissionScope.Global),
@@ -295,7 +295,7 @@ namespace AlgoJudge.Server.Authorization
 
             // **Both since 2026-09-14**, because the shipped `manager` role
             // carries it and every path that makes a manager writes an activity
-            // grant. Searching the directory honours it wherever it is held;
+            // grant. Searching the directory honors it wherever it is held;
             // listing accounts and reading somebody's sessions still ask at
             // system scope, which is what keeps `/manager/users` an
             // administrator's screen.
@@ -335,12 +335,12 @@ namespace AlgoJudge.Server.Authorization
 
         public static readonly IReadOnlySet<string> Participant = ParticipantKeys.ToHashSet();
 
-        private static readonly HashSet<string> Known = Catalogue.Select(d => d.Key).ToHashSet();
+        private static readonly HashSet<string> Known = Catalog.Select(d => d.Key).ToHashSet();
 
         /// <summary>
         /// Whether a permission set makes a grant a staff grant.
         /// <para>
-        /// A key the catalogue does not describe counts as staff: an unknown
+        /// A key the catalog does not describe counts as staff: an unknown
         /// right is more likely to be a new one somebody has been given than an
         /// ordinary participant's, and guessing the other way would quietly put
         /// them in the ranking.
@@ -349,7 +349,7 @@ namespace AlgoJudge.Server.Authorization
         public static bool IsStaff(IEnumerable<string> permissions) =>
             permissions.Any(key => !NotStaffConferring.Contains(key));
 
-        /// <summary>Whether every key is one the catalogue describes.</summary>
+        /// <summary>Whether every key is one the catalog describes.</summary>
         /// <summary>
         /// The keys out of a stored grant, or none when the column will not
         /// parse. One reader, because two would disagree the day the column

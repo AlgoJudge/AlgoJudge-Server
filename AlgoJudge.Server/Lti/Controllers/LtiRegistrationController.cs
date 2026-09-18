@@ -75,7 +75,7 @@ namespace AlgoJudge.Server.Lti.Controllers
     [ApiController]
     [Route("lti/register")]
     // Dynamic registration: the platform arrives with a one-time token and
-    // no account. The token is what authorises it.
+    // no account. The token is what authorizes it.
     [AllowAnonymous]
     public class LtiRegisterController(
         IDynamicRegistrationService registrations,

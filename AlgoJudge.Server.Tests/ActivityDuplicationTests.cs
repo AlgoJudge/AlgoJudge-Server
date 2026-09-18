@@ -102,7 +102,7 @@ public class ActivityDuplicationTests(ServerFixture server)
             foreach (var name in Announcements)
             {
                 var marker = typeof(Series).GetProperty(name)!.GetValue(round);
-                Assert.True(marker is null, $"{name} travelled into the copy");
+                Assert.True(marker is null, $"{name} traveled into the copy");
             }
         }
     }

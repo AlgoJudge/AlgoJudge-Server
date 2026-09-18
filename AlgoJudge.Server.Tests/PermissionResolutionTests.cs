@@ -35,7 +35,7 @@ public class PermissionResolutionTests(ServerFixture server)
     /// <summary>
     /// <b>The key that looks like an administrator and is not one.</b>
     /// <c>IsAdministratorAsync</c> requires <c>ActivityId is null</c> before
-    /// honouring it, so written into an activity grant it confers nothing —
+    /// honoring it, so written into an activity grant it confers nothing —
     /// while the panel shows somebody holding it. Refused at the write now,
     /// rather than stored and silently inert.
     /// </summary>
@@ -88,7 +88,7 @@ public class PermissionResolutionTests(ServerFixture server)
     }
 
     /// <summary>
-    /// <b>Why the rule above names one key instead of reading the catalogue.</b>
+    /// <b>Why the rule above names one key instead of reading the catalog.</b>
     /// Five of the shipped <c>manager</c> template's keys are declared
     /// <c>PermissionScope.Global</c> — the <c>problem:*</c> ones — while the
     /// template is applied to <i>activity</i> grants by the seeder and the panel.
@@ -101,7 +101,7 @@ public class PermissionResolutionTests(ServerFixture server)
     /// endpoint answers about a scope rather than about what will be allowed.
     /// </para>
     /// <para>
-    /// This test asserts the current behaviour rather than the desired one, so
+    /// This test asserts the current behavior rather than the desired one, so
     /// that fixing it is a decision somebody takes rather than a surprise. Until
     /// then, refusing every misplaced global key would refuse the template this
     /// product ships.

@@ -27,7 +27,7 @@ namespace AlgoJudge.Server.Authorization
     /// <para>
     /// The shape — a <c>Kind</c>, a switch, and a refusal naming what it does
     /// not implement — is <c>Storage/BlobStoreRegistry</c>'s, deliberately: an
-    /// operator who has configured storage here has already learnt it.
+    /// operator who has configured storage here has already learned it.
     /// </para>
     /// </summary>
     public static class KeyRing

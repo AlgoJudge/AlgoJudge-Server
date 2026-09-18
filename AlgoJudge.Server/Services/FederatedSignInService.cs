@@ -244,7 +244,7 @@ namespace AlgoJudge.Server.Services
         /// The login to try first.
         /// <para>
         /// A provider that emits nothing usable — a display name with no ASCII in
-        /// it, a blank claim — still gets an account. <see cref="Sanitise"/>
+        /// it, a blank claim — still gets an account. <see cref="Sanitize"/>
         /// answers an empty string rather than refusing, and <c>CreateAsync("")</c>
         /// is an <c>InvalidUserName</c>, which surfaced as a 500 in the middle of
         /// somebody's first sign-in.
@@ -253,14 +253,14 @@ namespace AlgoJudge.Server.Services
         private static string LoginStem(
             IdentityProvider provider, ClaimsPrincipal principal, string subject)
         {
-            var claimed = Sanitise(
+            var claimed = Sanitize(
                 First(principal, "preferred_username")
                 ?? First(principal, ClaimTypes.Name)
                 ?? First(principal, "email")
                 ?? "");
             if (claimed.Length > 0) return claimed;
 
-            var fallback = Sanitise($"{provider.Slug}-{subject}");
+            var fallback = Sanitize($"{provider.Slug}-{subject}");
             return fallback.Length > 0 ? fallback : "user";
         }
 
@@ -272,7 +272,7 @@ namespace AlgoJudge.Server.Services
                 return wanted;
             }
 
-            // Truncated so the decorated login still fits: `Sanitise` caps at
+            // Truncated so the decorated login still fits: `Sanitize` caps at
             // `MaxLogin`, and the separator and the suffix go on top of that.
             var stem = wanted[..Math.Min(wanted.Length, MaxLogin - SuffixLength - 1)];
             return $"{stem}-{Suffix(subject)}";
@@ -416,11 +416,11 @@ namespace AlgoJudge.Server.Services
         /// <c>char.IsLetterOrDigit</c> is true of every Unicode letter, so
         /// <c>żaneta</c> used to survive here and then fail <c>CreateAsync</c> —
         /// a 500 in the middle of a first sign-in, on a product whose users are
-        /// mostly Polish. Folding keeps the login recognisable, which is the
+        /// mostly Polish. Folding keeps the login recognizable, which is the
         /// whole reason for taking it from the provider rather than minting one.
         /// </para>
         /// </summary>
-        private static string Sanitise(string raw)
+        private static string Sanitize(string raw)
         {
             // **The letters that do not decompose.** `FormD` splits a letter from
             // its accent, so ą, ć, ę, ń, ó, ś and ź fold on their own — but ł

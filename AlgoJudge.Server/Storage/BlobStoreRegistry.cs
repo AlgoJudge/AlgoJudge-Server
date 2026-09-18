@@ -124,7 +124,7 @@ namespace AlgoJudge.Server.Storage
 
             // **An installation that says nothing does not start** (decided
             // 2026-08-12). Where the files of a product go is not a thing to
-            // inherit from a default nobody read: the earlier behaviour — one
+            // inherit from a default nobody read: the earlier behavior — one
             // synthesized `postgres` store — meant a deployment could accept a
             // hundred gigabytes of submissions into its database without anyone
             // ever choosing that.

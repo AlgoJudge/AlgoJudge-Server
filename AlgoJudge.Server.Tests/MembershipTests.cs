@@ -61,7 +61,7 @@ public class MembershipTests(ServerFixture server)
 
         Assert.Equal(HttpStatusCode.Forbidden, read.StatusCode);
         var refusal = await read.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("enrolment.required", refusal.GetProperty("code").GetString());
+        Assert.Equal("enrollment.required", refusal.GetProperty("code").GetString());
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public class MembershipTests(ServerFixture server)
 
     /// <summary>
     /// **Staff are not members and do not have to be.** An administrator holds
-    /// the catalogue by the bypass, which makes them staff everywhere.
+    /// the catalog by the bypass, which makes them staff everywhere.
     /// </summary>
     [Fact]
     public async Task Staff_read_without_joining()
@@ -129,7 +129,7 @@ public class MembershipTests(ServerFixture server)
     /// just granted access to.
     /// </summary>
     [Fact]
-    public async Task An_unpublished_activity_accepts_no_enrolment()
+    public async Task An_unpublished_activity_accepts_no_enrollment()
     {
         var admin = await AdminAsync(server);
         var slug = "UNPUB-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
@@ -155,7 +155,7 @@ public class MembershipTests(ServerFixture server)
         }
 
         var stranger = await Sign.NewAccountAsync(server, "s-" + Guid.NewGuid().ToString("N")[..10]);
-        var joined = await stranger.PostAsJsonAsync($"/api/v1/activities/{slug}/enrolment", new { });
+        var joined = await stranger.PostAsJsonAsync($"/api/v1/activities/{slug}/enrollment", new { });
 
         Assert.Equal(HttpStatusCode.NotFound, joined.StatusCode);
     }

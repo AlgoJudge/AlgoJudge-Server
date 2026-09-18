@@ -738,11 +738,11 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         var (older, _) = await TwoLiveAsync();
 
         using var scope = services.CreateScope();
-        var cancelled = await scope.ServiceProvider
+        var canceled = await scope.ServiceProvider
             .GetRequiredService<IStorageMigrations>()
             .CancelAsync(CancellationToken.None);
 
-        Assert.NotNull(cancelled);
-        Assert.Equal(older, cancelled!.Id);
+        Assert.NotNull(canceled);
+        Assert.Equal(older, canceled!.Id);
     }
 }

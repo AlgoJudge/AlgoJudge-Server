@@ -191,8 +191,8 @@ public class SessionRetentionTests(ServerFixture server)
     /// only the open ones</b>.
     /// <para>
     /// It closed what was open and left the addresses on every row that person
-    /// had ever made. `Submission.UserId` documents deletion as anonymisation;
-    /// an anonymisation that leaves personal data behind is not one.
+    /// had ever made. `Submission.UserId` documents deletion as anonymization;
+    /// an anonymization that leaves personal data behind is not one.
     /// </para>
     /// </summary>
     [Fact]
@@ -218,7 +218,7 @@ public class SessionRetentionTests(ServerFixture server)
             .GetRequiredService<Database.ApplicationDbContext>())
         {
             var user = await context.Users.FirstAsync(u => u.Id == who);
-            await deletion.AnonymiseAsync(user, CancellationToken.None);
+            await deletion.AnonymizeAsync(user, CancellationToken.None);
             await context.SaveChangesAsync();
         }
 

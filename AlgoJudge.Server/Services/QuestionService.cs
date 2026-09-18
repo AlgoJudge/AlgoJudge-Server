@@ -58,7 +58,7 @@ namespace AlgoJudge.Server.Services
 
             // A question about a round out of reach goes with the round. One
             // about the activity carries no round and stays — an announcement
-            // is how the organiser explains the lockdown.
+            // is how the organizer explains the lockdown.
             var unreachable = (await lockdown.UnreachableRoundsAsync(
                 activity.Id, await lockdown.ForReaderAsync(ct), ct)).ToList();
             if (unreachable.Count > 0)

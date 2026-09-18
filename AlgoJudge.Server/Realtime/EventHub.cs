@@ -29,7 +29,7 @@ namespace AlgoJudge.Server.Realtime
         private readonly SemaphoreSlim writeLock = new(1, 1);
 
         /// <summary>
-        /// Sends one frame, or gives up. Serialised per connection: a WebSocket
+        /// Sends one frame, or gives up. Serialized per connection: a WebSocket
         /// permits one send at a time, and two events racing would interleave
         /// into a frame nobody can parse.
         /// <para>
@@ -224,7 +224,7 @@ namespace AlgoJudge.Server.Realtime
 
         public static void MapEventSocket(this WebApplication app, string path)
         {
-            // **Anonymous by attribute, authorised in the handler** — the same
+            // **Anonymous by attribute, authorized in the handler** — the same
             // arrangement `GET /files/{id}` uses, and for a related reason: the
             // refusal has to be a 401 on the handshake, which is what the Client
             // is written to expect. The fallback policy would answer first and

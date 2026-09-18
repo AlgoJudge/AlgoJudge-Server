@@ -84,7 +84,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// The key is the contestant, which is the group when there is one: a
         /// group spends one allowance, so its members must take one lock.
-        /// Hashed rather than <c>GetHashCode</c>, which is randomised per process
+        /// Hashed rather than <c>GetHashCode</c>, which is randomized per process
         /// and would have two Server instances taking different locks.
         /// </para>
         /// </summary>

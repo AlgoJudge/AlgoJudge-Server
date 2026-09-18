@@ -33,7 +33,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// The rule — "an SSO account may change none of its own profile fields"
         /// — was decided on 2026-08-04 and, until phase 2, was enforced only by
-        /// the Client greying its inputs. A rule applied by a screen is a rule
+        /// the Client graying its inputs. A rule applied by a screen is a rule
         /// anybody with a terminal can ignore, so it lives here now.
         /// </para>
         /// </summary>
@@ -301,14 +301,14 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// Deletion is <b>anonymisation</b>, immediate and with no grace period.
+        /// Deletion is <b>anonymization</b>, immediate and with no grace period.
         /// <para>
         /// <see cref="Submission"/> and <see cref="Result"/> reference this row's
         /// id and it has to stay resolvable — a contest's history cannot develop
         /// holes because somebody left. So the row survives, emptied.
         /// </para>
         /// <para>
-        /// Anonymising the user row is <b>not enough</b>: identity is also in the
+        /// Anonymizing the user row is <b>not enough</b>: identity is also in the
         /// text they wrote. Their questions go with them.
         /// </para>
         /// </summary>
@@ -336,9 +336,9 @@ namespace AlgoJudge.Server.Services
             }
 
             // The emptying itself lives in one place, shared with the two
-            // channels an SSO account uses. Three copies of "what anonymising
+            // channels an SSO account uses. Three copies of "what anonymizing
             // means" would be three answers the day a field is added.
-            await deletion.AnonymiseAsync(user, ct);
+            await deletion.AnonymizeAsync(user, ct);
 
             await context.SaveChangesAsync(ct);
             await users.UpdateAsync(user);

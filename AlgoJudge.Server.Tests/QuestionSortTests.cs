@@ -116,7 +116,7 @@ public class QuestionSortTests(ServerFixture server)
     /// <b>What this does not prove.</b> Removing <c>.ThenBy(q =&gt; q.Id)</c> from
     /// the series arm leaves it green: with two rows PostgreSQL returned them in
     /// a stable order anyway. That is not luck to be engineered around — a query
-    /// with no total order is <i>permitted</i> to be stable, so no behaviour test
+    /// with no total order is <i>permitted</i> to be stable, so no behavior test
     /// can establish that the tiebreaker is there. It was measured on
     /// 2026-09-14 rather than assumed, and it is written down here so that a
     /// green run is not later read as evidence the tiebreaker is covered.

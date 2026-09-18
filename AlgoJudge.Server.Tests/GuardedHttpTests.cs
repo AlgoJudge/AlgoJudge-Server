@@ -17,7 +17,7 @@ public class GuardedHttpTests
     /// so its own fetcher must not be a way to knock on it.
     /// </summary>
     [Fact]
-    public async Task An_address_the_predicate_refuses_is_never_dialled()
+    public async Task An_address_the_predicate_refuses_is_never_dialed()
     {
         using var client = new HttpClient(
             GuardedHttp.Handler(PublicAddress.IsPublicOrPrivateNetwork));

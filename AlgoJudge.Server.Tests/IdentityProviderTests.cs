@@ -45,7 +45,7 @@ public class IdentityProviderTests(ServerFixture server)
     /// `DbUpdateConcurrencyException: expected to affect 1 row(s), but actually
     /// affected 0`. The service emptied the collection and refilled it with new
     /// objects, and because every entity in this schema assigns its own key in
-    /// its initialiser, a rule reached through a *tracked* parent arrives with a
+    /// its initializer, a rule reached through a *tracked* parent arrives with a
     /// non-default `Id` and is taken for a row that already exists: EF wrote
     /// `UPDATE` where it needed `INSERT`, and the update matched nothing.
     /// </para>

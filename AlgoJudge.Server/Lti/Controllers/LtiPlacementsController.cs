@@ -46,12 +46,12 @@ namespace AlgoJudge.Server.Lti.Controllers
         /// reading — what it declined to do and why.
         /// </para>
         /// </summary>
-        [HttpPost("{id:guid}/roster/enrol")]
-        [ProducesResponseType<RosterEnrolmentDto>(StatusCodes.Status200OK)]
+        [HttpPost("{id:guid}/roster/enroll")]
+        [ProducesResponseType<RosterEnrollmentDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status409Conflict)]
-        public Task<RosterEnrolmentDto> Enrol(Guid id, CancellationToken ct) =>
-            rosters.EnrolAsync(id, ct);
+        public Task<RosterEnrollmentDto> Enroll(Guid id, CancellationToken ct) =>
+            rosters.EnrollAsync(id, ct);
 
         /// <summary>
         /// Every course link this installation knows, newest first.
@@ -92,7 +92,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         public Task<GradeSummaryDto> Grades(
             Guid id, [FromQuery] bool verify, CancellationToken ct) =>
-            verifier.SummariseAsync(id, verify, ct);
+            verifier.SummarizeAsync(id, verify, ct);
 
         /// <summary>
         /// Sends everything postable again.

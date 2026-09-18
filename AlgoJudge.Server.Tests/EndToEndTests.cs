@@ -59,7 +59,7 @@ public class EndToEndTests(ServerFixture server)
 
         var instance = await client.GetFromJsonAsync<JsonElement>("/api/v1/instance");
 
-        // Shipped off: accounts are created by an organiser or arrive by SSO.
+        // Shipped off: accounts are created by an organizer or arrive by SSO.
         Assert.False(instance.GetProperty("localRegistrationEnabled").GetBoolean());
         Assert.Equal(JsonValueKind.Array, instance.GetProperty("documents").ValueKind);
     }
@@ -164,7 +164,7 @@ public class EndToEndTests(ServerFixture server)
 
         // ── a participant joins and submits ──────────────────────────────────
         var participant = await Sign.NewAccountAsync(server, "e2e-" + slug.ToLowerInvariant());
-        var joined = await participant.PostAsJsonAsync($"/api/v1/activities/{slug}/enrolment", new { });
+        var joined = await participant.PostAsJsonAsync($"/api/v1/activities/{slug}/enrollment", new { });
         await Sign.Succeeded(joined);
 
         var series2 = await participant.GetFromJsonAsync<JsonElement>($"/api/v1/activities/{slug}/series");
@@ -295,12 +295,12 @@ public class EndToEndTests(ServerFixture server)
     /// cannot do that any more and should never have wanted to: a language is one
     /// member of a document whose shape belongs to the problem type, and a Server
     /// that reached into it would need a release every time a Runner learned a
-    /// new toolchain. The refusal lives where the catalogue does.
+    /// new toolchain. The refusal lives where the catalog does.
     /// </para>
     ///
     /// <para>
     /// The test this replaces asserted `submission.language`, an error code that
-    /// no longer exists. This asserts the opposite behaviour deliberately, so
+    /// no longer exists. This asserts the opposite behavior deliberately, so
     /// that re-adding the check means deleting a test that says why it went.
     /// </para>
     /// </summary>
@@ -330,7 +330,7 @@ public class EndToEndTests(ServerFixture server)
     /// seven languages compiled into the controller, which meant a Server
     /// release for every language anybody added. The table is gone with the
     /// language, and nothing here can replace it: a guess of `main.txt` is a
-    /// name the Runner refuses for every toolchain in its catalogue, so it would
+    /// name the Runner refuses for every toolchain in its catalog, so it would
     /// turn a correct solution into a compilation error.
     /// </para>
     ///
@@ -501,7 +501,7 @@ public class EndToEndTests(ServerFixture server)
 
     /// <summary>
     /// <b>The trailing slash is not a variation, it is the bug.</b> The guard
-    /// matched with <c>EndsWith</c> while endpoint routing normalises a trailing
+    /// matched with <c>EndsWith</c> while endpoint routing normalizes a trailing
     /// slash, so <c>/identity/register/</c> reached the framework's own register
     /// handler with nothing in front of it — and this middleware is the only
     /// place in the tree that reads <c>LocalRegistrationEnabled</c>, which every
@@ -624,7 +624,7 @@ public class EndToEndTests(ServerFixture server)
 
         // Staff are excluded from the participant count — read from the grants,
         // never stored. Compared against the grants rather than a fixed number,
-        // because other tests in this collection enrol accounts of their own.
+        // because other tests in this collection enroll accounts of their own.
         await using var context = server.NewContext();
         var expected = await context.Grants.CountAsync(g =>
             g.Activity!.Slug == "DEV-2026" && !g.IsSystem && g.State == GrantState.Active);

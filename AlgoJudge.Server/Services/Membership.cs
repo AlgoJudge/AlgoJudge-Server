@@ -40,7 +40,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// <b>Staff are not members and must not have to be.</b> Somebody running
         /// a course reads its board without competing in it, and an
-        /// administrator is staff everywhere by the bypass. The catalogue already
+        /// administrator is staff everywhere by the bypass. The catalog already
         /// draws that line — <c>Permissions.IsStaff</c>, which is "seeing or
         /// changing other people's work" — so this asks it rather than naming a
         /// key per call site and drifting.
@@ -67,10 +67,10 @@ namespace AlgoJudge.Server.Services
 
             // `ForbiddenActionException` rather than `AccessDeniedException`: the
             // caller does hold the permission, and what they lack is membership.
-            // `enrolment.required` is the code `SubmissionService` already
+            // `enrollment.required` is the code `SubmissionService` already
             // refuses in and the Client turns into "join first".
             throw new ForbiddenActionException(
-                "Only somebody enrolled in this activity may read it", "enrolment.required");
+                "Only somebody enrolled in this activity may read it", "enrollment.required");
         }
     }
 }

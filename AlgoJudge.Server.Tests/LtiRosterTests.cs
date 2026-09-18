@@ -95,7 +95,7 @@ public class LtiRosterTests
 
     /// <summary>
     /// A member with no username at all is still read. Deciding what to do about
-    /// that is enrolment's business, and it needs to see them to say so.
+    /// that is enrollment's business, and it needs to see them to say so.
     /// </summary>
     [Fact]
     public async Task Somebody_the_platform_will_not_name_is_still_in_the_roster()

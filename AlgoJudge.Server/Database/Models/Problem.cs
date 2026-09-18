@@ -83,10 +83,10 @@ namespace AlgoJudge.Server.Database.Models
         /// The permission model settles what a manager may <b>do</b> with a
         /// problem; this settles <b>which</b> problems that applies to. Keeping
         /// the two apart is what stops the exception becoming a second
-        /// authorisation system — nothing else gets a list like this.
+        /// authorization system — nothing else gets a list like this.
         /// </para>
         /// <para>
-        /// A table rather than a <c>jsonb</c> array because the Server authorises
+        /// A table rather than a <c>jsonb</c> array because the Server authorizes
         /// on it and the library listing filters by it: it is a join, and a join
         /// written as a document is a join the database cannot index.
         /// </para>

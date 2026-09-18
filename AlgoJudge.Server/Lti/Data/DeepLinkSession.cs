@@ -46,7 +46,7 @@ namespace AlgoJudge.Server.Lti.Data
         public string? Data { get; set; }
 
         /// <summary>
-        /// Whether the platform said it would take more than one item. Honoured
+        /// Whether the platform said it would take more than one item. Honored
         /// rather than assumed: a platform sent two links where it expected one
         /// silently keeps the first in some implementations and none in others.
         /// </summary>

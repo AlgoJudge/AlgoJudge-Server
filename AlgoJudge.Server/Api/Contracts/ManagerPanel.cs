@@ -272,7 +272,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int Count { get; init; }
         public string? ExpiresAt { get; init; }
         public IReadOnlyList<string>? Tags { get; init; }
-        /// <summary>Enrol them all into one activity as they are created.</summary>
+        /// <summary>Enroll them all into one activity as they are created.</summary>
         public string? ActivityId { get; init; }
         /// <summary>Ignored without an activity.</summary>
         public IReadOnlyList<string>? Permissions { get; init; }
@@ -472,7 +472,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int Attempts { get; init; }
 
         /// <summary>
-        /// A manager ruled that this counts towards no standing. On the list as
+        /// A manager ruled that this counts toward no standing. On the list as
         /// well as the detail, unlike the origin fields: no disclosure question,
         /// and a manager scanning two hundred rows should not open each.
         /// </summary>
@@ -540,7 +540,7 @@ namespace AlgoJudge.Server.Api.Contracts
     }
 
     /// <summary>
-    /// A manager's ruling that a submission counts towards no standing.
+    /// A manager's ruling that a submission counts toward no standing.
     /// <c>excluded: false</c> lifts it and clears the reason with it — a
     /// sentence about a state that no longer holds is worse than none.
     /// </summary>
@@ -818,18 +818,18 @@ namespace AlgoJudge.Server.Api.Contracts
     public record InstanceThemeInputDto
     {
         public string? FileId { get; init; }
-        public ThemeColoursInputDto? Theme { get; init; }
+        public ThemeColorsInputDto? Theme { get; init; }
     }
 
     /// <summary>
-    /// The form's own shape. Mirrors <see cref="ThemeColoursDto"/> in both
+    /// The form's own shape. Mirrors <see cref="ThemeColorsDto"/> in both
     /// schemes; an empty string is <b>absent</b>, because the form sends every
     /// field and an untouched one means the default.
     /// </summary>
-    public record ThemeColoursInputDto
+    public record ThemeColorsInputDto
     {
-        public ThemeColoursDto? Light { get; init; }
-        public ThemeColoursDto? Dark { get; init; }
+        public ThemeColorsDto? Light { get; init; }
+        public ThemeColorsDto? Dark { get; init; }
         public string? FontFamily { get; init; }
         public string? FontFamilyHeadings { get; init; }
         /// <summary>
@@ -915,13 +915,13 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string MergedByUserId { get; init; }
 
         /// <summary>
-        /// When the emptied account is anonymised, which is also when an undo
+        /// When the emptied account is anonymized, which is also when an undo
         /// stops being offered. Until then it is only blocked, so an undo gives
         /// it back whole.
         /// </summary>
-        public required string AnonymiseAfter { get; init; }
+        public required string AnonymizeAfter { get; init; }
 
-        public string? SourceAnonymisedAt { get; init; }
+        public string? SourceAnonymizedAt { get; init; }
         public string? UndoneAt { get; init; }
 
         /// <summary>Whether an undo is still offered.</summary>

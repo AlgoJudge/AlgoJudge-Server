@@ -14,7 +14,7 @@ namespace AlgoJudge.Server.Tests;
 /// Whether the thing that changed said so, and to the people it concerns.
 /// <para>
 /// Two guards already stand either side of this and neither can see it.
-/// <c>EventCatalogueTests</c> proves every declared name is <i>sent by
+/// <c>EventCatalogTests</c> proves every declared name is <i>sent by
 /// something</i>; the Client's <c>check:events</c> proves the two sides
 /// <i>spell the names alike</i>. Both were green while a paused round told
 /// nobody in it, a question reached no manager, and a blocked account moved no
@@ -62,7 +62,7 @@ public class EventDeliveryTests(ServerFixture server)
         // hub is being read.
         (await Sign.NewAccountAsync(server, login)).Dispose();
         var client = await Sign.InAsync(host, login, Sign.Password);
-        await Sign.Succeeded(await client.PostAsJsonAsync($"/api/v1/activities/{slug}/enrolment", new { }));
+        await Sign.Succeeded(await client.PostAsJsonAsync($"/api/v1/activities/{slug}/enrollment", new { }));
         return (client, await IdOfAsync(login));
     }
 
@@ -190,7 +190,7 @@ public class EventDeliveryTests(ServerFixture server)
     /// <summary>
     /// <b>A submission appearing reaches the screen that lists submissions.</b>
     /// <para>
-    /// <c>submissionChanged</c> was sent from two places — cancelling an attempt
+    /// <c>submissionChanged</c> was sent from two places — canceling an attempt
     /// and ruling one out of the ranking — and from nowhere else. Everything
     /// that actually moves a submission announced only the participant's
     /// <c>submissionStateChanged</c>, which is routed to a different dispatcher,

@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  # **Not cancelled.** A run interrupted between two `docker push` calls leaves
+  # **Not canceled.** A run interrupted between two `docker push` calls leaves
   # a version half in the registry, which is worse than a duplicate run.
   cancel-in-progress: false
 

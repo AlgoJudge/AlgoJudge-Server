@@ -89,10 +89,10 @@ namespace AlgoJudge.Server.Utils
         {
             ApiException api => (api.Status, TitleFor(api.Status), api.Code, api.Fields),
 
-            // A cancelled request is the caller hanging up, not a fault. 499 is
+            // A canceled request is the caller hanging up, not a fault. 499 is
             // not in the RFC but is what every proxy logs it as, and it keeps
             // these out of the 5xx count that pages somebody.
-            OperationCanceledException => (499, "Client Closed Request", "cancelled", null),
+            OperationCanceledException => (499, "Client Closed Request", "canceled", null),
 
             // The framework's own request failures already carry the right
             // status — a body it could not bind is 400, one too large is 413.

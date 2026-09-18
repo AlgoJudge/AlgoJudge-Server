@@ -41,7 +41,7 @@ public class LtiGradeSyncTests(ServerFixture server)
             "the gradebook holds nothing for the person who submitted");
 
         var summary = await world.SummaryAsync();
-        Assert.Equal(1, summary.GetProperty("synchronised").GetInt32());
+        Assert.Equal(1, summary.GetProperty("synchronized").GetInt32());
         Assert.Equal(0, summary.GetProperty("failed").GetInt32());
     }
 
@@ -67,7 +67,7 @@ public class LtiGradeSyncTests(ServerFixture server)
 
         var summary = await world.SummaryAsync();
         Assert.Equal(1, summary.GetProperty("withheld").GetInt32());
-        Assert.Equal(0, summary.GetProperty("synchronised").GetInt32());
+        Assert.Equal(0, summary.GetProperty("synchronized").GetInt32());
         // Withheld is not failed, and a screen must not read as broken when it
         // is behaving exactly as configured.
         Assert.Equal(0, summary.GetProperty("failed").GetInt32());
@@ -186,8 +186,8 @@ public class LtiGradeSyncTests(ServerFixture server)
     }
 
     /// <summary>
-    /// <b>A synchronised grade is not sent again, and this is the test that was
-    /// missing.</b> Until it existed, every sweep moved every synchronised row
+    /// <b>A synchronized grade is not sent again, and this is the test that was
+    /// missing.</b> Until it existed, every sweep moved every synchronized row
     /// back to pending — so every grade in the installation was reposted every
     /// minute, for ever, against somebody else's Moodle. It looked like working
     /// software.
@@ -224,9 +224,9 @@ public class LtiGradeSyncTests(ServerFixture server)
         await world.SweepAsync();
 
         var summary = await world.SummaryAsync();
-        Assert.Equal(0, summary.GetProperty("synchronised").GetInt32());
+        Assert.Equal(0, summary.GetProperty("synchronized").GetInt32());
         Assert.Equal(1, summary.GetProperty("pending").GetInt32());
-        // Not a status code and not "synchronisation failed": the platform's own
+        // Not a status code and not "synchronization failed": the platform's own
         // words, because that is what an operator can act on.
         Assert.Contains("the gradebook says no", summary.GetProperty("lastError").GetString()!);
     }
@@ -251,7 +251,7 @@ public class LtiGradeSyncTests(ServerFixture server)
         // pretending clocks disagree.
         world.Gradebook.Held[world.Subject] = (ours + 17, DateTime.UtcNow.AddSeconds(-1));
 
-        // A sweep does not touch it: the row is already synchronised.
+        // A sweep does not touch it: the row is already synchronized.
         await world.SweepAsync();
         Assert.Equal(ours + 17, world.Gradebook.Held[world.Subject].Score);
 

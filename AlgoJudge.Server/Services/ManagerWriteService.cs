@@ -177,9 +177,9 @@ namespace AlgoJudge.Server.Services
                 activity.RunnerTags = RunnerTags.Validated(runnerTags, "The activity's Runner tags");
             }
             activity.ParticipantRoleId =
-                await EnrolmentRoleAsync(input.ParticipantRoleId, activity, activity.ParticipantRoleId, ct);
+                await EnrollmentRoleAsync(input.ParticipantRoleId, activity, activity.ParticipantRoleId, ct);
             activity.ManagerRoleId =
-                await EnrolmentRoleAsync(input.ManagerRoleId, activity, activity.ManagerRoleId, ct);
+                await EnrollmentRoleAsync(input.ManagerRoleId, activity, activity.ManagerRoleId, ct);
 
             if (input.JoinPolicy is { } policy)
             {
@@ -648,10 +648,10 @@ namespace AlgoJudge.Server.Services
         /// Absent leaves it alone, an empty string clears it back to the shipped
         /// role, and anything else has to name a role this activity may use — a
         /// global one, or one of its own. Naming another activity's would let one
-        /// course decide what another's enrolments carry.
+        /// course decide what another's enrollments carry.
         /// </para>
         /// </summary>
-        private async Task<Guid?> EnrolmentRoleAsync(
+        private async Task<Guid?> EnrollmentRoleAsync(
             string? asked, Activity activity, Guid? current, CancellationToken ct)
         {
             if (asked is null) return current;
@@ -673,7 +673,7 @@ namespace AlgoJudge.Server.Services
             }
 
             // **Naming a role here hands out everything in it.** Every later
-            // enrolment carries it without anybody choosing again, so this is a
+            // enrollment carries it without anybody choosing again, so this is a
             // grant written once and spent many times — and the rule that
             // nobody hands out what they do not hold has to apply to it as it
             // does to writing the role in the first place. Without this a

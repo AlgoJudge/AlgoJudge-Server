@@ -253,7 +253,7 @@ public class RunnerTests(ServerFixture server)
     /// that covers all of them.
     /// </summary>
     [Fact]
-    public async Task A_stale_lease_in_a_batch_leaves_its_neighbours_renewed()
+    public async Task A_stale_lease_in_a_batch_leaves_its_neighbors_renewed()
     {
         var (slug, _) = await Build.ActivityAsync(server);
         var participant = await Build.ParticipantAsync(server, slug);
@@ -354,7 +354,7 @@ public class RunnerTests(ServerFixture server)
     /// <summary>
     /// The race, in a batch. One row moves under the save; EF fails the whole
     /// <c>SaveChanges</c> for it, and the answer must still be per job — the
-    /// reclaimed one refused and its neighbour renewed.
+    /// reclaimed one refused and its neighbor renewed.
     /// <para>
     /// Without the reload-and-ask-again this answers <b>409</b> or <b>500</b>
     /// for jobs nothing was wrong with, which is the one shape a Runner cannot
@@ -701,7 +701,7 @@ public class RunnerTests(ServerFixture server)
     /// predicate could not tell apart until 2026-09-04.
     /// <para>
     /// The test above catches a *person's* file, and it passed for a reason that
-    /// does not generalise: a person's upload carries a user id, and the check
+    /// does not generalize: a person's upload carries a user id, and the check
     /// asked whether the file had been uploaded by nobody. Two Runners are both
     /// nobody — a Runner holds a token and not a session — so every Runner's
     /// scratch uploads were one pool, and B could name A's fresh bytes and
@@ -824,7 +824,7 @@ public class RunnerTests(ServerFixture server)
     }
 
     [Fact]
-    public async Task Cancelling_an_attempt_stops_the_runner_reporting_on_it()
+    public async Task Canceling_an_attempt_stops_the_runner_reporting_on_it()
     {
         var (slug, _) = await Build.ActivityAsync(server);
         var participant = await Build.ParticipantAsync(server, slug);
@@ -837,9 +837,9 @@ public class RunnerTests(ServerFixture server)
         var leaseToken = job.GetProperty("leaseToken").GetString()!;
 
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
-        var cancelled = await admin.PostAsync(
+        var canceled = await admin.PostAsync(
             $"/api/v1/submissions/{submissionId}/attempts/{jobId}/cancel", null);
-        await Sign.Succeeded(cancelled);
+        await Sign.Succeeded(canceled);
 
         // The lease went with the cancellation, so the Runner is refused.
         var late = await runner.Client.PostAsJsonAsync($"/api/v1/runner/jobs/{jobId}/report", new
@@ -848,7 +848,7 @@ public class RunnerTests(ServerFixture server)
         });
         Assert.Equal(HttpStatusCode.Forbidden, late.StatusCode);
 
-        // And a finished attempt cannot be cancelled twice.
+        // And a finished attempt cannot be canceled twice.
         var twice = await admin.PostAsync(
             $"/api/v1/submissions/{submissionId}/attempts/{jobId}/cancel", null);
         Assert.Equal(HttpStatusCode.Conflict, twice.StatusCode);
@@ -988,7 +988,7 @@ public class RunnerTests(ServerFixture server)
     /// <b>A state this Server cannot read shows nothing, not the unapproved.</b>
     /// <para>
     /// The parser behind this filter had no failing arm: anything it did not
-    /// recognise fell through to <c>PendingApproval</c>, so `?state=nonsense`
+    /// recognize fell through to <c>PendingApproval</c>, so `?state=nonsense`
     /// answered a question nobody had asked — and answered it with the one list
     /// an operator is most likely to act on. The test needs a pending Runner to
     /// exist, because without one the wrong answer and the right one are both

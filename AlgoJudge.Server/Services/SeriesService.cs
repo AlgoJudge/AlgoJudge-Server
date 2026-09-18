@@ -181,7 +181,7 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         /// <param name="context">
         /// Needed for one line, and the line is not optional. Every entity here
-        /// assigns its own key in its initialiser, so a rule added through a
+        /// assigns its own key in its initializer, so a rule added through a
         /// <b>tracked</b> round's navigation is an entity EF finds with its key
         /// already set — and it reads that as <c>Modified</c>, not <c>Added</c>.
         /// It then writes <c>UPDATE "SeriesAddressRules" … WHERE "Id" = …</c>
@@ -237,7 +237,7 @@ namespace AlgoJudge.Server.Services
                     // **The base address is compared because .NET 10 stopped
                     // refusing host bits.** On .NET 8 `TryParse` rejected
                     // `10.0.5.17/24`; on .NET 10 it accepts and silently
-                    // normalises it to `10.0.5.0/24` — turning a typo for one
+                    // normalizes it to `10.0.5.0/24` — turning a typo for one
                     // machine into a whole laboratory, which is the typo
                     // somebody makes. The rule is unchanged; only the thing
                     // enforcing it moved out of the framework.
@@ -608,7 +608,7 @@ namespace AlgoJudge.Server.Services
             context.SeriesProblems.Add(new SeriesProblem
             {
                 SeriesId = seriesId,
-                // Denormalised from the series so the database can enforce the
+                // Denormalized from the series so the database can enforce the
                 // activity-wide slug rule on its own.
                 ActivityId = series.ActivityId,
                 ProblemId = problemId,

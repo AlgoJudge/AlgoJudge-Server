@@ -1,5 +1,5 @@
 {
-  "$comment": "What this Server puts on the socket, and the one thing the Client must know to ignore. Generated from Api/Contracts/Events.cs; EventCatalogueTests fails if the two part company, and the Client's check:events diffs its own records against this file. Kept beside openapi.json and for the same reason: events are not HTTP operations, so that document cannot carry them.",
+  "$comment": "What this Server puts on the socket, and the one thing the Client must know to ignore. Generated from Api/Contracts/Events.cs; EventCatalogTests fails if the two part company, and the Client's check:events diffs its own records against this file. Kept beside openapi.json and for the same reason: events are not HTTP operations, so that document cannot carry them.",
   "events": [
     "activityChanged",
     "activityCreated",

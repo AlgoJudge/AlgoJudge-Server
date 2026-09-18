@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Tests;
 /// Everything below fails if it goes.
 /// </para>
 /// <para>
-/// <b>Schema rather than behaviour</b>, deliberately: re-adding the foreign key
+/// <b>Schema rather than behavior</b>, deliberately: re-adding the foreign key
 /// or leaving the default in place looks like tightening, and the upload path
 /// would only say so at run time, on the backend fewest deployments use.
 /// </para>

@@ -31,9 +31,9 @@ namespace AlgoJudge.Server.Services
     }
 
     /// <summary>
-    /// Reads it off the current request, and normalises the address.
+    /// Reads it off the current request, and normalizes the address.
     /// <para>
-    /// <b>The normalisation is the point, and it lives here so that it lives in
+    /// <b>The normalization is the point, and it lives here so that it lives in
     /// exactly one place.</b> Kestrel on a dual-stack socket hands back an
     /// IPv4-mapped IPv6 address — <c>::ffff:172.20.0.1</c> — and PostgreSQL calls
     /// that <b>family 6</b>. So

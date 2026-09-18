@@ -228,7 +228,7 @@ namespace AlgoJudge.Server.Lti.Services
                 // Unknown, expired and replayed are one answer on purpose: which
                 // of the three an attacker hit is free information.
                 throw new LtiLaunchException(LtiLaunchException.BadState,
-                    "The launch state was not recognised, had expired, or had already been used");
+                    "The launch state was not recognized, had expired, or had already been used");
             }
 
             var handler = new JsonWebTokenHandler();

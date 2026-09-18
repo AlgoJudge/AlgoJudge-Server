@@ -59,20 +59,20 @@ public class StaffTests
     }
 
     [Fact]
-    public void The_catalogue_describes_every_key_including_the_new_one()
+    public void The_catalog_describes_every_key_including_the_new_one()
     {
-        Assert.Contains(Permissions.Catalogue, d => d.Key == Permissions.TrialRun);
+        Assert.Contains(Permissions.Catalog, d => d.Key == Permissions.TrialRun);
         Assert.Empty(Permissions.Unknown([Permissions.TrialRun]));
     }
 
     /// <summary>
-    /// The catalogue is the rule, not a description of it.
+    /// The catalog is the rule, not a description of it.
     /// <para>
     /// The Client draws the systemic switch from what this endpoint publishes,
-    /// and until the catalogue carried <c>systemic</c> it had to infer the
+    /// and until the catalog carried <c>systemic</c> it had to infer the
     /// answer by negating <c>participant</c>. That inference is right for every
     /// key that existed when it was written and wrong for `trial:run` — the
-    /// screen would grey the switch on and force it, while the Server stored it
+    /// screen would gray the switch on and force it, while the Server stored it
     /// off. Nobody would see an error; the dialog would simply state something
     /// untrue about the ranking.
     /// </para>
@@ -83,9 +83,9 @@ public class StaffTests
     /// </para>
     /// </summary>
     [Fact]
-    public void What_the_catalogue_publishes_is_what_the_Server_enforces()
+    public void What_the_catalog_publishes_is_what_the_Server_enforces()
     {
-        Assert.All(Permissions.Catalogue, definition =>
+        Assert.All(Permissions.Catalog, definition =>
             Assert.Equal(Permissions.IsStaff([definition.Key]), definition.Systemic));
     }
 
@@ -121,7 +121,7 @@ public class StaffTests
     [Fact]
     public void Outside_the_default_template_is_not_the_same_as_systemic()
     {
-        var trial = Permissions.Catalogue.Single(d => d.Key == Permissions.TrialRun);
+        var trial = Permissions.Catalog.Single(d => d.Key == Permissions.TrialRun);
 
         Assert.False(trial.Participant, "it is not granted by default");
         Assert.False(trial.Systemic, "and holding it does not take somebody off the board");

@@ -55,7 +55,7 @@ namespace AlgoJudge.Server.Lti.Services
             }
 
             // Everybody this platform knows here. A person with no link has no
-            // `userId` the platform would recognise, so there is nothing to post
+            // `userId` the platform would recognize, so there is nothing to post
             // for them — §6.4's sixth case, and a state rather than a failure.
             var linked = await db.ExternalIdentities.AsNoTracking()
                 .Where(i => i.PlatformId == link.PlatformId)
@@ -266,7 +266,7 @@ namespace AlgoJudge.Server.Lti.Services
 
                 // **The policy state and the sync state are different things**,
                 // and conflating them cost an hour: comparing them directly moved
-                // every synchronised row back to pending on every sweep, so every
+                // every synchronized row back to pending on every sweep, so every
                 // grade in the installation was reposted every minute for ever.
                 // Caught by a test that expected a sweep to leave a teacher's
                 // edit alone.

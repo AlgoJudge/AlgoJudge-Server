@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AlgoJudge.Server.Lti.Workers
 {
     /// <summary>
-    /// Moves the gradebook towards what AlgoJudge holds, and keeps moving.
+    /// Moves the gradebook toward what AlgoJudge holds, and keeps moving.
     /// <para>
     /// <b>A reconciler, not a sender</b> (§6.4). At least six things detach a
     /// gradebook from the truth — a released freeze, a platform that was down, a
@@ -182,7 +182,7 @@ namespace AlgoJudge.Server.Lti.Workers
                 // and the comparison below then measures a truncated `last`
                 // against an untruncated `now`, decides nothing needs bumping,
                 // and posts a timestamp the platform has already seen. Accepted,
-                // ignored, and reported as synchronised.
+                // ignored, and reported as synchronized.
                 //
                 // Found by a test with the clock stopped. With a real clock the
                 // next sweep is a minute later and the fault never shows, which
@@ -227,7 +227,7 @@ namespace AlgoJudge.Server.Lti.Workers
                 state.PostedScore = state.DesiredScore;
                 state.PostedAt = stamp;
                 state.LastTimestamp = stamp;
-                state.State = GradeSyncStatus.Synchronised;
+                state.State = GradeSyncStatus.Synchronized;
                 state.Attempts = 0;
                 state.NextAttemptAt = null;
                 state.LastError = null;

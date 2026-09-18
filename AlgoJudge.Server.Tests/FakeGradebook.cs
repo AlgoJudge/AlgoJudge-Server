@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// resolves to <b>whole seconds</b>, and two posts inside one second collide.
 /// </para>
 /// <para>
-/// <see cref="DropsStaleSilently"/> switches to the other behaviour §6.4 of
+/// <see cref="DropsStaleSilently"/> switches to the other behavior §6.4 of
 /// `LMS_INTEGRATION.md` describes — accepted, ignored, reported as success. No
 /// platform here does that, but the specification allows it and the tool must
 /// survive both.

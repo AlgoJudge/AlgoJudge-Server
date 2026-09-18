@@ -119,7 +119,7 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// The best standing across a person's submissions, as a fraction.
         /// <para>
-        /// The best, not the last: somebody who scores eighty per cent and then
+        /// The best, not the last: somebody who scores eighty percent and then
         /// breaks it keeps the eighty. Compared as fractions, because two
         /// submissions to one problem may have been marked out of different
         /// maxima — a package republished with more tests, or a type that marks

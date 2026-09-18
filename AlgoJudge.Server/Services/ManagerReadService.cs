@@ -26,7 +26,7 @@ namespace AlgoJudge.Server.Services
         Task<int> RejudgeSeriesAsync(Guid seriesId, CancellationToken ct);
         Task<ManagedSubmissionDetailDto> CancelAttemptAsync(Guid submissionId, Guid attemptId, CancellationToken ct);
 
-        /// <summary>Rules that a submission counts towards no standing, or lifts it.</summary>
+        /// <summary>Rules that a submission counts toward no standing, or lifts it.</summary>
         Task<ManagedSubmissionDetailDto> SetExcludedAsync(
             Guid submissionId, bool excluded, string? reason, CancellationToken ct);
 
@@ -61,7 +61,7 @@ namespace AlgoJudge.Server.Services
         /// this activity's submissions.
         /// <para>
         /// Public since 2026-09-14, and the reason is a gap rather than tidiness.
-        /// <c>submissionChanged</c> was sent from exactly two places — cancelling
+        /// <c>submissionChanged</c> was sent from exactly two places — canceling
         /// an attempt and ruling one out of the ranking — while everything that
         /// actually moves a submission (it being created, claimed, judged,
         /// rejudged, or reclaimed from a dead Runner) announced only the
@@ -181,7 +181,7 @@ namespace AlgoJudge.Server.Services
 
             // **Null is every, empty is nothing** — the rule `Filter` applies on
             // the way in. Words this Server has no name for narrow to nothing
-            // rather than to everything, because a filter it cannot honour must
+            // rather than to everything, because a filter it cannot honor must
             // never widen what it answers with.
             if (filter.SeriesIds is not null)
             {
@@ -502,7 +502,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// Stops a job that has not finished. <b>A finished one is history</b>
-        /// and is refused: cancelling it would mean deciding that a verdict
+        /// and is refused: canceling it would mean deciding that a verdict
         /// somebody already saw did not happen.
         /// </summary>
         public async Task<ManagedSubmissionDetailDto> CancelAttemptAsync(
@@ -517,13 +517,13 @@ namespace AlgoJudge.Server.Services
                 Permissions.SubmissionCancel, job.Submission!.SeriesProblem!.ActivityId, ct);
 
             if (job.State is EvaluationJobState.Completed or EvaluationJobState.Failed
-                or EvaluationJobState.Cancelled or EvaluationJobState.Superseded)
+                or EvaluationJobState.Canceled or EvaluationJobState.Superseded)
             {
                 throw new ConflictException(
-                    "This attempt has already finished and cannot be cancelled", "attempt.finished");
+                    "This attempt has already finished and cannot be canceled", "attempt.finished");
             }
 
-            job.State = EvaluationJobState.Cancelled;
+            job.State = EvaluationJobState.Canceled;
             job.FinishedAt = clock.GetUtcNow().UtcDateTime;
             // The lease goes with it, so a Runner still holding it is refused
             // when it reports rather than allowed to resurrect the job.
@@ -541,7 +541,7 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// A manager's ruling that a submission counts towards no standing.
+        /// A manager's ruling that a submission counts toward no standing.
         /// <para>
         /// <b>It retracts nothing</b>: the verdict, the attempts, the files, the
         /// place in every list and the ceiling it spent all stay. What it leaves
@@ -1115,7 +1115,7 @@ namespace AlgoJudge.Server.Services
         /// A manager approves the fingerprint, and nothing is evaluated before
         /// that.
         /// <para>
-        /// Answers the whole record, not the registration acknowledgement. The
+        /// Answers the whole record, not the registration acknowledgment. The
         /// caller is a manager refreshing a row and needs everything the row
         /// shows; a Runner learning its own id is the other endpoint, and this
         /// one sat on that shape until 2026-08-08. Its two siblings — revoking
@@ -1217,7 +1217,7 @@ namespace AlgoJudge.Server.Services
 
             // One of the two things about a Runner the operator owns rather than
             // the Runner reporting it — and, since 2026-08-24, what decides
-            // which work it is given. Normalised so that `Lab-A` here and
+            // which work it is given. Normalized so that `Lab-A` here and
             // `lab-a` on an activity cannot be two pools that read as one.
             runner.Tags = RunnerTags.Validated(tags, "The Runner's tags");
             await context.SaveChangesAsync(ct);

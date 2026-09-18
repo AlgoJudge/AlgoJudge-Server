@@ -35,7 +35,7 @@ public class SeriesDuplicationTests(ServerFixture server)
         await DatedAsync(Guid.Parse(roundId));
 
         // **The target's own assignment is moved out of the way**, so this test
-        // is about the fields travelling. Every fixture activity attaches its
+        // is about the fields traveling. Every fixture activity attaches its
         // problem as `A`, and the freeing of a taken slug has a test of its own.
         await using (var renaming = server.NewContext())
         {

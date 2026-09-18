@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Lti.Data
 
         /// <summary>
         /// The opaque <c>state</c> handed to the platform and expected back. The
-        /// lookup key, and the CSRF defence.
+        /// lookup key, and the CSRF defense.
         /// </summary>
         public required string State { get; set; }
 

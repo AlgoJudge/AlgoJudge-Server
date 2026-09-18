@@ -117,7 +117,7 @@ namespace AlgoJudge.Server.Services
                 Logo = defaultLogo is null ? null : Logo(defaultLogo),
                 LogoTranslations = logos
                     .Where(r => r.Language is not null)
-                    .Select(r => new LocalisedLogoDto { Language = r.Language!, Logo = Logo(r) })
+                    .Select(r => new LocalizedLogoDto { Language = r.Language!, Logo = Logo(r) })
                     .ToList() is { Count: > 0 } translations ? translations : null,
                 ShowLogo = instance.ShowLogo,
                 ShowLocalSignIn = instance.ShowLocalSignIn,
@@ -156,7 +156,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// <b>A theme that cannot be read is no theme, not a broken page.</b> The
         /// bytes were validated when they were published, so this cannot normally
-        /// fail — and if it does, an installation showing the default colours is a
+        /// fail — and if it does, an installation showing the default colors is a
         /// great deal better than one whose every screen answers 500. It is logged
         /// as an error, because it is one.
         /// </para>
@@ -193,8 +193,8 @@ namespace AlgoJudge.Server.Services
 
                 return new InstanceThemeDto
                 {
-                    Light = Colours(theme.Light),
-                    Dark = Colours(theme.Dark),
+                    Light = Colors(theme.Light),
+                    Dark = Colors(theme.Dark),
                     FontFamily = theme.FontFamily,
                     FontFamilyHeadings = theme.FontFamilyHeadings,
                     Fonts = (theme.Fonts ?? [])
@@ -223,23 +223,23 @@ namespace AlgoJudge.Server.Services
             }
         }
 
-        private static ThemeColoursDto? Colours(ThemeColours? colours) => colours is null ? null : new()
+        private static ThemeColorsDto? Colors(ThemeColors? colors) => colors is null ? null : new()
         {
-            Primary = colours.Primary,
-            Secondary = colours.Secondary,
-            Accent = colours.Accent,
-            Link = colours.Link,
-            Body = colours.Body,
-            Surface = colours.Surface,
-            Text = colours.Text,
-            Dimmed = colours.Dimmed,
-            Border = colours.Border,
-            NavBackground = colours.NavBackground,
-            NavText = colours.NavText,
-            NavActiveBackground = colours.NavActiveBackground,
-            NavActiveText = colours.NavActiveText,
-            HeaderBackground = colours.HeaderBackground,
-            HeaderText = colours.HeaderText,
+            Primary = colors.Primary,
+            Secondary = colors.Secondary,
+            Accent = colors.Accent,
+            Link = colors.Link,
+            Body = colors.Body,
+            Surface = colors.Surface,
+            Text = colors.Text,
+            Dimmed = colors.Dimmed,
+            Border = colors.Border,
+            NavBackground = colors.NavBackground,
+            NavText = colors.NavText,
+            NavActiveBackground = colors.NavActiveBackground,
+            NavActiveText = colors.NavActiveText,
+            HeaderBackground = colors.HeaderBackground,
+            HeaderText = colors.HeaderText,
         };
 
         private static InstanceLogoDto Logo(FileReference reference) => new()

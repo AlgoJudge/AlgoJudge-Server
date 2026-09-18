@@ -153,7 +153,7 @@ namespace AlgoJudge.Server.Lti.Services
                 AuthTokenUrl = input.AuthTokenUrl.Trim(),
                 AuthLoginUrl = input.AuthLoginUrl.Trim(),
                 IsIdentityAuthority = input.IsIdentityAuthority,
-                IdentityNamespace = Normalise(input.IdentityNamespace),
+                IdentityNamespace = Normalize(input.IdentityNamespace),
                 UsernameClaim = string.IsNullOrWhiteSpace(input.UsernameClaim)
                     ? "username"
                     : input.UsernameClaim.Trim(),
@@ -192,7 +192,7 @@ namespace AlgoJudge.Server.Lti.Services
             platform.AuthTokenUrl = input.AuthTokenUrl.Trim();
             platform.AuthLoginUrl = input.AuthLoginUrl.Trim();
             platform.IsIdentityAuthority = input.IsIdentityAuthority;
-            platform.IdentityNamespace = Normalise(input.IdentityNamespace);
+            platform.IdentityNamespace = Normalize(input.IdentityNamespace);
             platform.UsernameClaim = string.IsNullOrWhiteSpace(input.UsernameClaim)
                 ? "username"
                 : input.UsernameClaim.Trim();
@@ -242,7 +242,7 @@ namespace AlgoJudge.Server.Lti.Services
             }
         }
 
-        private static string? Normalise(string? value) =>
+        private static string? Normalize(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 
         private static void Validate(PlatformInput input)

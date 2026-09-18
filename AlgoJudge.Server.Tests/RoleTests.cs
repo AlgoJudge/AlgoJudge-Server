@@ -214,7 +214,7 @@ public class RoleTests(ServerFixture server)
     /// <summary>
     /// <b>A role edit can change who is a competitor</b>, and that is the
     /// dangerous half of a live role. Adding a staff key to the role a course
-    /// enrols into takes everybody holding it out of the ranking, so the flag is
+    /// enrolls into takes everybody holding it out of the ranking, so the flag is
     /// recomputed rather than left saying yesterday's answer.
     /// </summary>
     [Fact]
@@ -300,7 +300,7 @@ public class RoleTests(ServerFixture server)
     }
 
     /// <summary>
-    /// The key is only honoured at system scope, so a role belonging to one
+    /// The key is only honored at system scope, so a role belonging to one
     /// activity that carried it would show a right every check disagrees with —
     /// the same rule an activity grant has always had.
     /// </summary>
@@ -327,7 +327,7 @@ public class RoleTests(ServerFixture server)
     /// activity's own role reach anybody at all.
     /// </summary>
     [Fact]
-    public async Task Joining_an_activity_links_the_role_it_enrols_into()
+    public async Task Joining_an_activity_links_the_role_it_enrolls_into()
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
         var slug = await NewActivityAsync(admin);
@@ -344,7 +344,7 @@ public class RoleTests(ServerFixture server)
         // Nothing chosen: the shipped participant role.
         var (first, firstId) = await AccountAsync("joins-default");
         await Sign.Succeeded(await first.PostAsJsonAsync(
-            $"/api/v1/activities/{slug}/enrolment", new { }));
+            $"/api/v1/activities/{slug}/enrollment", new { }));
         Assert.Equal(
             await Build.RoleIdAsync(admin, "participant"),
             (await GrantRowAsync(firstId, activityId)).RoleId.ToString());
@@ -358,7 +358,7 @@ public class RoleTests(ServerFixture server)
 
         var (second, secondId) = await AccountAsync("joins-chosen");
         await Sign.Succeeded(await second.PostAsJsonAsync(
-            $"/api/v1/activities/{slug}/enrolment", new { }));
+            $"/api/v1/activities/{slug}/enrollment", new { }));
         Assert.Equal(chosen, (await GrantRowAsync(secondId, activityId)).RoleId.ToString());
     }
 

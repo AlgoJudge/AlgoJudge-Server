@@ -92,7 +92,7 @@ namespace AlgoJudge.Server.Lti.Services
             // **A second placement is allowed and is not silent** — decided
             // 2026-08-13. A shared problem set across two groups is real, so this
             // is not refused; what it is not allowed to do is happen unnoticed,
-            // because one activity then reaches two gradebooks and §7's enrolment
+            // because one activity then reaches two gradebooks and §7's enrollment
             // has two rosters.
             var alreadyPlaced = await db.ResourceLinks.AnyAsync(l => l.ActivityId == activity.Id, ct);
 

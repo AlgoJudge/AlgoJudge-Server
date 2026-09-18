@@ -313,7 +313,7 @@ namespace AlgoJudge.Server.Controllers
         /// Records a verdict, once.
         /// <para>
         /// Idempotent on the lease token: a Runner that resends because it did
-        /// not see the acknowledgement gets the same result back with
+        /// not see the acknowledgment gets the same result back with
         /// <c>duplicate: true</c>, rather than a second one.
         /// </para>
         /// </summary>
@@ -566,7 +566,7 @@ namespace AlgoJudge.Server.Controllers
     // Approving a Runner lives with revoking and tagging in
     // `PanelController.ManagerRunnersController`, not here. It is a manager
     // surface carrying the ordinary session, and it belongs beside its siblings
-    // — kept apart, it drifted onto the registration acknowledgement's shape and
+    // — kept apart, it drifted onto the registration acknowledgment's shape and
     // answered a manager with `{runnerId, fingerprint, state}` where the two
     // endpoints next to it answered the whole row.
 }

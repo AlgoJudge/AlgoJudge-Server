@@ -308,7 +308,7 @@ namespace AlgoJudge.Server.Services
             // `UPDATE` for the new rows instead of `INSERT`, and the update
             // matched nothing — `DbUpdateConcurrencyException`, "expected to
             // affect 1 row(s), but actually affected 0". Every entity here
-            // assigns its own key in its initialiser, so a rule reached through
+            // assigns its own key in its initializer, so a rule reached through
             // a *tracked* parent's navigation already carries a non-default `Id`
             // and is taken for a row that exists. The create path never showed it
             // because there the parent itself is `Add`ed and the whole graph goes
@@ -409,7 +409,7 @@ namespace AlgoJudge.Server.Services
             // Refused rather than cascaded. Removing a provider that people sign
             // in through decides something about their accounts — under the
             // deletion cascade, an account whose last link goes and which has no
-            // local credential is anonymised — and that is not a side effect a
+            // local credential is anonymized — and that is not a side effect a
             // delete button should have. Disabling it is the reversible act.
             var linked = await context.UserIdentities.CountAsync(i => i.ProviderId == id, ct);
             if (linked > 0)

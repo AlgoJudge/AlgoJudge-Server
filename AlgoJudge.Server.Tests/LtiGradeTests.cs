@@ -104,10 +104,10 @@ public class LtiGradeTests
     }
 
     /// <summary>
-    /// The other behaviour the specification permits, and the one §6.4 assumed:
+    /// The other behavior the specification permits, and the one §6.4 assumed:
     /// accepted, ignored, reported as success. No platform in the reference
     /// stack does this — but a tool that only survived Moodle's answer would
-    /// mark a grade synchronised that never arrived.
+    /// mark a grade synchronized that never arrived.
     /// </summary>
     [Fact]
     public async Task A_platform_that_drops_a_stale_score_silently_still_gets_a_newer_one()
@@ -211,7 +211,7 @@ public class LtiGradeTests
                 CancellationToken.None));
 
         Assert.Contains("403", refusal.Message);
-        // The platform's own words travel, because "synchronisation failed" is
+        // The platform's own words travel, because "synchronization failed" is
         // not something an operator can act on.
         Assert.Contains("the gradebook says no", refusal.Message);
     }

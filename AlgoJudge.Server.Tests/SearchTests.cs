@@ -168,7 +168,7 @@ public class SearchTests(ServerFixture server)
         var (id, first, last) = await NamedAsync("Jan", $"Pytajacy{Guid.NewGuid():N}"[..16]);
         var asker = await Sign.InAsync(server, (await NameOfAsync(id))!, Sign.Password);
 
-        await Sign.Succeeded(await asker.PostAsJsonAsync($"/api/v1/activities/{slug}/enrolment", new { }));
+        await Sign.Succeeded(await asker.PostAsJsonAsync($"/api/v1/activities/{slug}/enrollment", new { }));
         await Sign.Succeeded(await asker.PostAsJsonAsync($"/api/v1/activities/{slug}/questions", new
         {
             topic = "Limit czasu",
@@ -216,7 +216,7 @@ public class SearchTests(ServerFixture server)
         var row = Assert.Single(byTopic);
         Assert.Equal("announcement", row.GetProperty("kind").GetString());
         // Absent or null: the projection withholds it either way, and the
-        // serialiser drops a null rather than writing one.
+        // serializer drops a null rather than writing one.
         Assert.True(!row.TryGetProperty("authorName", out var author)
             || author.ValueKind == JsonValueKind.Null);
 
@@ -244,7 +244,7 @@ public class SearchTests(ServerFixture server)
         var participant = await Sign.InAsync(server, (await NameOfAsync(id))!, Sign.Password);
 
         await Sign.Succeeded(await participant.PostAsJsonAsync(
-            $"/api/v1/activities/{slug}/enrolment", new { }));
+            $"/api/v1/activities/{slug}/enrollment", new { }));
         await Build.SubmitAsync(participant, slug, "print(1)\n");
 
         var admin = await AdminAsync(server);

@@ -14,7 +14,7 @@ namespace AlgoJudge.Server.Api.Contracts
     /// Records rather than classes: a response is a value, and nothing should be
     /// able to mutate one after a service has decided what it says. Every
     /// identifier is a <b>string</b> holding a UUID, never a <c>Guid</c> — the
-    /// Client's models say `id: string`, and letting the serialiser decide the
+    /// Client's models say `id: string`, and letting the serializer decide the
     /// casing of a GUID is how "018f2c00-..." becomes "018F2C00-...".
     /// </para>
     /// </summary>
@@ -52,7 +52,7 @@ namespace AlgoJudge.Server.Api.Contracts
     /// <b>Null is every, empty is nothing.</b> Somebody who sent no words is
     /// asking an unnarrowed question. Somebody who sent words this product has
     /// no name for is asking a question whose answer is empty — and a filter the
-    /// Server cannot honour must never <i>widen</i> what it answers with. That
+    /// Server cannot honor must never <i>widen</i> what it answers with. That
     /// distinction is the whole of this class: three places used to disagree
     /// about it, and one of them returned an entire print queue to a request
     /// that had asked for one row of it.
@@ -175,7 +175,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required string Sha256 { get; init; }
     }
 
-    public record LocalisedLogoDto
+    public record LocalizedLogoDto
     {
         public required string Language { get; init; }
         public required InstanceLogoDto Logo { get; init; }
@@ -214,7 +214,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool SeriesRestrictionsEnabled { get; init; }
         public required IReadOnlyList<InstanceDocumentRefDto> Documents { get; init; }
         public InstanceLogoDto? Logo { get; init; }
-        public IReadOnlyList<LocalisedLogoDto>? LogoTranslations { get; init; }
+        public IReadOnlyList<LocalizedLogoDto>? LogoTranslations { get; init; }
         public required bool ShowLogo { get; init; }
 
         /// <summary>
@@ -275,14 +275,14 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool AccountDeletionEnabled { get; init; }
 
         /// <summary>
-        /// The operator's colours and typeface. Absent means the installation has
+        /// The operator's colors and typeface. Absent means the installation has
         /// set none and the Client draws the theme it ships with.
         /// <para>
         /// <b>The values travel here rather than as a file reference</b>, unlike
         /// every document beside them. A privacy policy is tens of kilobytes and
         /// is fetched by whoever is about to read it; a theme is under two, and
         /// the shell needs it before the first paint — a second round trip would
-        /// guarantee a flash of the wrong colours on every arrival.
+        /// guarantee a flash of the wrong colors on every arrival.
         /// </para>
         /// <para>
         /// Public, like every other instance setting, and it has to be: the
@@ -293,13 +293,13 @@ namespace AlgoJudge.Server.Api.Contracts
     }
 
     /// <summary>
-    /// What an installation looks like. <b>Every colour optional, and absent
+    /// What an installation looks like. <b>Every color optional, and absent
     /// means the product's default</b> — never black and never empty.
     /// </summary>
     public record InstanceThemeDto
     {
-        public ThemeColoursDto? Light { get; init; }
-        public ThemeColoursDto? Dark { get; init; }
+        public ThemeColorsDto? Light { get; init; }
+        public ThemeColorsDto? Dark { get; init; }
         public string? FontFamily { get; init; }
         public string? FontFamilyHeadings { get; init; }
         /// <summary>The faces to draw with, resolved to addresses.</summary>
@@ -312,18 +312,18 @@ namespace AlgoJudge.Server.Api.Contracts
     }
 
     /// <summary>
-    /// One colour scheme. Both are stated in full: a dark scheme derived from a
+    /// One color scheme. Both are stated in full: a dark scheme derived from a
     /// light one fails a contrast floor unpredictably, and the browser checks
     /// assert one.
     /// </summary>
-    public record ThemeColoursDto
+    public record ThemeColorsDto
     {
         /* Brand. One hex each; the Client generates the shades from it. */
         public string? Primary { get; init; }
         public string? Secondary { get; init; }
         public string? Accent { get; init; }
         /// <summary>Its own key: in an identity system a link is usually a
-        /// different hue rather than a lighter brand colour.</summary>
+        /// different hue rather than a lighter brand color.</summary>
         public string? Link { get; init; }
 
         /* Surface and text. */

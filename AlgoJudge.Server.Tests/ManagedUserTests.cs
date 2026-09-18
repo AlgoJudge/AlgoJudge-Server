@@ -83,7 +83,7 @@ public class ManagedUserTests(ServerFixture server)
         var stored = await context.Users.FirstAsync(u => u.Id == id);
         Assert.Equal(wanted, stored.Email);
 
-        // Written through the manager, so the lookup key is the normaliser's
+        // Written through the manager, so the lookup key is the normalizer's
         // answer rather than `ToUpperInvariant`, and the confirmation is cleared.
         Assert.Equal(wanted.ToUpperInvariant(), stored.NormalizedEmail);
         Assert.False(stored.EmailConfirmed);

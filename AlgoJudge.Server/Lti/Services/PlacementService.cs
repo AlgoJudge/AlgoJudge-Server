@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Lti.Services
 
         /// <summary>
         /// Whether this activity is reached from more than one course at all.
-        /// Carried separately from the acknowledgement so a screen can stay quiet
+        /// Carried separately from the acknowledgment so a screen can stay quiet
         /// about the ordinary case rather than asking about something that is not
         /// shared.
         /// </summary>

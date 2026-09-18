@@ -17,7 +17,7 @@ namespace AlgoJudge.Server.Database.Models
     /// Permitted transitions, validated by the Server:
     /// <c>Queued → Running</c> on claim; <c>Running → Completed</c> on a verdict;
     /// <c>Running → Failed</c> on an infrastructure failure; <c>Running →
-    /// Cancelled</c> by a manager; <c>Running → Queued</c> when the lease
+    /// Canceled</c> by a manager; <c>Running → Queued</c> when the lease
     /// expires. A rejudge is a <b>new job</b>, never a transition, and a finished
     /// job never leaves its state.
     /// </para>
