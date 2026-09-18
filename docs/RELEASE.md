@@ -409,3 +409,41 @@ CI says the full-stack check waits on the first release because
 
 The documentation site cuts its `/server/` snapshot on release day, from
 `AlgoJudge-Docs`.
+### A tag is not a release
+
+`release.yml` holds `contents: read`. It **creates no GitHub Release and writes
+no release notes** — nothing in CI does, and **nothing goes red when a Release
+is missing**. A tag with no Release looks exactly like a tag with one, from
+every angle except the releases page.
+
+It is therefore a step somebody takes by hand, and the evidence that it gets
+missed is `AlgoJudge-Docs`: it carried `v0.1.0` with no Release beside it until
+that was found on 2026-09-18, eleven days later.
+
+- [ ] `gh release list -R AlgoJudge/AlgoJudge-Server` names the tag just pushed.
+
+The note's shape is `/release` in the workspace, `reference/release-notes.md`.
+
+### The public website states this component's version
+
+`algojudge.pl` prints **`Server v0.1.0`** in four places — a card badge and
+a roadmap item, in each of `src/content/pl.json` and `src/content/en.json` of
+`AlgoJudge-Website`. Releasing a new version makes all four wrong, and **nothing
+fails**: that repository has no CI at all.
+
+Two traps, both measured 2026-09-18:
+
+- `AlgoJudge-Website/tests/content.test.mjs:125` **pins the literal** by regex,
+  `Server v0\.1\.0`, and hard-codes the five repository keys. Correcting
+  the content turns the suite red and **the test is what is wrong** — fix it in
+  the same commit, never satisfy it by reverting a correct fact.
+- The tests run only when somebody types `npm test`. Nothing runs on a push or
+  a pull request there.
+
+**This was already true when this line was written.** `AlgoJudge-Client` and
+`AlgoJudge-External-Runner` were released as `0.1.1` on 2026-09-09 and
+2026-09-08, and the website still printed `v0.1.0` for both.
+
+The procedure is `/website-sync` in the workspace. It is not this runbook's
+step to perform, and it is this runbook's job to say that it is owed.
+
