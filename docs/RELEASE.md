@@ -411,24 +411,17 @@ The documentation site cuts its `/server/` snapshot on release day, from
 `AlgoJudge-Docs`.
 ### The public website states this component's version
 
-`algojudge.pl` prints **`Server v0.1.0`** in four places — a card badge and
-a roadmap item, in each of `src/content/pl.json` and `src/content/en.json` of
-`AlgoJudge-Website`. Releasing a new version makes all four wrong, and **nothing
-fails**: that repository has no CI at all.
+`algojudge.pl` prints **`Server v<version>`** in four places — a card badge and a
+roadmap item, in each of `src/content/pl.json` and `src/content/en.json` of
+`AlgoJudge-Website`. A release makes all four wrong.
 
-Two traps, both measured 2026-09-18:
+**`AlgoJudge-Website` has no CI.** Its fifteen tests run only when somebody types
+`npm test`, so nothing reports the mismatch.
 
-- `AlgoJudge-Website/tests/content.test.mjs:125` **pins the literal** by regex,
-  `Server v0\.1\.0`, and hard-codes the five repository keys. Correcting
-  the content turns the suite red and **the test is what is wrong** — fix it in
-  the same commit, never satisfy it by reverting a correct fact.
-- The tests run only when somebody types `npm test`. Nothing runs on a push or
-  a pull request there.
+`AlgoJudge-Website/tests/content.test.mjs:125` pins the version literal by regex,
+`Server v0\.1\.0`, and hard-codes the five repository keys. Correcting the content
+turns that suite red: the test asserts the literal and needs the same edit. Change
+content and test in one commit.
 
-**This was already true when this line was written.** `AlgoJudge-Client` and
-`AlgoJudge-External-Runner` were released as `0.1.1` on 2026-09-09 and
-2026-09-08, and the website still printed `v0.1.0` for both.
-
-The procedure is `/website-sync` in the workspace. It is not this runbook's
-step to perform, and it is this runbook's job to say that it is owed.
-
+The correction is `/website-sync` in the workspace. This runbook's step is to
+record that it is owed.
