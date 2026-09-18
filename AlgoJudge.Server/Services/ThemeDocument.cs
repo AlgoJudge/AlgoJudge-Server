@@ -7,10 +7,10 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace AlgoJudge.Server.Services
 {
     /// <summary>
-    /// One colour scheme's worth of an instance's theme. <b>Every key optional,
+    /// One color scheme's worth of an instance's theme. <b>Every key optional,
     /// and absent means the product's default</b> — never black, never empty.
     /// </summary>
-    public sealed class ThemeColours
+    public sealed class ThemeColors
     {
         /* Brand. One hex each; the Client generates the ten shades Mantine wants,
            which is why one field reaches a pale tile, a rule and dark text on it. */
@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// Its own key rather than a shade of <see cref="Primary"/>: in an
         /// identity system a link is usually a <b>different hue</b>, not a
-        /// lighter version of the brand colour.
+        /// lighter version of the brand color.
         /// </summary>
         public string? Link { get; set; }
 
@@ -32,7 +32,7 @@ namespace AlgoJudge.Server.Services
         public string? Dimmed { get; set; }
         public string? Border { get; set; }
 
-        /* The shell — where an installation is actually recognised. The hover and
+        /* The shell — where an installation is actually recognized. The hover and
            muted steps are mixed from these in CSS rather than asked for, so they
            track whatever is set here and the form stays short. */
         public string? NavBackground { get; set; }
@@ -65,7 +65,7 @@ namespace AlgoJudge.Server.Services
     /// <para>
     /// <b>YAML, for the reason the product has already given three times</b> — a
     /// package's <c>config.yml</c>, statement front matter and
-    /// <c>algojudge.yml</c>. A fourth serialisation would be a fourth set of
+    /// <c>algojudge.yml</c>. A fourth serialization would be a fourth set of
     /// traps for a file a person edits by hand.
     /// </para>
     /// </summary>
@@ -73,8 +73,8 @@ namespace AlgoJudge.Server.Services
     {
         public string? Format { get; set; }
         public int? Version { get; set; }
-        public ThemeColours? Light { get; set; }
-        public ThemeColours? Dark { get; set; }
+        public ThemeColors? Light { get; set; }
+        public ThemeColors? Dark { get; set; }
         public string? FontFamily { get; set; }
         public string? FontFamilyHeadings { get; set; }
         public List<ThemeFontFace>? Fonts { get; set; }
@@ -86,7 +86,7 @@ namespace AlgoJudge.Server.Services
     /// <b>The validation here is a security boundary, not tidiness.</b> Every
     /// value in this document ends up inside a stylesheet the Client builds, so a
     /// field that accepted <c>red; } body { …</c> would be CSS injection through
-    /// an installation's own configuration file. A colour is six hexadecimal
+    /// an installation's own configuration file. A color is six hexadecimal
     /// digits and nothing else — no <c>rgb()</c>, no keyword, no <c>var()</c> —
     /// and a family name is letters, digits, spaces, hyphens and underscores.
     /// </para>
@@ -109,7 +109,7 @@ namespace AlgoJudge.Server.Services
         public const int MaxFaces = 12;
 
         /// <summary>
-        /// A theme is a few hundred bytes of colours. The ceiling is here so a
+        /// A theme is a few hundred bytes of colors. The ceiling is here so a
         /// file that is not one is refused before it is parsed rather than after.
         /// </summary>
         public const int MaxBytes = 64 * 1024;
@@ -122,7 +122,7 @@ namespace AlgoJudge.Server.Services
         public static readonly IReadOnlyList<string> GenericFamilies =
             ["system-ui", "sans-serif", "serif", "monospace"];
 
-        private static readonly Regex Colour =
+        private static readonly Regex Color =
             new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
 
         private static readonly Regex FamilyName =
@@ -137,12 +137,12 @@ namespace AlgoJudge.Server.Services
 
         private static readonly HashSet<string> FaceKeys = ["family", "weight", "style", "file"];
 
-        public static readonly IReadOnlyList<string> ColourKeys = typeof(ThemeColours)
+        public static readonly IReadOnlyList<string> ColorKeys = typeof(ThemeColors)
             .GetProperties()
             .Select(property => char.ToLowerInvariant(property.Name[0]) + property.Name[1..])
             .ToList();
 
-        private static readonly HashSet<string> ColourKeySet = ColourKeys.ToHashSet(StringComparer.Ordinal);
+        private static readonly HashSet<string> ColorKeySet = ColorKeys.ToHashSet(StringComparer.Ordinal);
 
         /// <summary>
         /// <c>wOF2</c>. Checked on the bytes rather than on the declared type,
@@ -217,15 +217,15 @@ namespace AlgoJudge.Server.Services
                 throw new ValidationException(
                     $"The theme states version {root.Version?.ToString() ?? "nothing"}, and this "
                     + $"Server reads version {Version}. Refused rather than guessed: a version it "
-                    + "does not know may mean something different by a key it recognises.",
+                    + "does not know may mean something different by a key it recognizes.",
                     "theme.version");
             }
 
             Section(loose, "light");
             Section(loose, "dark");
 
-            Colours(root.Light, "light");
-            Colours(root.Dark, "dark");
+            Colors(root.Light, "light");
+            Colors(root.Dark, "dark");
 
             var families = Faces(root, loose, stored);
 
@@ -239,7 +239,7 @@ namespace AlgoJudge.Server.Services
                 if (document.TryGetValue(name, out var section)
                     && section is IDictionary<object, object?> keys)
                 {
-                    Unknown(keys.Keys.Select(key => key?.ToString() ?? ""), ColourKeySet, name + ".");
+                    Unknown(keys.Keys.Select(key => key?.ToString() ?? ""), ColorKeySet, name + ".");
                 }
             }
         }
@@ -249,7 +249,7 @@ namespace AlgoJudge.Server.Services
         /// theme saved from a screen and a theme written by hand are the same
         /// document once they have been through here.
         /// </summary>
-        public static string Serialise(ThemeRoot theme)
+        public static string Serialize(ThemeRoot theme)
         {
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -276,13 +276,13 @@ namespace AlgoJudge.Server.Services
                 "theme.key");
         }
 
-        private static void Colours(ThemeColours? colours, string scheme)
+        private static void Colors(ThemeColors? colors, string scheme)
         {
-            if (colours is null) return;
+            if (colors is null) return;
 
-            foreach (var property in typeof(ThemeColours).GetProperties())
+            foreach (var property in typeof(ThemeColors).GetProperties())
             {
-                if (property.GetValue(colours) is not string value) continue;
+                if (property.GetValue(colors) is not string value) continue;
 
                 var trimmed = value.Trim();
                 var key = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
@@ -290,22 +290,22 @@ namespace AlgoJudge.Server.Services
                 if (trimmed.Length == 0)
                 {
                     // Empty is absent. The panel's form sends every field, and an
-                    // untouched one is the default rather than a colour.
-                    property.SetValue(colours, null);
+                    // untouched one is the default rather than a color.
+                    property.SetValue(colors, null);
                     continue;
                 }
 
-                if (!Colour.IsMatch(trimmed))
+                if (!Color.IsMatch(trimmed))
                 {
                     throw new ValidationException(
-                        $"{scheme}.{key} is '{trimmed}', which is not a colour this Server stores. "
+                        $"{scheme}.{key} is '{trimmed}', which is not a color this Server stores. "
                         + "Six hexadecimal digits after a hash, and nothing else — not a keyword, "
                         + "not rgb(), not var(). These values are written into a stylesheet, and a "
                         + "field that took anything else would let a configuration file carry CSS.",
-                        "theme.colour");
+                        "theme.color");
                 }
 
-                property.SetValue(colours, trimmed.ToLowerInvariant());
+                property.SetValue(colors, trimmed.ToLowerInvariant());
             }
         }
 

@@ -452,7 +452,7 @@
         }
       }
     },
-    "/activities/{idOrSlug}/enrolment": {
+    "/activities/{idOrSlug}/enrollment": {
       "post": {
         "tags": [
           "Activities"
@@ -471,17 +471,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EnrolInputDto"
+                "$ref": "#/components/schemas/EnrollInputDto"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/EnrolInputDto"
+                "$ref": "#/components/schemas/EnrollInputDto"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/EnrolInputDto"
+                "$ref": "#/components/schemas/EnrollInputDto"
               }
             }
           }
@@ -5808,7 +5808,7 @@
         }
       }
     },
-    "/lti/placements/{id}/roster/enrol": {
+    "/lti/placements/{id}/roster/enroll": {
       "post": {
         "tags": [
           "LtiPlacements"
@@ -5830,17 +5830,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterEnrolmentDto"
+                  "$ref": "#/components/schemas/RosterEnrollmentDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterEnrolmentDto"
+                  "$ref": "#/components/schemas/RosterEnrollmentDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RosterEnrolmentDto"
+                  "$ref": "#/components/schemas/RosterEnrollmentDto"
                 }
               }
             }
@@ -12201,7 +12201,7 @@
       },
       "AccountMergeDto": {
         "required": [
-          "anonymiseAfter",
+          "anonymizeAfter",
           "canUndo",
           "id",
           "mergedAt",
@@ -12231,11 +12231,11 @@
             "type": "string",
             "nullable": true
           },
-          "anonymiseAfter": {
+          "anonymizeAfter": {
             "type": "string",
             "nullable": true
           },
-          "sourceAnonymisedAt": {
+          "sourceAnonymizedAt": {
             "type": "string",
             "nullable": true
           },
@@ -13433,7 +13433,7 @@
         },
         "additionalProperties": false
       },
-      "EnrolInputDto": {
+      "EnrollInputDto": {
         "type": "object",
         "properties": {
           "password": {
@@ -13582,7 +13582,7 @@
           "deferred",
           "failed",
           "pending",
-          "synchronised",
+          "synchronized",
           "total",
           "withheld"
         ],
@@ -13592,7 +13592,7 @@
             "type": "integer",
             "format": "int32"
           },
-          "synchronised": {
+          "synchronized": {
             "type": "integer",
             "format": "int32"
           },
@@ -14245,7 +14245,7 @@
           "logoTranslations": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/LocalisedLogoDto"
+              "$ref": "#/components/schemas/LocalizedLogoDto"
             },
             "nullable": true
           },
@@ -14426,10 +14426,10 @@
         "type": "object",
         "properties": {
           "light": {
-            "$ref": "#/components/schemas/ThemeColoursDto"
+            "$ref": "#/components/schemas/ThemeColorsDto"
           },
           "dark": {
-            "$ref": "#/components/schemas/ThemeColoursDto"
+            "$ref": "#/components/schemas/ThemeColorsDto"
           },
           "fontFamily": {
             "type": "string",
@@ -14465,7 +14465,7 @@
             "nullable": true
           },
           "theme": {
-            "$ref": "#/components/schemas/ThemeColoursInputDto"
+            "$ref": "#/components/schemas/ThemeColorsInputDto"
           }
         },
         "additionalProperties": false
@@ -14746,7 +14746,7 @@
         },
         "additionalProperties": false
       },
-      "LocalisedLogoDto": {
+      "LocalizedLogoDto": {
         "required": [
           "language",
           "logo"
@@ -17953,7 +17953,7 @@
         },
         "additionalProperties": false
       },
-      "RosterEnrolmentDto": {
+      "RosterEnrollmentDto": {
         "required": [
           "granted",
           "linked",
@@ -18950,7 +18950,7 @@
         },
         "additionalProperties": false
       },
-      "ThemeColoursDto": {
+      "ThemeColorsDto": {
         "type": "object",
         "properties": {
           "primary": {
@@ -19016,14 +19016,14 @@
         },
         "additionalProperties": false
       },
-      "ThemeColoursInputDto": {
+      "ThemeColorsInputDto": {
         "type": "object",
         "properties": {
           "light": {
-            "$ref": "#/components/schemas/ThemeColoursDto"
+            "$ref": "#/components/schemas/ThemeColorsDto"
           },
           "dark": {
-            "$ref": "#/components/schemas/ThemeColoursDto"
+            "$ref": "#/components/schemas/ThemeColorsDto"
           },
           "fontFamily": {
             "type": "string",

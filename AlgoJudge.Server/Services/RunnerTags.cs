@@ -47,7 +47,7 @@ namespace AlgoJudge.Server.Services
         /// any screen to say why.
         /// </para>
         /// </summary>
-        public static List<string> Normalise(IEnumerable<string>? tags) =>
+        public static List<string> Normalize(IEnumerable<string>? tags) =>
             tags is null
                 ? []
                 : [.. tags.Select(tag => tag.Trim().ToLowerInvariant())
@@ -57,8 +57,8 @@ namespace AlgoJudge.Server.Services
         /// <summary>What is matched against, once the empty case is spelled out.</summary>
         public static string[] Effective(IEnumerable<string>? tags)
         {
-            var normalised = Normalise(tags);
-            return normalised.Count == 0 ? [Default] : [.. normalised];
+            var normalized = Normalize(tags);
+            return normalized.Count == 0 ? [Default] : [.. normalized];
         }
 
         /// <summary>Whether a Runner holding <paramref name="runner"/> may take work tagged <paramref name="work"/>.</summary>
@@ -134,18 +134,18 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         public static List<string> Validated(IEnumerable<string>? tags, string field)
         {
-            var normalised = Normalise(tags);
-            if (normalised.Count > MaxTags)
+            var normalized = Normalize(tags);
+            if (normalized.Count > MaxTags)
             {
                 throw new ValidationException(
                     $"{field} carries more than {MaxTags} tags", "runner.tags.count");
             }
-            if (normalised.Any(tag => tag.Length > MaxLength))
+            if (normalized.Any(tag => tag.Length > MaxLength))
             {
                 throw new ValidationException(
                     $"A tag is longer than {MaxLength} characters", "runner.tags.length");
             }
-            return normalised;
+            return normalized;
         }
     }
 }

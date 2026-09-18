@@ -109,7 +109,7 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// Where a person edits their own details, because they cannot edit them
-        /// here. <b>Configuration, not discovery</b> — OIDC standardises no
+        /// here. <b>Configuration, not discovery</b> — OIDC standardizes no
         /// account-management URL, so there is nothing to look up and a guess
         /// would send people to a 404 on somebody else's domain.
         /// </summary>
@@ -127,7 +127,7 @@ namespace AlgoJudge.Server.Database.Models
         /// </para>
         /// <para>
         /// **Configuration, not discovery**, for the same reason as the other:
-        /// OIDC standardises no such URL. Absent means the account screen offers
+        /// OIDC standardizes no such URL. Absent means the account screen offers
         /// only what this installation can do by itself — which is honest, and
         /// is why nothing here guesses one.
         /// </para>

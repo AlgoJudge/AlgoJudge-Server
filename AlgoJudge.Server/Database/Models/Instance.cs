@@ -30,7 +30,7 @@ namespace AlgoJudge.Server.Database.Models
         public string? Name { get; set; }
 
         /// <summary>
-        /// Shipped <b>off</b>: accounts are created by an organiser or arrive by
+        /// Shipped <b>off</b>: accounts are created by an organizer or arrive by
         /// SSO. There is no self-service registration in v1.
         /// </summary>
         public bool LocalRegistrationEnabled { get; set; }

@@ -130,7 +130,7 @@ public class SubmissionOriginTests(ServerFixture server)
             .GetRequiredService<Database.ApplicationDbContext>())
         {
             var user = await context.Users.FirstAsync(u => u.Id == who);
-            await deletion.AnonymiseAsync(user, CancellationToken.None);
+            await deletion.AnonymizeAsync(user, CancellationToken.None);
             await context.SaveChangesAsync();
         }
 

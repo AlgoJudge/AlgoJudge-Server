@@ -8,7 +8,7 @@ namespace AlgoJudge.Server.Utils
     /// <para>
     /// <b>Both download endpoints used to answer with the uploader's own
     /// words.</b> <c>FileService.CommitAsync</c> stores <c>MimeType</c> exactly
-    /// as the multipart part declared it — the only normalisation is blank
+    /// as the multipart part declared it — the only normalization is blank
     /// becoming <c>application/octet-stream</c> — so a file uploaded as
     /// <c>text/html</c> was served as <c>text/html</c>, on the API origin, from
     /// an endpoint that is anonymous for anything an instance document points
@@ -68,7 +68,7 @@ namespace AlgoJudge.Server.Utils
         /// The one type shown in place rather than offered.
         /// <para>
         /// A statement is read in an <c>&lt;object data&gt;</c>, and a browser
-        /// honours <c>attachment</c> even there — so a PDF served as an
+        /// honors <c>attachment</c> even there — so a PDF served as an
         /// attachment falls through to the download link beside it. Everything
         /// else is safer offered.
         /// </para>

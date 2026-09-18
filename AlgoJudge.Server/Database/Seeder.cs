@@ -257,7 +257,7 @@ namespace AlgoJudge.Server.Database
             {
                 ("participant", "Takes part: solves problems and sees their own results.",
                     Permissions.ParticipantTemplate),
-                ("manager", "Runs an activity: problems, submissions, questions, enrolment.",
+                ("manager", "Runs an activity: problems, submissions, questions, enrollment.",
                     Permissions.ManagerTemplate),
                 ("admin", "Administers the installation. Bypasses every check.",
                     Permissions.AdminTemplate),

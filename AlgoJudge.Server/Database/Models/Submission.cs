@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Database.Models
         public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// The submitting user. Deletion is anonymisation, so this identifier
+        /// The submitting user. Deletion is anonymization, so this identifier
         /// stays resolvable even after the account it names has been emptied.
         /// </summary>
         public required string UserId { get; set; }
@@ -81,7 +81,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <para>
         /// The question it exists to answer is <b>was this sent from outside the
         /// examination room</b>, which is containment in a network rather than
-        /// equality with an address — so <c>inet</c>, and normalised before it
+        /// equality with an address — so <c>inet</c>, and normalized before it
         /// gets here. See <see cref="Services.RequestOrigin"/> and
         /// <c>docs/specs/ORIGIN_METADATA.md</c>.
         /// </para>
@@ -135,7 +135,7 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// Who ruled. No navigation, as <see cref="Grant.GrantedByUserId"/>:
-        /// deletion here is anonymisation, and a foreign key would force a
+        /// deletion here is anonymization, and a foreign key would force a
         /// cascade decision this does not need.
         /// </summary>
         public string? ExcludedByUserId { get; set; }

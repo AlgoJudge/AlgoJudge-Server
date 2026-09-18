@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// </para>
 /// <para>
 /// <b>Nothing is removed.</b> Deletion in this product means emptying in place,
-/// and a merge is no exception: the emptied account is anonymised when the undo
+/// and a merge is no exception: the emptied account is anonymized when the undo
 /// window closes, so the rows recording what it once did keep resolving.
 /// </para>
 /// </summary>
@@ -62,8 +62,8 @@ public class AccountMergeTests(ServerFixture server)
         var (source, sourceId, _) = await PersonAsync();
         var (target, targetId, _) = await PersonAsync();
 
-        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrolment", new { }));
-        await Sign.Succeeded(await target.PostAsJsonAsync($"/api/v1/activities/{activity}/enrolment", new { }));
+        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrollment", new { }));
+        await Sign.Succeeded(await target.PostAsJsonAsync($"/api/v1/activities/{activity}/enrollment", new { }));
         await Sign.Succeeded(await Build.TrySubmitAsync(source, activity, "print(1)\n"));
 
         var admin = await AdminAsync(server);
@@ -124,7 +124,7 @@ public class AccountMergeTests(ServerFixture server)
     /// merge does not rewrite an unrelated column. Sabotaging the rule did not
     /// bite it. What has to hold is stronger: when the account being merged away
     /// is the one that ruled, its ruling stays where it is. Its row survives
-    /// anonymised precisely so that it can.
+    /// anonymized precisely so that it can.
     /// </para>
     /// </summary>
     [Fact]
@@ -136,7 +136,7 @@ public class AccountMergeTests(ServerFixture server)
         var (_, targetId, _) = await PersonAsync();
 
         await Sign.Succeeded(await participant.PostAsJsonAsync(
-            $"/api/v1/activities/{activity}/enrolment", new { }));
+            $"/api/v1/activities/{activity}/enrollment", new { }));
         var sent = await Build.SubmitAsync(participant, activity, "print(1)\n");
         var submissionId = Guid.Parse(sent.GetProperty("id").GetString()!);
 
@@ -210,7 +210,7 @@ public class AccountMergeTests(ServerFixture server)
         var (source, sourceId, _) = await PersonAsync();
         var (_, targetId, _) = await PersonAsync();
 
-        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrolment", new { }));
+        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrollment", new { }));
         // Signed in and working before the merge, with the cookie it keeps.
         Assert.True((await source.GetAsync("/api/v1/activities")).IsSuccessStatusCode);
 
@@ -223,7 +223,7 @@ public class AccountMergeTests(ServerFixture server)
     }
 
     /// <summary>
-    /// It is <b>anonymised</b>, never removed — the rows that say what it once
+    /// It is <b>anonymized</b>, never removed — the rows that say what it once
     /// did still name it, and they have to keep resolving.
     /// </summary>
     [Fact]
@@ -237,7 +237,7 @@ public class AccountMergeTests(ServerFixture server)
         {
             await context.AccountMerges.Where(m => m.Id == mergeId)
                 .ExecuteUpdateAsync(u => u.SetProperty(
-                    m => m.AnonymiseAfter, DateTime.UtcNow.AddMinutes(-1)));
+                    m => m.AnonymizeAfter, DateTime.UtcNow.AddMinutes(-1)));
         }
 
         var swept = await SweepAsync();
@@ -272,8 +272,8 @@ public class AccountMergeTests(ServerFixture server)
         var (source, sourceId, _) = await PersonAsync();
         var (target, targetId, _) = await PersonAsync();
 
-        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrolment", new { }));
-        await Sign.Succeeded(await target.PostAsJsonAsync($"/api/v1/activities/{activity}/enrolment", new { }));
+        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrollment", new { }));
+        await Sign.Succeeded(await target.PostAsJsonAsync($"/api/v1/activities/{activity}/enrollment", new { }));
 
         await Sign.Succeeded(await Build.TrySubmitAsync(source, activity, "print(1)\n"));
         var theirOwn = await Build.SubmitAsync(target, activity, "print(2)\n");
@@ -326,7 +326,7 @@ public class AccountMergeTests(ServerFixture server)
         {
             await context.AccountMerges.Where(m => m.Id == mergeId)
                 .ExecuteUpdateAsync(u => u.SetProperty(
-                    m => m.AnonymiseAfter, DateTime.UtcNow.AddMinutes(-1)));
+                    m => m.AnonymizeAfter, DateTime.UtcNow.AddMinutes(-1)));
         }
         await SweepAsync();
 
@@ -418,7 +418,7 @@ public class AccountMergeTests(ServerFixture server)
         var (source, sourceId, _) = await PersonAsync();
         var (_, targetId, _) = await PersonAsync();
 
-        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrolment", new { }));
+        await Sign.Succeeded(await source.PostAsJsonAsync($"/api/v1/activities/{activity}/enrollment", new { }));
         await Sign.Succeeded(await Build.TrySubmitAsync(source, activity, "print(1)\n"));
 
         var admin = await AdminAsync(server);

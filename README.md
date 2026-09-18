@@ -21,7 +21,7 @@ This README contains repository-specific information about development, building
 
 | | |
 |---|---|
-| [`/en/server/`](https://docs.algojudge.pl/en/server/) | the domain model, permissions and grants, identity and LTI, the event catalogue, and every configuration key |
+| [`/en/server/`](https://docs.algojudge.pl/en/server/) | the domain model, permissions and grants, identity and LTI, the event catalog, and every configuration key |
 | [`/en/server/rest/`](https://docs.algojudge.pl/en/server/rest/) | the REST reference, generated from the `openapi.json` committed here — pinned by commit and verified by checksum, so it describes one known version rather than whatever `main` says today |
 | [`/en/protocol/`](https://docs.algojudge.pl/en/protocol/) | the contract this Server and a Runner share |
 
@@ -30,12 +30,12 @@ This README contains repository-specific information about development, building
 | Area | |
 |---|---|
 | API | REST, **all of it under `/api/v1`** (`UsePathBase`), identity included: `/api/v1/identity/register`, never `/identity/register` |
-| WebSocket | served at `/api/v1/ws` — it is mapped as `/ws` under the same path base as everything else; the event catalogue is committed as `events.json`, so both sides can diff their names against it |
+| WebSocket | served at `/api/v1/ws` — it is mapped as `/ws` under the same path base as everything else; the event catalog is committed as `events.json`, so both sides can diff their names against it |
 | Authorization | a real permission model: grants scoped system-wide or to one activity, templates, and `system:administrator` as a bypass — **refused outright in an activity grant**, so a manager of one course never becomes an administrator of the installation |
 | Evaluation | Runner registration, Ed25519 challenge–response, atomic job claiming, leases, heartbeats, idempotent reporting, trials. `EvaluationJob` is an entity of its own and `Result` hangs off it, because something has to name a Runner while an evaluation is still running |
 | Files | upload, download, metadata, and a collector for orphans. The SHA-256 the caller declares is **recomputed before storing** and the upload is refused if it disagrees. Where the bytes live is configuration — `postgres`, `filesystem` or `s3`, several stores at once — and a worker moves them between stores on request |
 | Accounts | local accounts, and several OIDC providers registered at once from the database, with first-sign-in provisioning and a claim-to-permission mapping the installation configures |
-| LTI | grade synchronisation, roster, deep linking, and **dynamic registration** — a platform registers itself against a single-use invitation |
+| LTI | grade synchronization, roster, deep linking, and **dynamic registration** — a platform registers itself against a single-use invitation |
 | Operations | maintenance levels `open`/`draining`/`closed`, `aj-admin` in the image, and `/admin/storage`, `/admin/keyring` and `/admin/config` behind loopback and a token |
 | OpenAPI | `openapi.json` is committed and CI fails if it stops matching what is served |
 

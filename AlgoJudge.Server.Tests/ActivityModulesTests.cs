@@ -10,7 +10,7 @@ namespace AlgoJudge.Server.Tests;
 /// <b>An archive exported before a module existed must still import.</b> The
 /// exchange archive is written in the browser and carries the activity's
 /// modules verbatim, so one written before 2026-09-12 names <c>questions</c>
-/// and nothing else. While both members were <c>required</c> the serialiser
+/// and nothing else. While both members were <c>required</c> the serializer
 /// refused it with a 400 before any handler ran — and omitting the object
 /// entirely was accepted all along, which made the contract strict about the
 /// one shape an older export writes and lenient about the one it never does.

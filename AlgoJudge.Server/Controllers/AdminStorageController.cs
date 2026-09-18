@@ -70,7 +70,7 @@ namespace AlgoJudge.Server.Controllers
         }
 
         /// <summary>
-        /// Asks for a migration towards the store that takes new writes.
+        /// Asks for a migration toward the store that takes new writes.
         /// <para>
         /// <b>This is what makes a migration deliberate (A83).</b> Changing
         /// <c>Storage__Default</c> moves nothing by itself — it says where the
@@ -121,7 +121,7 @@ namespace AlgoJudge.Server.Controllers
                     Database.Models.StorageMigrationState.Running => "running",
                     Database.Models.StorageMigrationState.Finished => "finished",
                     Database.Models.StorageMigrationState.Refused => "refused",
-                    _ => "cancelled",
+                    _ => "canceled",
                 },
                 TargetStoreId = migration.TargetStoreId,
                 RequestedAt = Wire.At(migration.RequestedAt)!,

@@ -273,7 +273,7 @@ public class LtiSessionTests(ServerFixture server)
         // embedded session is `SameSite=None`, which no browser accepts without
         // `Secure`, so a client on plain HTTP is handed a cookie it will never
         // send back — and every request after the launch is anonymous. That is
-        // the real behaviour, not a test artefact: an installation serving plain
+        // the real behavior, not a test artifact: an installation serving plain
         // HTTP cannot have embedded sessions at all.
         var client = host.CreateClient(new WebApplicationFactoryClientOptions
         {

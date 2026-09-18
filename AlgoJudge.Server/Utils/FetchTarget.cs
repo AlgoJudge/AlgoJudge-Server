@@ -89,12 +89,12 @@ namespace AlgoJudge.Server.Utils
         /// </summary>
         public static bool Allows(IReadOnlyCollection<string> allowedHosts, string host)
         {
-            var wanted = Normalise(host);
+            var wanted = Normalize(host);
             if (wanted.Length == 0) return false;
 
             foreach (var allowed in allowedHosts)
             {
-                if (Normalise(allowed) == wanted) return true;
+                if (Normalize(allowed) == wanted) return true;
             }
             return false;
         }
@@ -109,7 +109,7 @@ namespace AlgoJudge.Server.Utils
         /// is a list nobody can predict.
         /// </para>
         /// </summary>
-        private static string Normalise(string host) =>
+        private static string Normalize(string host) =>
             host.Trim().TrimEnd('.').ToLowerInvariant();
     }
 }

@@ -10,7 +10,7 @@ namespace AlgoJudge.Server.Services
     /// — decided 2026-08-04, on the grounds that the Server cannot police what
     /// it cannot read. <c>SubmissionService</c> applies all three before a
     /// submission is committed. What was missing is the other half: nothing
-    /// checked the value being written, so a number the product cannot honour
+    /// checked the value being written, so a number the product cannot honor
     /// was accepted into the panel, projected to the manager who typed it, and
     /// then contradicted at the moment somebody tried to submit.
     /// </para>
@@ -49,7 +49,7 @@ namespace AlgoJudge.Server.Services
             // opinion.** `UploadLimits.Submission` is what the endpoint refuses
             // at, before any of this runs, and its own comment says an activity
             // "may set something smaller still". Larger is a number the panel
-            // would show and the product would not honour: the request dies at
+            // would show and the product would not honor: the request dies at
             // the framework with a message about the request body, and the
             // manager's own ceiling is never consulted.
             if (maxUploadBytes is { } upload)

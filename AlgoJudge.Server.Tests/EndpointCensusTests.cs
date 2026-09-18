@@ -17,7 +17,7 @@ namespace AlgoJudge.Server.Tests;
 /// left leaning on a default at all.
 /// </para>
 /// <para>
-/// <b>Open is not unauthorized.</b> Most of the list below authorises itself in
+/// <b>Open is not unauthorized.</b> Most of the list below authorizes itself in
 /// its handler, because what it checks is not something a policy can say: a file
 /// is readable if any reference to it is, a Runner proves a key it registered, a
 /// platform arrives with a signed launch and no account yet. Adding a line here
@@ -44,7 +44,7 @@ public class EndpointCensusTests(ServerFixture server)
         // The login and registration screens change shape with it, so it is read
         // before anybody has signed in.
         "GET /instance",
-        // Authorised by the rule, not the attribute: readable when any reference
+        // Authorized by the rule, not the attribute: readable when any reference
         // to the file is readable by the caller, and 404 when it is not. The
         // terms of service are a file, and the registration form links them.
         "GET /files/{id:guid}",
@@ -70,7 +70,7 @@ public class EndpointCensusTests(ServerFixture server)
         "GET /identity/providers/{slug}/challenge",
         "GET /identity/providers/{slug}/signed-in",
         // The provider's back channel, telling us an account was deleted there.
-        // Authorised by the shared secret the provider was registered with.
+        // Authorized by the shared secret the provider was registered with.
         "POST /identity/providers/{providerId:guid}/deletion-requests",
     ];
 
@@ -102,7 +102,7 @@ public class EndpointCensusTests(ServerFixture server)
 
     /// <summary>
     /// A platform calls these, before there is anybody to be signed in as. Each
-    /// is authorised by what the platform signed.
+    /// is authorized by what the platform signed.
     /// </summary>
     private static readonly string[] Lti =
     [

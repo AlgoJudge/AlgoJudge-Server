@@ -22,7 +22,7 @@ namespace AlgoJudge.Server.Services
         Task<AccountMergeDto> UndoAsync(Guid mergeId, CancellationToken ct);
 
         /// <summary>
-        /// Anonymises the accounts whose undo window has closed. Answers how
+        /// Anonymizes the accounts whose undo window has closed. Answers how
         /// many were emptied.
         /// </summary>
         Task<int> SweepAsync(CancellationToken ct);
@@ -123,7 +123,7 @@ namespace AlgoJudge.Server.Services
         /// a permission they do not themselves hold.
         /// </para>
         /// <para>
-        /// <b>Nothing else refuses, and that is the anonymising doing its
+        /// <b>Nothing else refuses, and that is the anonymizing doing its
         /// work.</b> An earlier draft removed the emptied row and therefore had
         /// to refuse any account something still named — one that owned a
         /// problem, ruled a submission out, granted a permission. Deletion here
@@ -218,7 +218,7 @@ namespace AlgoJudge.Server.Services
                 TargetUserId = target.Id,
                 MergedAt = now,
                 MergedByUserId = manager.Id,
-                AnonymiseAfter = now + UndoWindow,
+                AnonymizeAfter = now + UndoWindow,
                 Moved = JsonSerializer.Serialize(moved),
             };
             context.AccountMerges.Add(merge);
@@ -258,7 +258,7 @@ namespace AlgoJudge.Server.Services
                 moved.Trials.Add(trial.Id);
             }
 
-            // **An authorisation, not an audit trace.** A file nothing points at
+            // **An authorization, not an audit trace.** A file nothing points at
             // yet is readable only by whoever uploaded it, which is what makes
             // the two-step publish safe — leaving this behind would strand every
             // upload the source had in flight.
@@ -421,7 +421,7 @@ namespace AlgoJudge.Server.Services
         /// blocked and otherwise untouched for a day, so this is a move and an
         /// unblocking — the person's own login and password still work.
         /// Once the sweeper has emptied it there is nothing to give back, and
-        /// this refuses rather than handing over an anonymised shell.
+        /// this refuses rather than handing over an anonymized shell.
         /// </para>
         /// </summary>
         public async Task<AccountMergeDto> UndoAsync(Guid mergeId, CancellationToken ct)
@@ -442,7 +442,7 @@ namespace AlgoJudge.Server.Services
                 {
                     throw new ConflictException("This merge has already been undone", "merge.undone");
                 }
-                if (merge.SourceAnonymisedAt is not null)
+                if (merge.SourceAnonymizedAt is not null)
                 {
                     throw new ConflictException(
                         "The account this came from has been emptied and cannot be given back",
@@ -573,13 +573,13 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// The accounts whose undo window has closed.
         /// <para>
-        /// <b>Anonymised, never removed.</b> Deletion in this product has always
+        /// <b>Anonymized, never removed.</b> Deletion in this product has always
         /// meant emptying in place — `docs/specs/AUTHENTICATION.md` settled that
         /// — and a merge is no exception: the rows that record what this account
         /// once <i>did</i> still name it, and they have to keep resolving.
         /// </para>
         /// <para>
-        /// <b>The order is what saves the questions.</b> `AnonymiseAsync`
+        /// <b>The order is what saves the questions.</b> `AnonymizeAsync`
         /// replaces the text of every question its user wrote; by the time this
         /// runs they belong to the target, so there are none of theirs left to
         /// redact.
@@ -590,9 +590,9 @@ namespace AlgoJudge.Server.Services
             var now = clock.GetUtcNow().UtcDateTime;
 
             var due = await context.AccountMerges
-                .Where(m => m.SourceAnonymisedAt == null
+                .Where(m => m.SourceAnonymizedAt == null
                     && m.UndoneAt == null
-                    && m.AnonymiseAfter <= now)
+                    && m.AnonymizeAfter <= now)
                 .ToListAsync(ct);
 
             var emptied = 0;
@@ -605,19 +605,19 @@ namespace AlgoJudge.Server.Services
                     log.LogWarning(
                         "The account {UserId} merged as {MergeId} is gone; nothing to empty",
                         merge.SourceUserId, merge.Id);
-                    merge.SourceAnonymisedAt = now;
+                    merge.SourceAnonymizedAt = now;
                     continue;
                 }
 
-                await deletions.AnonymiseAsync(user, ct);
-                merge.SourceAnonymisedAt = now;
+                await deletions.AnonymizeAsync(user, ct);
+                merge.SourceAnonymizedAt = now;
                 emptied++;
             }
 
             try
             {
                 // **One save for the whole sweep, and that is what makes the
-                // token enough here.** `AnonymiseAsync` writes nothing of its
+                // token enough here.** `AnonymizeAsync` writes nothing of its
                 // own — it moves tracked entities — so the emptying and the
                 // marker land together or not at all. An undo that committed
                 // first therefore does not merely lose a marker: it stops the

@@ -276,12 +276,12 @@ namespace AlgoJudge.Server.Workers
         // audience resolution that `IEventAudience` was written to replace. It
         // was wrong in four ways, and only one of them was the reported bug:
         //
-        //  - it matched with a raw `Contains` on the serialised JSON, so
+        //  - it matched with a raw `Contains` on the serialized JSON, so
         //    `ranking:read` matched inside `ranking:read:unfrozen`;
-        //  - it never deserialised, so it had no answer for an unparseable row;
+        //  - it never deserialized, so it had no answer for an unparseable row;
         //  - it read activity grants only, so somebody holding a **system**
         //    grant heard nothing this worker announced;
-        //  - it honoured `system:administrator` in an activity grant, which
+        //  - it honored `system:administrator` in an activity grant, which
         //    `PermissionService` deliberately does not.
         //
         // Two of those change who receives an event, in both directions. That is

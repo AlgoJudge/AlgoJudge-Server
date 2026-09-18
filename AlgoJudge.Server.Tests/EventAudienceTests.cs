@@ -16,7 +16,7 @@ namespace AlgoJudge.Server.Tests;
 /// The socket must never be a second path to data a fetch would refuse, and it
 /// must not be a narrower one either — a person who may read something and is
 /// never told it has changed sees a stale screen and no reason for it. Both
-/// halves were wrong: <c>EventAudience</c> honoured <c>system:administrator</c>
+/// halves were wrong: <c>EventAudience</c> honored <c>system:administrator</c>
 /// in an activity grant, which <c>PermissionService</c> deliberately does not,
 /// and <c>SeriesScheduler</c> kept a third copy of the rule that read activity
 /// grants only.

@@ -98,7 +98,7 @@ public static class Build
     /// its own so it can be asserted about.
     /// <para>
     /// <b>The shape no test had.</b> Every activity built here ran exactly one
-    /// round, so nothing ever asked what a round does to its neighbours — which
+    /// round, so nothing ever asked what a round does to its neighbors — which
     /// is the whole question an activity-scoped importance answers.
     /// </para>
     /// </summary>
@@ -170,7 +170,7 @@ public static class Build
     {
         var login = "p-" + Guid.NewGuid().ToString("N")[..10];
         var client = await Sign.NewAccountAsync(server, login);
-        var joined = await client.PostAsJsonAsync($"/api/v1/activities/{activitySlug}/enrolment", new { });
+        var joined = await client.PostAsJsonAsync($"/api/v1/activities/{activitySlug}/enrollment", new { });
         await Sign.Succeeded(joined);
         return client;
     }

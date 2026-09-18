@@ -93,8 +93,8 @@ namespace AlgoJudge.Server.Lti.Services
         public required int WithName { get; init; }
     }
 
-    /// <summary>What a roster enrolment did, and what it declined to do.</summary>
-    public record RosterEnrolmentDto
+    /// <summary>What a roster enrollment did, and what it declined to do.</summary>
+    public record RosterEnrollmentDto
     {
         public required int Read { get; init; }
 
@@ -141,7 +141,7 @@ namespace AlgoJudge.Server.Lti.Services
         /// read once.
         /// </para>
         /// </summary>
-        Task<RosterEnrolmentDto> EnrolAsync(Guid resourceLinkId, CancellationToken ct);
+        Task<RosterEnrollmentDto> EnrollAsync(Guid resourceLinkId, CancellationToken ct);
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ namespace AlgoJudge.Server.Lti.Services
         ApplicationDbContext core,
         INrpsClient nrps,
         IIdentityResolver identities,
-        ILtiEnrolmentService enrolment,
+        ILtiEnrollmentService enrollment,
         IPermissionService permissions,
         TimeProvider clock
     ) : IRosterService
@@ -189,7 +189,7 @@ namespace AlgoJudge.Server.Lti.Services
             var roster = await nrps.ReadAsync(platform, url, link.PlatformResourceLinkId, ct);
 
             // Who is already linked, so the screen can say which of these people
-            // this installation would recognise.
+            // this installation would recognize.
             var subjects = roster.Members.Select(m => m.UserId).ToList();
             var known = await db.ExternalIdentities.AsNoTracking()
                 .Where(i => i.PlatformId == platform.Id && subjects.Contains(i.Subject))
@@ -237,7 +237,7 @@ namespace AlgoJudge.Server.Lti.Services
             };
         }
 
-        public async Task<RosterEnrolmentDto> EnrolAsync(Guid resourceLinkId, CancellationToken ct)
+        public async Task<RosterEnrollmentDto> EnrollAsync(Guid resourceLinkId, CancellationToken ct)
         {
             var link = await db.ResourceLinks.AsNoTracking()
                 .FirstOrDefaultAsync(l => l.Id == resourceLinkId, ct)
@@ -266,7 +266,7 @@ namespace AlgoJudge.Server.Lti.Services
                 || string.IsNullOrWhiteSpace(platform.IdentityNamespace))
             {
                 throw new ConflictException(
-                    "This platform may not say who somebody is, so its roster cannot enrol anybody. "
+                    "This platform may not say who somebody is, so its roster cannot enroll anybody. "
                     + "Trust it for a directory first, or let people arrive by launching",
                     "lti.roster.notAuthority");
             }
@@ -337,11 +337,11 @@ namespace AlgoJudge.Server.Lti.Services
 
                 if (userId is null) continue;
 
-                await enrolment.EnrolAsync(link, platform.ProviderId, userId, member.Roles, ct);
+                await enrollment.EnrollAsync(link, platform.ProviderId, userId, member.Roles, ct);
                 granted++;
             }
 
-            return new RosterEnrolmentDto
+            return new RosterEnrollmentDto
             {
                 Read = roster.Members.Count,
                 Linked = linked,

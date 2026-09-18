@@ -26,13 +26,13 @@ namespace AlgoJudge.Server.Lti.Controllers
     [ApiController]
     [Route("lti")]
     // The launch is what creates the session; it cannot require one. What
-    // authorises it is the platform's signed JWT, checked in the handler.
+    // authorizes it is the platform's signed JWT, checked in the handler.
     [AllowAnonymous]
     public class LtiLaunchController(
         ILaunchService launches,
         IResourceLinkService links,
         IIdentityResolver identities,
-        ILtiEnrolmentService enrolment,
+        ILtiEnrollmentService enrollment,
         ILaunchTickets tickets,
         AlgoJudge.Server.Services.IActivityService activities,
         SignInManager<AlgoJudge.Server.Database.Models.User> signIn,
@@ -158,14 +158,14 @@ namespace AlgoJudge.Server.Lti.Controllers
                         // an account, and nobody is signed in yet at this point
                         // in the request - the session is established two lines
                         // below. Trusting the role claim here trusts it for
-                        // exactly what the enrolment already trusts it for.
+                        // exactly what the enrollment already trusts it for.
                         if (!await activities.IsPublishedAsync(link.ActivityId, ct)
                             && !LtiRoles.RunsTheCourse(launch.Roles))
                         {
                             return Failed(LtiLaunchException.NotPublished);
                         }
 
-                        await enrolment.EnrolAsync(
+                        await enrollment.EnrollAsync(
                             link, launch.Platform.ProviderId, resolved.User.Id, launch.Roles, ct);
 
                         var embedded = string.Equals(launch.DocumentTarget, "iframe",

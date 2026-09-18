@@ -29,7 +29,7 @@ namespace AlgoJudge.Server.Database.Models
         public Guid Id { get; set; } = Uuid.New();
 
         /// <summary>
-        /// Deletion is anonymisation, so this stays resolvable after the account
+        /// Deletion is anonymization, so this stays resolvable after the account
         /// it names has been emptied and a past participant keeps their place in
         /// an activity's history.
         /// </summary>

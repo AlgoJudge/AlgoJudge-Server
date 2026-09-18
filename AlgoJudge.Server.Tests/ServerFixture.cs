@@ -318,7 +318,7 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
 /// would have them claiming each other's jobs. What changed on 2026-08-29 is
 /// that there are three such databases instead of one, and xUnit runs
 /// collections in parallel — which is the whole of the speed-up, because a
-/// collection is xUnit's unit of serialisation and fifty classes sat in one.
+/// collection is xUnit's unit of serialization and fifty classes sat in one.
 /// </para>
 /// <para>
 /// <b>Membership means nothing.</b> These are bins, not themes: filled

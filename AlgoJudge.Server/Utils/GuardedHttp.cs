@@ -10,7 +10,7 @@ namespace AlgoJudge.Server.Utils
     /// <b>Checking a name and then connecting is two lookups.</b> A host whose
     /// owner answers differently the second time reaches inside — DNS rebinding,
     /// and the window is minutes wide. So the check rides the connect callback,
-    /// applies to the address actually being dialled, and applies again to every
+    /// applies to the address actually being dialed, and applies again to every
     /// hop of a redirect.
     /// </para>
     /// <para>

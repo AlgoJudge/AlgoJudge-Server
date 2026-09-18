@@ -80,7 +80,7 @@ namespace AlgoJudge.Server.Lti.Services
             Platform platform, string lineItemsUrl, string resourceLinkId,
             string resourceId, string label, double scoreMaximum, CancellationToken ct)
         {
-            var http = await AuthorisedAsync(platform, ct);
+            var http = await AuthorizedAsync(platform, ct);
 
             // Asked for by `resourceId` first. A platform that already has our
             // column returns it, and creating a second one for the same
@@ -139,7 +139,7 @@ namespace AlgoJudge.Server.Lti.Services
             double score, double scoreMaximum, DateTime timestamp,
             bool graded, CancellationToken ct)
         {
-            var http = await AuthorisedAsync(platform, ct);
+            var http = await AuthorizedAsync(platform, ct);
 
             var body = JsonSerializer.Serialize(new Dictionary<string, object>
             {
@@ -176,7 +176,7 @@ namespace AlgoJudge.Server.Lti.Services
         public async Task<IReadOnlyList<AgsResult>> ReadResultsAsync(
             Platform platform, string lineItemUrl, CancellationToken ct)
         {
-            var http = await AuthorisedAsync(platform, ct);
+            var http = await AuthorizedAsync(platform, ct);
 
             using var request = new HttpRequestMessage(HttpMethod.Get, Results(lineItemUrl));
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(ResultContainerType));
@@ -230,7 +230,7 @@ namespace AlgoJudge.Server.Lti.Services
             return split < 0 ? url + suffix : url[..split] + suffix + url[split..];
         }
 
-        private async Task<HttpClient> AuthorisedAsync(Platform platform, CancellationToken ct)
+        private async Task<HttpClient> AuthorizedAsync(Platform platform, CancellationToken ct)
         {
             var http = clients.CreateClient(nameof(AgsClient));
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
@@ -287,7 +287,7 @@ namespace AlgoJudge.Server.Lti.Services
 
     /// <summary>
     /// A platform refusing something in the gradebook. Carries the platform's own
-    /// words, because "synchronisation failed" is not something an operator can
+    /// words, because "synchronization failed" is not something an operator can
     /// act on.
     /// </summary>
     public class AgsException(string message) : Exception(message);

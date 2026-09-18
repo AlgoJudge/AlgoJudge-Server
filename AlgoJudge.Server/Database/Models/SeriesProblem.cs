@@ -21,7 +21,7 @@ namespace AlgoJudge.Server.Database.Models
         public Series? Series { get; set; }
 
         /// <summary>
-        /// The activity this assignment belongs to, denormalised from
+        /// The activity this assignment belongs to, denormalized from
         /// <see cref="Series"/>.
         /// <para>
         /// Carried so the database can enforce that <see cref="Slug"/> is unique

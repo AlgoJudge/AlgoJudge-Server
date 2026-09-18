@@ -59,14 +59,14 @@ namespace AlgoJudge.Server.Database.Models
         Running = 1,
         Completed = 2,
         Failed = 3,
-        Cancelled = 4,
+        Canceled = 4,
 
         /// <summary>
         /// **Queued, and then overtaken by a rejudge.** Not the same fact as
-        /// `Cancelled`, which a manager does on purpose and which
+        /// `Canceled`, which a manager does on purpose and which
         /// `MANAGER_PANEL.md` states as an action of theirs — telling somebody
-        /// reading an attempt list that a person cancelled an attempt nobody
-        /// cancelled is an audit lie for the sake of not adding a value.
+        /// reading an attempt list that a person canceled an attempt nobody
+        /// canceled is an audit lie for the sake of not adding a value.
         /// <para>
         /// Only ever reached from `Queued`, so nothing running is ever
         /// superseded and no Runner meets one: leaving `Queued` is what takes
@@ -169,16 +169,16 @@ namespace AlgoJudge.Server.Database.Models
 
     /// <summary>
     /// How somebody gets into an activity without a manager doing it for them.
-    /// A manager may always enrol by hand — that is what a grant is — so these
-    /// are the three answers to <b>self</b>-enrolment and nothing else.
+    /// A manager may always enroll by hand — that is what a grant is — so these
+    /// are the three answers to <b>self</b>-enrollment and nothing else.
     /// </summary>
     public enum JoinPolicy
     {
-        /// <summary>No self-enrolment. Only a manager may enrol someone.</summary>
+        /// <summary>No self-enrollment. Only a manager may enroll someone.</summary>
         Closed = 0,
-        /// <summary>Self-enrolment on giving the activity's join password.</summary>
+        /// <summary>Self-enrollment on giving the activity's join password.</summary>
         Password = 1,
-        /// <summary>Self-enrolment, no password.</summary>
+        /// <summary>Self-enrollment, no password.</summary>
         Open = 2,
     }
 
@@ -186,7 +186,7 @@ namespace AlgoJudge.Server.Database.Models
     /// How far a series' importance reaches while it runs.
     /// <para>
     /// <b>The narrow one is the default</b>: a rank that reaches out of its own
-    /// activity is the surprising behaviour, and surprising behaviour is opted
+    /// activity is the surprising behavior, and surprising behavior is opted
     /// into. What keeps an examination in a room honest is the address list,
     /// which pays no attention to this.
     /// </para>
@@ -210,7 +210,7 @@ namespace AlgoJudge.Server.Database.Models
         Welcome = 0,
         /// <summary>The landing page for somebody who is in.</summary>
         Home = 1,
-        /// <summary>Regulations; what an enrolment form asks acceptance of.</summary>
+        /// <summary>Regulations; what an enrollment form asks acceptance of.</summary>
         Rules = 2,
         Terms = 3,
         Privacy = 4,

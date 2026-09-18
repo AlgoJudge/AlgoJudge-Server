@@ -163,7 +163,7 @@ public static class CopiedFields
     /// holds</b>, which is the half that makes this bite. A copy that drops a
     /// field leaves the property initializer's value behind, so comparing
     /// against a source that never moved off it passes whether the field
-    /// travelled or not. <c>RestrictionsEnabled</c> defaults to <c>true</c> and
+    /// traveled or not. <c>RestrictionsEnabled</c> defaults to <c>true</c> and
     /// <c>Unlisted</c> to <c>false</c>: neither "set it to true" nor "set it to
     /// a non-default" is the rule — <b>differ from a fresh one</b> is.
     /// </para>

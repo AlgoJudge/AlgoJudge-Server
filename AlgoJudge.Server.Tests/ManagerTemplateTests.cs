@@ -14,13 +14,13 @@ namespace AlgoJudge.Server.Tests;
 /// It is an <b>activity</b> grant: <c>ActivityService</c> writes exactly this
 /// when somebody creates an activity, the seeder writes it on the seeded one,
 /// and the template describes itself as <i>"Runs an activity: problems,
-/// submissions, questions, enrolment"</i>. So what it is worth on an activity is
+/// submissions, questions, enrollment"</i>. So what it is worth on an activity is
 /// what it is worth at all.
 /// </para>
 /// <para>
 /// <b>Nothing in the browser suite can answer this.</b> The Client's fake models
 /// a grant's scope and never a permission's, so it hands out every key a grant
-/// lists whatever the catalogue says the key means.
+/// lists whatever the catalog says the key means.
 /// </para>
 /// </summary>
 [Collection("server-1")]
@@ -107,7 +107,7 @@ public class ManagerTemplateTests(ServerFixture server)
 
     /// <summary>
     /// A manager of one activity, pointed at the shipped role on it — the way
-    /// the panel enrols one, rather than by copying its permissions in.
+    /// the panel enrolls one, rather than by copying its permissions in.
     /// </summary>
     private async Task<HttpClient> ManagerOfAsync(string slug)
     {
@@ -241,8 +241,8 @@ public class ManagerTemplateTests(ServerFixture server)
     }
 
     /// <summary>
-    /// Grants had no narrowing at all, so this one is new behaviour rather than
-    /// unreachable behaviour. **A system grant stays out of it**: running a
+    /// Grants had no narrowing at all, so this one is new behavior rather than
+    /// unreachable behavior. **A system grant stays out of it**: running a
     /// course is not running the installation.
     /// </summary>
     [Fact]
@@ -310,7 +310,7 @@ public class ManagerTemplateTests(ServerFixture server)
     /// reaches, so both pickers in the panel came back empty.
     /// </summary>
     [Fact]
-    public async Task A_manager_may_look_a_person_up_to_enrol_them()
+    public async Task A_manager_may_look_a_person_up_to_enroll_them()
     {
         var (slug, _) = await Build.ActivityAsync(server);
         var manager = await ManagerOfAsync(slug);
@@ -323,14 +323,14 @@ public class ManagerTemplateTests(ServerFixture server)
     }
 
     /// <summary>
-    /// <b>Naming a role as what an activity enrols into hands out everything in
+    /// <b>Naming a role as what an activity enrolls into hands out everything in
     /// it</b>, to everybody who joins afterwards. Without the excess rule a
     /// manager could point their own course's participant role at the shipped
     /// <c>administrator</c> one and let the next person through the door take
     /// the installation.
     /// </summary>
     [Fact]
-    public async Task An_activitys_enrolment_role_cannot_carry_what_the_manager_does_not_hold()
+    public async Task An_activitys_enrollment_role_cannot_carry_what_the_manager_does_not_hold()
     {
         var (slug, _) = await Build.ActivityAsync(server);
         var manager = await ManagerOfAsync(slug);
@@ -357,7 +357,7 @@ public class ManagerTemplateTests(ServerFixture server)
         Assert.True(
             after.TryGetProperty("participantRoleId", out var role) is false
             || role.ValueKind == JsonValueKind.Null,
-            "the activity still enrols into the shipped role");
+            "the activity still enrolls into the shipped role");
     }
 
     /// <summary>

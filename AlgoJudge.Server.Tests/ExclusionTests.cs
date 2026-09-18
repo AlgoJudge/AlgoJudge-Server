@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AlgoJudge.Server.Tests;
 
 /// <summary>
-/// A manager's ruling that a submission counts towards no standing.
+/// A manager's ruling that a submission counts toward no standing.
 /// <para>
 /// The line these are drawn along: <b>an exclusion retracts nothing</b>. The
 /// verdict stays, the place in every list stays, and <b>the ceiling it spent
@@ -294,7 +294,7 @@ public class ExclusionTests(ServerFixture server)
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var user = await context.Users.FirstAsync(u => u.Id == who);
             await scope.ServiceProvider.GetRequiredService<IAccountDeletionService>()
-                .AnonymiseAsync(user, default);
+                .AnonymizeAsync(user, default);
             await context.SaveChangesAsync();
         }
 

@@ -221,7 +221,7 @@ namespace AlgoJudge.Server.Database
                 [("amy", "rekurencja", 8640, "python", "completed", "Partially accepted", 50, null, false),
                  ("nowak", "rekurencja", 7200, "python", "completed", "Accepted", 100, null, false),
                  ("nowak", "sortowanie", 7800, "python", "completed", "Partially accepted", 80, null, false),
-                 ("wisniewski", "rekurencja", 9000, "python", "cancelled", null, null, null, false)]),
+                 ("wisniewski", "rekurencja", 9000, "python", "canceled", null, null, null, false)]),
 
             new("zajecia-3", "Zajęcia 3 — struktury danych", 3,
                 TimeSpan.FromDays(5), TimeSpan.FromDays(12), true,
@@ -577,7 +577,7 @@ namespace AlgoJudge.Server.Database
                         "queued" => EvaluationJobState.Queued,
                         "running" => EvaluationJobState.Running,
                         "failed" => EvaluationJobState.Failed,
-                        "cancelled" => EvaluationJobState.Cancelled,
+                        "canceled" => EvaluationJobState.Canceled,
                         _ => EvaluationJobState.Completed,
                     },
                     ClaimedAt = state is "queued" ? null : at.AddSeconds(2),

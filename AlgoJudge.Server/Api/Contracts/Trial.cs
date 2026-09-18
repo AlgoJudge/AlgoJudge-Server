@@ -17,7 +17,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// manager calibrating a problem that belongs to no activity yet.
         /// </summary>
         public string? ActivityId { get; init; }
-        /// <summary>`queued` | `running` | `completed` | `failed` | `cancelled`.</summary>
+        /// <summary>`queued` | `running` | `completed` | `failed` | `canceled`.</summary>
         public required string State { get; init; }
         public required string ProblemType { get; init; }
         public required string CreatedAt { get; init; }
@@ -90,7 +90,7 @@ namespace AlgoJudge.Server.Api.Contracts
 
     /// <summary>
     /// A renewed lease. Its own record rather than `LeaseDto`, which names a
-    /// job: a reply that called a trial a job would be the first step towards
+    /// job: a reply that called a trial a job would be the first step toward
     /// treating it as one.
     /// </summary>
     public record TrialLeaseDto

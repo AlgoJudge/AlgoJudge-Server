@@ -167,7 +167,7 @@ public class TrialRunTests(ServerFixture server)
 
     /// <summary>
     /// Reporting twice is not an error, and does not produce a second record —
-    /// a Runner that missed the acknowledgement is still telling the truth.
+    /// a Runner that missed the acknowledgment is still telling the truth.
     /// </summary>
     [Fact]
     public async Task Reporting_a_trial_twice_says_it_is_a_repeat()
@@ -285,7 +285,7 @@ public class TrialRunTests(ServerFixture server)
     /// calibrating a problem in the **library**, which belongs to no activity.
     ///
     /// <para>
-    /// Permitted by a global `trial:run`, which the catalogue already allowed —
+    /// Permitted by a global `trial:run`, which the catalog already allowed —
     /// `TrialRun` is declared `Both` — and which had no path until the activity
     /// became optional.
     /// </para>

@@ -1,4 +1,4 @@
-# The colours and typeface an installation draws with.
+# The colors and typeface an installation draws with.
 #
 # A file of its own beside algojudge.yml, with its own format and version — the
 # same reason a page is a file rather than a string in a key. It is byte for
@@ -6,10 +6,10 @@
 # can be dropped in here and a theme written here can be read back in the panel.
 #
 # EVERY KEY IS OPTIONAL AND ABSENT MEANS THE PRODUCT'S DEFAULT. Not black, not
-# empty — the colour AlgoJudge ships. A theme that states two keys changes two
+# empty — the color AlgoJudge ships. A theme that states two keys changes two
 # things and leaves the other thirty alone.
 #
-# A colour is six hexadecimal digits after a hash and nothing else: not a
+# A color is six hexadecimal digits after a hash and nothing else: not a
 # keyword, not rgb(), not var(). These values are written into a stylesheet, and
 # a field that took anything else would let this file carry CSS.
 #
@@ -23,13 +23,13 @@ format: algojudge-theme
 version: 1
 
 light:
-  # The brand colour. One hex; the Client generates the ten shades from it, so
+  # The brand color. One hex; the Client generates the ten shades from it, so
   # this one field reaches the buttons, the focus ring and the navigation.
   primary: "#6b4c9a"
 
 dark:
   # Stated in full rather than derived from the light one. A dark scheme worked
-  # out from a light colour fails a contrast floor unpredictably, and the
+  # out from a light color fails a contrast floor unpredictably, and the
   # browser checks assert one.
   primary: "#a98cd8"
 

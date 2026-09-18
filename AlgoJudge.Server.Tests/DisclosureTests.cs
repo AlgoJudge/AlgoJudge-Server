@@ -99,13 +99,13 @@ public class DisclosureTests(ServerFixture server)
 
         var refused = await Sign.TrySubmitAsync(stranger, "python", "print(1)\n");
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-        Assert.Equal("enrolment.required",
+        Assert.Equal("enrollment.required",
             (await refused.Content.ReadFromJsonAsync<JsonElement>())
                 .GetProperty("code").GetString());
 
         // Joining is the whole of the difference.
         await Sign.Succeeded(await stranger.PostAsJsonAsync(
-            "/api/v1/activities/DEV-2026/enrolment", new { }));
+            "/api/v1/activities/DEV-2026/enrollment", new { }));
         await Sign.SubmitAsync(stranger, "python", "print(1)\n");
     }
 
@@ -140,7 +140,7 @@ public class DisclosureTests(ServerFixture server)
         {
             var refused = await Sign.TrySubmitAsync(admin, "python", "print(1)\n");
             Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-            Assert.Equal("enrolment.required",
+            Assert.Equal("enrollment.required",
                 (await refused.Content.ReadFromJsonAsync<JsonElement>())
                     .GetProperty("code").GetString());
         }
@@ -290,7 +290,7 @@ public class DisclosureTests(ServerFixture server)
     }
 
     [Fact]
-    public async Task Enrolment_is_refused_where_only_an_organiser_may_enrol()
+    public async Task Enrollment_is_refused_where_only_an_organizer_may_enroll()
     {
         var participant = await Sign.InAsync(server, Seeder.DevParticipantLogin, Seeder.DevParticipantPassword);
 
@@ -307,11 +307,11 @@ public class DisclosureTests(ServerFixture server)
             // the refusal rather than the "already in" answer.
             var stranger = await Sign.NewAccountAsync(server, "stranger-closed");
             var response = await stranger.PostAsJsonAsync(
-                "/api/v1/activities/DEV-2026/enrolment", new { });
+                "/api/v1/activities/DEV-2026/enrollment", new { });
 
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
             var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-            Assert.Equal("enrolment.closed", problem.GetProperty("code").GetString());
+            Assert.Equal("enrollment.closed", problem.GetProperty("code").GetString());
         }
         finally
         {
@@ -327,8 +327,8 @@ public class DisclosureTests(ServerFixture server)
     {
         var stranger = await Sign.NewAccountAsync(server, "joins-twice");
 
-        var first = await stranger.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrolment", new { });
-        var second = await stranger.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrolment", new { });
+        var first = await stranger.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrollment", new { });
+        var second = await stranger.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrollment", new { });
 
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         // A link gets opened twice. The second time answers with the activity as
@@ -361,7 +361,7 @@ public class DisclosureTests(ServerFixture server)
 
         // Somebody else does not.
         var stranger = await Sign.NewAccountAsync(server, "not-the-author");
-        await stranger.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrolment", new { });
+        await stranger.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrollment", new { });
         var theirs = await stranger.GetFromJsonAsync<JsonElement>("/api/v1/activities/DEV-2026/questions");
         Assert.DoesNotContain(
             theirs.GetProperty("items").EnumerateArray(),
@@ -369,10 +369,10 @@ public class DisclosureTests(ServerFixture server)
     }
 
     [Fact]
-    public async Task Deleting_an_account_anonymises_it_and_what_it_wrote()
+    public async Task Deleting_an_account_anonymizes_it_and_what_it_wrote()
     {
         var leaver = await Sign.NewAccountAsync(server, "leaves");
-        await leaver.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrolment", new { });
+        await leaver.PostAsJsonAsync("/api/v1/activities/DEV-2026/enrollment", new { });
         await leaver.PostAsJsonAsync("/api/v1/activities/DEV-2026/questions", new
         {
             topic = "Nazwisko w temacie",

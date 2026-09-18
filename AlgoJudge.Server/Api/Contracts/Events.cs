@@ -4,7 +4,7 @@ namespace AlgoJudge.Server.Api.Contracts
     /// The event envelope, exactly as `AlgoJudge-Client/src/api/Event.ts` already
     /// declares it: <c>{ "type": "...", "data": { ... } }</c>.
     /// <para>
-    /// No wrapper, no batching, no ids, no acknowledgements in v1. The payload of
+    /// No wrapper, no batching, no ids, no acknowledgments in v1. The payload of
     /// each type is the one declared beside it in the Client's API modules, and
     /// <b>those declarations are the schema</b> — this file names the types and
     /// the payload shapes the Server fills, it does not invent them.
@@ -112,7 +112,7 @@ namespace AlgoJudge.Server.Api.Contracts
     /// <summary>
     /// `submissionStateChanged` — the one event the M1 slice sends.
     /// <para>
-    /// Sent as a job is claimed, finishes, or is cancelled. The submission is
+    /// Sent as a job is claimed, finishes, or is canceled. The submission is
     /// carried whole so a screen redraws from what arrived rather than patching
     /// it, and it is the <b>participant's</b> projection: rescaled score, no
     /// per-test document, no other person's submission.

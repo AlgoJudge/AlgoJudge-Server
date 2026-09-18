@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Database.Models
         Refused = 3,
 
         /// <summary>An operator called it off. Whatever moved stays moved.</summary>
-        Cancelled = 4,
+        Canceled = 4,
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>
         /// Optimistic concurrency. The advisory lock in <c>StorageMigrator</c>
         /// keeps two instances from <b>moving</b> at once; it does not stand
-        /// between the worker and an operator cancelling. Without this a cancel
+        /// between the worker and an operator canceling. Without this a cancel
         /// is overwritten by the next state the worker writes, and a migration
         /// somebody was told had stopped carries on.
         /// </summary>

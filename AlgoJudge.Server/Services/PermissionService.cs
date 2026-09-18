@@ -125,7 +125,7 @@ namespace AlgoJudge.Server.Services
 
             if (await IsAdministratorAsync(ct))
             {
-                return Permissions.Catalogue.Select(d => d.Key).ToHashSet();
+                return Permissions.Catalog.Select(d => d.Key).ToHashSet();
             }
 
             var effective = new HashSet<string>();
@@ -146,7 +146,7 @@ namespace AlgoJudge.Server.Services
         {
             if (await IsAdministratorAsync(ct))
             {
-                return Permissions.Catalogue.Select(d => d.Key).ToHashSet();
+                return Permissions.Catalog.Select(d => d.Key).ToHashSet();
             }
 
             var everywhere = new HashSet<string>();
@@ -223,7 +223,7 @@ namespace AlgoJudge.Server.Services
                 if (withheld.Count == 0) return null;
 
                 // "Everywhere except these" is a thing null cannot say, so the
-                // list is materialised. Only reachable when this person actually
+                // list is materialized. Only reachable when this person actually
                 // holds an override that withholds this permission — rare, and
                 // bounded by the number of activities — which is why the common
                 // path above still answers without touching the database.

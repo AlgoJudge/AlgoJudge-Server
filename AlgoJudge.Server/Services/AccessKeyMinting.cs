@@ -87,7 +87,7 @@ namespace AlgoJudge.Server.Services
                 response = await clients.CreateClient(nameof(AccessKeyMinting))
                     .SendAsync(request, ct);
             }
-            // A cancelled request is the caller leaving, not the far end failing.
+            // A canceled request is the caller leaving, not the far end failing.
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException
                                       && !ct.IsCancellationRequested)
             {

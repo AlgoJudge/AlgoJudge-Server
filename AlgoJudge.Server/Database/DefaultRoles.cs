@@ -5,13 +5,13 @@ using Microsoft.EntityFrameworkCore;
 namespace AlgoJudge.Server.Database
 {
     /// <summary>
-    /// Which role an enrolment hands out, for the paths that enrol somebody
+    /// Which role an enrollment hands out, for the paths that enroll somebody
     /// without anybody choosing.
     /// <para>
-    /// Self-enrolment, the creator of an activity, a bulk of temporary accounts
-    /// and an LTI launch all used to serialise a copy of a compiled-in list.
+    /// Self-enrollment, the creator of an activity, a bulk of temporary accounts
+    /// and an LTI launch all used to serialize a copy of a compiled-in list.
     /// They now link, which is what makes an activity's own role reach anybody:
-    /// a manager sets it once here and every later enrolment carries it.
+    /// a manager sets it once here and every later enrollment carries it.
     /// </para>
     /// <para>
     /// <b>Null is a real answer and callers must handle it.</b> A database with
@@ -41,7 +41,7 @@ namespace AlgoJudge.Server.Database
         /// Whether they are joining to run the activity rather than to take part
         /// in it — an LTI instructor, or whoever created it.
         /// </param>
-        public static async Task<Role?> ForEnrolmentAsync(
+        public static async Task<Role?> ForEnrollmentAsync(
             ApplicationDbContext context, Guid activityId, bool runsIt, CancellationToken ct)
         {
             var activity = await context.Activities

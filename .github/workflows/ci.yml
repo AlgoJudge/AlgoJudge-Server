@@ -112,7 +112,7 @@ jobs:
             exec -T postgres psql -U algojudge -d algojudge -c '\dt' | grep -q Activities
 
       # The two rules the schema is asked to defend on its own, checked as
-      # schema rather than as behaviour: a file reference with no owner, and a
+      # schema rather than as behavior: a file reference with no owner, and a
       # second Instance row. Both would also be caught by a service, and both
       # are the kind of rule a service forgets.
       - name: The database refuses a reference with no owner
@@ -185,7 +185,7 @@ jobs:
             echo "a second migration was accepted while one was under way" >&2
             exit 1
           fi
-          $compose exec -T algojudge aj-admin storage cancel | grep -q '"state":"cancelled"'
+          $compose exec -T algojudge aj-admin storage cancel | grep -q '"state":"canceled"'
 
       # The public health endpoint says one word about storage and names
       # nothing: no store, no backend, no bucket, no path.

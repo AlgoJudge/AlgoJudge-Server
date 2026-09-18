@@ -19,7 +19,7 @@ namespace AlgoJudge.Server.Tests;
 /// The rule that replaced all three: <b>null is every, empty is nothing</b>. A
 /// caller who sent no words narrowed nothing; a caller whose every word is
 /// unknown asked something whose answer is empty. A filter that cannot be
-/// honoured must never widen what it answers with.
+/// honored must never widen what it answers with.
 /// </para>
 /// </summary>
 public class FilterVocabularyTests

@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Authorization
     /// </para>
     /// <list type="bullet">
     /// <item><b>There is no self-service registration.</b> Accounts are created
-    /// by an organiser or arrive by SSO, and blocking local sign-ups is an
+    /// by an organizer or arrive by SSO, and blocking local sign-ups is an
     /// instance setting shipped <b>on</b>. Left alone, an installation that
     /// declares registration closed accepts registrations anyway, and the new
     /// account can sign in — the setting would be a label rather than a rule.</item>
@@ -39,7 +39,7 @@ namespace AlgoJudge.Server.Authorization
         /// and all.
         /// <para>
         /// <b>This was <c>EndsWith</c> until 2026-08-31, and the slash walked
-        /// past it.</b> Endpoint routing normalises a trailing slash, so
+        /// past it.</b> Endpoint routing normalizes a trailing slash, so
         /// <c>POST /identity/register/</c> reached <c>MapIdentityApi</c>'s
         /// register handler while <c>"/register/".EndsWith("/register")</c> was
         /// false — and this is the only place in the tree that reads

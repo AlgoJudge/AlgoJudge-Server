@@ -13,14 +13,14 @@ namespace AlgoJudge.Server.Services
     /// <c>FOR UPDATE SKIP LOCKED</c> — so a nudge cannot deliver a job twice,
     /// and a nudge that is lost costs nothing but the wait it would have cut
     /// short. That is what lets the whole arrangement be optimistic: the
-    /// deadline is the mechanism and the signal is only an optimisation of
+    /// deadline is the mechanism and the signal is only an optimization of
     /// *when* a Runner looks.
     /// </para>
     /// <para>
     /// **In this process only.** A second Server instance would not see these,
     /// and the decision of 2026-08-27 says what the answer will be when there
     /// is one: PostgreSQL <c>LISTEN</c>/<c>NOTIFY</c>, not Redis. Until then a
-    /// missed nudge degrades to the wait, which is exactly the behaviour every
+    /// missed nudge degrades to the wait, which is exactly the behavior every
     /// installation has today.
     /// </para>
     /// </summary>

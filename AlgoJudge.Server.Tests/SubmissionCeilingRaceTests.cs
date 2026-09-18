@@ -63,7 +63,7 @@ public class SubmissionCeilingRaceTests(ServerFixture server)
         var first = await Sign.InAsync(host, login, Sign.Password);
         var second = await Sign.InAsync(host, login, Sign.Password);
 
-        var joined = await first.PostAsJsonAsync($"/api/v1/activities/{slug}/enrolment", new { });
+        var joined = await first.PostAsJsonAsync($"/api/v1/activities/{slug}/enrollment", new { });
         await Sign.Succeeded(joined);
 
         saboteur.Armed = true;
@@ -85,7 +85,7 @@ public class SubmissionCeilingRaceTests(ServerFixture server)
         // Long enough that a second request which was *not* blocked would have
         // finished, and short enough not to matter when it is.
         await Task.Delay(500);
-        Assert.False(b.IsCompleted, "the second submission did not wait, so nothing serialised it");
+        Assert.False(b.IsCompleted, "the second submission did not wait, so nothing serialized it");
 
         saboteur.Release();
 

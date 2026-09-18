@@ -42,12 +42,12 @@ public class ConcurrencyTests(ServerFixture server)
 
     /// <summary>
     /// <b>The race this whole change exists for.</b> An undo checks that nothing
-    /// has been anonymised; the sweeper checks that nothing has been undone.
+    /// has been anonymized; the sweeper checks that nothing has been undone.
     /// Both read, both decide, both write — and without a token both are right,
     /// leaving a merge that was given back <i>and</i> emptied.
     /// </summary>
     [Fact]
-    public async Task An_undo_and_the_anonymiser_cannot_both_win()
+    public async Task An_undo_and_the_anonymizer_cannot_both_win()
     {
         var (source, target) = await TwoAccountsAsync();
         var id = Guid.NewGuid();
@@ -60,7 +60,7 @@ public class ConcurrencyTests(ServerFixture server)
                 SourceUserId = source,
                 TargetUserId = target,
                 MergedByUserId = target,
-                AnonymiseAfter = DateTime.UtcNow.AddDays(-1),
+                AnonymizeAfter = DateTime.UtcNow.AddDays(-1),
                 Moved = JsonSerializer.Serialize(new { }),
             });
             await seed.SaveChangesAsync();
@@ -76,13 +76,13 @@ public class ConcurrencyTests(ServerFixture server)
         undoing.UndoneByUserId = target;
         await undo.SaveChangesAsync();
 
-        sweeping.SourceAnonymisedAt = DateTime.UtcNow;
+        sweeping.SourceAnonymizedAt = DateTime.UtcNow;
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => sweep.SaveChangesAsync());
 
         await using var after = server.NewContext();
         var merge = await after.AccountMerges.FirstAsync(m => m.Id == id);
         Assert.NotNull(merge.UndoneAt);
-        Assert.Null(merge.SourceAnonymisedAt);
+        Assert.Null(merge.SourceAnonymizedAt);
     }
 
     /* ── a deletion somebody stopped ───────────────────────────────────────── */
@@ -151,11 +151,11 @@ public class ConcurrencyTests(ServerFixture server)
         await using var operatorSide = server.NewContext();
         await using var worker = server.NewContext();
 
-        var cancelling = await operatorSide.StorageMigrations.FirstAsync(m => m.Id == id);
+        var canceling = await operatorSide.StorageMigrations.FirstAsync(m => m.Id == id);
         var moving = await worker.StorageMigrations.FirstAsync(m => m.Id == id);
 
-        cancelling.State = StorageMigrationState.Cancelled;
-        cancelling.Detail = "called off by an operator";
+        canceling.State = StorageMigrationState.Canceled;
+        canceling.Detail = "called off by an operator";
         await operatorSide.SaveChangesAsync();
 
         // What the worker would have written on its next file.
@@ -164,7 +164,7 @@ public class ConcurrencyTests(ServerFixture server)
 
         await using var after = server.NewContext();
         Assert.Equal(
-            StorageMigrationState.Cancelled,
+            StorageMigrationState.Canceled,
             (await after.StorageMigrations.FirstAsync(m => m.Id == id)).State);
     }
 

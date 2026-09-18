@@ -298,7 +298,7 @@ public class LtiIdentityTests(ServerFixture server)
     /// which is what a university running two Moodles actually looks like.
     /// <para>
     /// <b>They already hold an activity grant, and there is only ever one.</b>
-    /// The unique index is on <c>(UserId, ActivityId)</c> alone, so enrolment
+    /// The unique index is on <c>(UserId, ActivityId)</c> alone, so enrollment
     /// that looks for its own provider's row finds none, inserts, and the launch
     /// answers 500 on that constraint. Found by launching the same activity from
     /// Moodle 4.5 after Moodle 5.2, 2026-08-14 — and <b>not</b> reproducible with

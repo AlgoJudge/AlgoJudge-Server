@@ -91,7 +91,7 @@ namespace AlgoJudge.Server.Database.Models
         /// The account has been deleted, which here means emptied.
         /// <para>
         /// <see cref="Submission"/> and <see cref="Result"/> reference this row's
-        /// id and it has to stay resolvable, so deletion anonymises in place —
+        /// id and it has to stay resolvable, so deletion anonymizes in place —
         /// immediately, with no grace period. The flag exists so a screen can say
         /// "deleted account" rather than showing a blank name and leaving a
         /// reader to guess.
@@ -135,7 +135,7 @@ namespace AlgoJudge.Server.Database.Models
         /// one column holds both families.
         /// </para>
         /// <para>
-        /// Normalised before it gets here. See <see cref="Services.RequestOrigin"/>
+        /// Normalized before it gets here. See <see cref="Services.RequestOrigin"/>
         /// for what happens when it is not.
         /// </para>
         /// </summary>

@@ -557,7 +557,7 @@ namespace AlgoJudge.Server.Services
             // **Cleared here, so every requeue path gets it for free.** A job
             // that comes back from a release, a report or the reaper is claimed
             // again by this line, and each claim has to earn its own
-            // acknowledgement — the previous holder's is not evidence about
+            // acknowledgment — the previous holder's is not evidence about
             // this one.
             job.AcknowledgedAt = null;
             job.LeaseExpiresAt = now.Add(lease);
@@ -637,7 +637,7 @@ namespace AlgoJudge.Server.Services
         /// Records a verdict, once.
         /// <para>
         /// Idempotent on the lease token, backed by a unique index: a Runner that
-        /// resends because it did not see the acknowledgement gets the same
+        /// resends because it did not see the acknowledgment gets the same
         /// result rather than a second one, and a Runner whose lease was already
         /// reclaimed is refused rather than allowed to overwrite a newer attempt.
         /// </para>
@@ -712,7 +712,7 @@ namespace AlgoJudge.Server.Services
 
             // **A judged result has a verdict; a failure has none, and that is
             // not the same kind of absence.** An infrastructure failure is not a
-            // judgement — it already carries no score and no maximum — so the
+            // judgment — it already carries no score and no maximum — so the
             // column stays nullable and the obligation lands here, on the path
             // that claims to have judged something.
             //

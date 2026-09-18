@@ -21,12 +21,12 @@ namespace AlgoJudge.Server.Tests;
 /// only stops being something you find by watching a screen not update.
 /// </para>
 /// </summary>
-public class EventCatalogueTests
+public class EventCatalogTests
 {
-    private sealed record Catalogue(string[] Events, string[] Transport);
+    private sealed record Catalog(string[] Events, string[] Transport);
 
     [Fact]
-    public void The_committed_catalogue_names_exactly_what_the_Server_declares()
+    public void The_committed_catalog_names_exactly_what_the_Server_declares()
     {
         var declared = typeof(EventTypes)
             .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
@@ -36,8 +36,8 @@ public class EventCatalogueTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
 
-        var catalogue = Read();
-        var committed = catalogue.Events.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        var catalog = Read();
+        var committed = catalog.Events.OrderBy(n => n, StringComparer.Ordinal).ToArray();
 
         var missing = declared.Except(committed).ToArray();
         var extra = committed.Except(declared).ToArray();
@@ -57,9 +57,9 @@ public class EventCatalogueTests
     [Fact]
     public void The_keep_alive_is_named_and_is_not_an_event()
     {
-        var catalogue = Read();
-        Assert.Contains("ping", catalogue.Transport);
-        Assert.DoesNotContain("ping", catalogue.Events);
+        var catalog = Read();
+        Assert.Contains("ping", catalog.Transport);
+        Assert.DoesNotContain("ping", catalog.Events);
     }
 
 
@@ -70,7 +70,7 @@ public class EventCatalogueTests
     /// <para>
     /// Fifteen of these were live at once on 2026-08-08 — every manager write
     /// was silent, so two people working on one activity never saw each other's
-    /// changes — and nothing could fail a build over it. The catalogue test above
+    /// changes — and nothing could fail a build over it. The catalog test above
     /// keeps the two sides naming the same things; this one keeps a name from
     /// being a promise nobody keeps.
     /// </para>
@@ -131,7 +131,7 @@ public class EventCatalogueTests
         return directory!.FullName;
     }
 
-    private static Catalogue Read()
+    private static Catalog Read()
     {
         // Up from `bin/Release/net10.0` to the repository root, where the file
         // sits beside `openapi.json`.
@@ -144,7 +144,7 @@ public class EventCatalogueTests
         Assert.True(directory is not null, "events.json was not found above the test assembly");
 
         var json = File.ReadAllText(Path.Combine(directory!.FullName, "events.json"));
-        return JsonSerializer.Deserialize<Catalogue>(json, new JsonSerializerOptions
+        return JsonSerializer.Deserialize<Catalog>(json, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
         })!;

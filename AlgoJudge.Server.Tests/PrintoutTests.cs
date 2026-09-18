@@ -479,7 +479,7 @@ public class PrintoutTests(ServerFixture server)
     /// <summary>
     /// Deleting an account takes its waiting sheets with it.
     /// <para>
-    /// Anonymisation reaches the <i>name</i> for free, through the <c>User</c>
+    /// Anonymization reaches the <i>name</i> for free, through the <c>User</c>
     /// navigation. It reaches nothing at all of the source, which is the half
     /// that would otherwise sit in the queue for whoever is next at the printer.
     /// </para>
@@ -599,7 +599,7 @@ public class PrintoutTests(ServerFixture server)
     /// <summary>
     /// **A file part keeps its bytes, newlines included.**
     /// <para>
-    /// A browser normalises every newline in a multipart *text* field to CRLF
+    /// A browser normalizes every newline in a multipart *text* field to CRLF
     /// before it leaves, so source picked from disk and hashed as it is on disk
     /// never matched what arrived — a 422 on a file nothing was wrong with. The
     /// file part is what makes the checksum mean what it says.

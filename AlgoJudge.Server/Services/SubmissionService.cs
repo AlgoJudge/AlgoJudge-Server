@@ -76,7 +76,7 @@ namespace AlgoJudge.Server.Services
 
             // **Null is every, empty is nothing.** Nobody narrowed anything, or
             // somebody narrowed by words this Server has no name for — and a
-            // filter it cannot honour must answer with nothing rather than with
+            // filter it cannot honor must answer with nothing rather than with
             // everything. A narrowing that widens is a screen that looks as
             // though it is working.
             //
@@ -304,12 +304,12 @@ namespace AlgoJudge.Server.Services
             {
                 // `ForbiddenActionException` rather than `AccessDeniedException`
                 // because the caller **does** hold `submission:create`; what they
-                // lack is membership, which is not a permission. `enrolment.*` is
-                // the family `ActivityService.EnrolAsync` already refuses in, and
+                // lack is membership, which is not a permission. `enrollment.*` is
+                // the family `ActivityService.EnrollAsync` already refuses in, and
                 // the Client needs a code it can turn into "join first".
                 throw new ForbiddenActionException(
                     "Only somebody enrolled in this activity may submit to it",
-                    "enrolment.required");
+                    "enrollment.required");
             }
 
             if (activity.ArchivedAt is not null)
@@ -353,7 +353,7 @@ namespace AlgoJudge.Server.Services
             // arrangement exists to prevent.
             //
             // The allowed set lives in the assignment's `config` and travels with
-            // the job, so the refusal happens where the catalogue is understood.
+            // the job, so the refusal happens where the catalog is understood.
             // Nothing is lost: the check ran on a string the Server could not
             // validate the meaning of either.
 
@@ -590,7 +590,7 @@ namespace AlgoJudge.Server.Services
             // **And the panel's own row.** Everything above is the participant's
             // view; the manager's list listens for a different name with a
             // different shape, and heard nothing at all until 2026-09-14 unless
-            // somebody cancelled an attempt or ruled one out of the ranking. So
+            // somebody canceled an attempt or ruled one out of the ranking. So
             // a contest's submissions screen stood still while the contest ran.
             //
             // Here rather than at each caller because this is the one place every

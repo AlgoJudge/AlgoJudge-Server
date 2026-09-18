@@ -32,13 +32,13 @@ namespace AlgoJudge.Server.Services
         Task<int> SweepAsync(CancellationToken ct);
 
         /// <summary>Empties an account in place. Shared, so the paths cannot drift.</summary>
-        Task AnonymiseAsync(User user, CancellationToken ct);
+        Task AnonymizeAsync(User user, CancellationToken ct);
     }
 
     /// <summary>
     /// Removing an account, from any of the three directions it can be asked.
     /// <para>
-    /// <b>Deletion is anonymisation</b>, always: <c>Submission</c> and
+    /// <b>Deletion is anonymization</b>, always: <c>Submission</c> and
     /// <c>Result</c> name a <c>userId</c> that has to stay resolvable, so a
     /// contest's history cannot develop holes because somebody left. The row
     /// survives, emptied.
@@ -187,7 +187,7 @@ namespace AlgoJudge.Server.Services
             try
             {
                 // **One save for the batch, which is what makes the token
-                // enough.** `CarryOutAsync` and `AnonymiseAsync` write nothing
+                // enough.** `CarryOutAsync` and `AnonymizeAsync` write nothing
                 // of their own; they move tracked entities. So an administrator
                 // who halted a request a moment ago does not merely win a
                 // marker — nothing is written at all, and the account is not
@@ -219,7 +219,7 @@ namespace AlgoJudge.Server.Services
         /// automatically</b> and goes to an administrator instead — a webhook
         /// that can silence an administrator is an attack vector, not a
         /// feature;</item>
-        /// <item>otherwise the account is anonymised.</item>
+        /// <item>otherwise the account is anonymized.</item>
         /// </list>
         /// </summary>
         private async Task CarryOutAsync(
@@ -266,9 +266,9 @@ namespace AlgoJudge.Server.Services
                 return;
             }
 
-            await AnonymiseAsync(user, ct);
+            await AnonymizeAsync(user, ct);
             request.State = DeletionState.Completed;
-            request.Detail = "The account was anonymised";
+            request.Detail = "The account was anonymized";
         }
 
         /// <summary>
@@ -296,7 +296,7 @@ namespace AlgoJudge.Server.Services
                 && Permissions.Parse(g.Permissions).Count > 0);
         }
 
-        public async Task AnonymiseAsync(User user, CancellationToken ct)
+        public async Task AnonymizeAsync(User user, CancellationToken ct)
         {
             var suffix = user.Id.Length >= 4 ? user.Id[^4..] : user.Id;
 
@@ -325,7 +325,7 @@ namespace AlgoJudge.Server.Services
                 question.Body = "[deleted]";
             }
 
-            // **Two halves, and anonymising the name is only the first.** A
+            // **Two halves, and anonymizing the name is only the first.** A
             // printout's requester is read through the `User` navigation, so the
             // name on a waiting sheet goes with the row above — and the source
             // it references does not. Bytes somebody asked to have printed are
@@ -337,7 +337,7 @@ namespace AlgoJudge.Server.Services
             // the closure.** This closed what was open and left the addresses
             // behind — so an account that had been "deleted" still said where
             // that person had connected from, on every row they had ever made.
-            // An anonymisation that leaves personal data behind is not one.
+            // An anonymization that leaves personal data behind is not one.
             //
             // The rows stay, as they do when `AddressSweeper` reaches them: what
             // is deleted is the person, not the record that somebody signed in.

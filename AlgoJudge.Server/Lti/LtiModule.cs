@@ -42,7 +42,7 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.ILaunchService, Services.LaunchService>();
             services.AddScoped<Services.IResourceLinkService, Services.ResourceLinkService>();
             services.AddScoped<Services.IIdentityResolver, Services.IdentityResolver>();
-            services.AddScoped<Services.ILtiEnrolmentService, Services.EnrolmentService>();
+            services.AddScoped<Services.ILtiEnrollmentService, Services.EnrollmentService>();
             services.AddScoped<Services.IGradeSyncService, Services.GradeSyncService>();
             services.AddScoped<Services.IAgsClient, Services.AgsClient>();
             services.AddScoped<Services.IGradeVerifier, Services.GradeVerifier>();

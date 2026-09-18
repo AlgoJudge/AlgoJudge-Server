@@ -36,7 +36,7 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// A short line beside the name, shown in the ranking. A class, a school,
-        /// a year — whatever the activity's organiser wants a reader to know
+        /// a year — whatever the activity's organizer wants a reader to know
         /// about a row.
         /// </summary>
         public string? Description { get; set; }

@@ -94,7 +94,7 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// The union of the named templates, with the two things a claim may
         /// never carry stripped: <c>system:administrator</c>, and any key the
-        /// catalogue does not describe.
+        /// catalog does not describe.
         /// <para>
         /// A template naming a permission this Server has never heard of would
         /// otherwise be stored into a grant, and <c>Permissions.IsStaff</c> counts

@@ -6,7 +6,7 @@ namespace AlgoJudge.Server.Tests;
 /// The nudge, and the one ordering that makes it worth having.
 ///
 /// <para>
-/// **A signal is only ever an optimisation of *when* a Runner looks** — every
+/// **A signal is only ever an optimization of *when* a Runner looks** — every
 /// job still leaves through <c>ClaimAsync</c> under
 /// <c>FOR UPDATE SKIP LOCKED</c>, so nothing here can deliver a job twice and a
 /// nudge that is genuinely lost costs one wait of latency. That is exactly why

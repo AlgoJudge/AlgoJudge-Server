@@ -87,7 +87,7 @@ namespace AlgoJudge.Server.Preconfiguration
         public const string PagesDirectory = "pages";
 
         /// <summary>
-        /// The colours and typeface, beside <c>pages/</c> rather than under
+        /// The colors and typeface, beside <c>pages/</c> rather than under
         /// <c>instance:</c>. It is its own document with its own format and
         /// version — the same reason a page is a file rather than a string in a
         /// key — and the file here is the file the panel publishes, byte for
@@ -176,7 +176,7 @@ namespace AlgoJudge.Server.Preconfiguration
             {
                 throw new ValidationException(
                     $"'{ThemeFileName}' is {bytes.Length} bytes and the ceiling is "
-                    + $"{ThemeDocument.MaxBytes}. A theme is a few hundred bytes of colours.",
+                    + $"{ThemeDocument.MaxBytes}. A theme is a few hundred bytes of colors.",
                     "preconfiguration.theme");
             }
 
@@ -268,7 +268,7 @@ namespace AlgoJudge.Server.Preconfiguration
                 throw new ValidationException(
                     $"{FileName} states version {root.Version?.ToString() ?? "nothing"}, and this "
                     + $"Server reads version {Version}. Refused rather than guessed: a version it "
-                    + "does not know may mean something different by a key it recognises.",
+                    + "does not know may mean something different by a key it recognizes.",
                     "preconfiguration.version");
             }
 

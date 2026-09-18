@@ -135,7 +135,7 @@ namespace AlgoJudge.Server.Database
                 // Listing filters on it on every arrival at the activity list.
                 e.HasIndex(a => new { a.Unlisted, a.ArchivedAt });
 
-                // The two roles this activity enrols into. `SetNull`, so a role
+                // The two roles this activity enrolls into. `SetNull`, so a role
                 // that goes away leaves the activity falling back to the shipped
                 // one rather than pointing at nothing.
                 //
@@ -289,7 +289,7 @@ namespace AlgoJudge.Server.Database
                     .OnDelete(DeleteBehavior.Restrict);
                 // The assignment slug is unique across the whole ACTIVITY, not
                 // within the series. That spans two tables, so `ActivityId` is
-                // denormalised onto this row and the database enforces the rule
+                // denormalized onto this row and the database enforces the rule
                 // itself — a service-layer check is one two concurrent requests
                 // can both pass.
                 e.HasOne(sp => sp.Activity)
@@ -402,7 +402,7 @@ namespace AlgoJudge.Server.Database
                 e.HasIndex(r => new { r.OwnerKind, r.SupersededAt });
 
                 // Exactly one owner, and it agrees with the discriminator. Two
-                // separate failures, both of which produce a row that authorises
+                // separate failures, both of which produce a row that authorizes
                 // against nothing: no owner at all, or an owner the read rule
                 // will not look at because the kind says elsewhere.
                 e.ToTable(t =>
@@ -869,8 +869,8 @@ namespace AlgoJudge.Server.Database
                 e.Property(m => m.Moved).HasColumnType("jsonb");
                 e.Property(m => m.RowVersion).IsRowVersion();
 
-                // The sweeper's only query: what is due to be anonymised.
-                e.HasIndex(m => new { m.SourceAnonymisedAt, m.AnonymiseAfter });
+                // The sweeper's only query: what is due to be anonymized.
+                e.HasIndex(m => new { m.SourceAnonymizedAt, m.AnonymizeAfter });
                 // Both screens that show a merge ask by the account they are on.
                 e.HasIndex(m => m.TargetUserId);
                 e.HasIndex(m => m.SourceUserId);

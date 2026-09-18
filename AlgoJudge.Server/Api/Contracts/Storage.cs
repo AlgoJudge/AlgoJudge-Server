@@ -31,7 +31,7 @@ namespace AlgoJudge.Server.Api.Contracts
     {
         public required string Id { get; init; }
 
-        /// <summary>`requested`, `running`, `finished`, `refused` or `cancelled`.</summary>
+        /// <summary>`requested`, `running`, `finished`, `refused` or `canceled`.</summary>
         public required string State { get; init; }
 
         public required string TargetStoreId { get; init; }

@@ -20,7 +20,7 @@ namespace AlgoJudge.Server.Tests;
 /// xUnit finished everything else first and then ran these alone. Measured on a
 /// timeline, the storage suites did not begin until **113 s** into a 199 s run
 /// and added **86 s to the end of it** — a third of the suite, spent waiting.
-/// Being a single collection already serialises them, so the peak is now one
+/// Being a single collection already serializes them, so the peak is now one
 /// storage container beside three Server ones: **four, where six is what broke
 /// in the first place**.
 /// </para>

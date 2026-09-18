@@ -42,7 +42,7 @@ namespace AlgoJudge.Server.Services
             // **Anywhere, and only this one of the three.** The key is in the
             // shipped `manager` role since 2026-09-14, and every path that makes
             // a manager writes an *activity* grant — so asked at system scope it
-            // was a key nobody who held it could spend, and the enrolment picker
+            // was a key nobody who held it could spend, and the enrollment picker
             // it exists for stayed empty. Listing the installation's accounts and
             // reading somebody's sessions are administration and still ask at
             // system scope: `/manager/users` is not a manager's screen, and
@@ -241,7 +241,7 @@ namespace AlgoJudge.Server.Services
             Role? role = null;
             if (activityId is { } forRole && input.Permissions is null)
             {
-                role = await DefaultRoles.ForEnrolmentAsync(context, forRole, runsIt: false, ct);
+                role = await DefaultRoles.ForEnrollmentAsync(context, forRole, runsIt: false, ct);
             }
             var carried = role is null ? wanted : [.. Permissions.Parse(role.Permissions)];
 
@@ -351,8 +351,8 @@ namespace AlgoJudge.Server.Services
             // two accounts could end up on one address — the state it exists to
             // prevent, and one that then made `ResetPasswordAsync` refuse with
             // the *other* account's address in the message, because that path
-            // does run the chain. `SetEmailAsync` normalises through the lookup
-            // normaliser and clears the confirmation itself.
+            // does run the chain. `SetEmailAsync` normalizes through the lookup
+            // normalizer and clears the confirmation itself.
             //
             // Before the assignments below rather than after them, because it
             // saves as it validates: a refusal has to leave this entity clean, or

@@ -377,7 +377,7 @@ namespace AlgoJudge.Server.Services
                 // An instance document and the logo are readable by anybody,
                 // signed in or not — they are what a signed-out screen renders.
                 // So are the theme and its faces: the sign-in screen is drawn in
-                // the operator's colours and typeface before anybody has signed
+                // the operator's colors and typeface before anybody has signed
                 // in, and the theme file holds nothing that is not already on
                 // `/instance` for the same readers.
                 case FileOwnerKind.InstanceDocument:

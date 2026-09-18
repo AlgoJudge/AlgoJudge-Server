@@ -272,7 +272,7 @@ namespace AlgoJudge.Server.Preconfiguration
             // Grouped by owner and reference name so a kind with two changed
             // translations is published once: `PublishAsync` supersedes the
             // languages it is given and leaves the rest standing, which is
-            // exactly the behaviour an unchanged translation needs.
+            // exactly the behavior an unchanged translation needs.
             foreach (var group in pending.GroupBy(entry => (entry.Owner, entry.File.Kind)))
             {
                 var statements = new List<NewStatementDto>();

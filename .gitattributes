@@ -1,4 +1,4 @@
-# Normalise every text file to LF, both in the repository and in the working
+# Normalize every text file to LF, both in the repository and in the working
 # tree, on every platform. This overrides core.autocrlf, so the result does not
 # depend on how an individual contributor's Git happens to be configured.
 * text=auto eol=lf

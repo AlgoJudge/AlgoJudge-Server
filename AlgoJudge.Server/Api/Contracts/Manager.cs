@@ -125,8 +125,8 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int MatchingRunners { get; init; }
 
         /// <summary>
-        /// The roles this activity enrols into, or null for the installation's
-        /// shipped ones. What self-enrolment, a bulk of temporary accounts and an
+        /// The roles this activity enrolls into, or null for the installation's
+        /// shipped ones. What self-enrollment, a bulk of temporary accounts and an
         /// LTI launch hand out here.
         /// </summary>
         public string? ParticipantRoleId { get; init; }
@@ -146,7 +146,7 @@ namespace AlgoJudge.Server.Api.Contracts
     /// <para>
     /// <b>This was <c>required</c> until 2026-09-16, and it made every archive
     /// exported before <c>printouts</c> existed un-importable.</b> A partial
-    /// object was refused by the serialiser with a 400 before any handler ran,
+    /// object was refused by the serializer with a 400 before any handler ran,
     /// while omitting the object entirely was always accepted — so the contract
     /// was strict about the one shape an older export actually writes, and
     /// lenient about the one it never writes. Both call sites already had a
@@ -204,12 +204,12 @@ namespace AlgoJudge.Server.Api.Contracts
         public IReadOnlyList<string>? RunnerTags { get; init; }
 
         /// <summary>
-        /// The roles this activity enrols into — one for taking part, one for
+        /// The roles this activity enrolls into — one for taking part, one for
         /// running it. Absent leaves them alone; an empty string clears one back
         /// to the installation's shipped role.
         /// <para>
         /// A global role, or one belonging to this activity. This is what lets a
-        /// role of an activity's own reach anybody: self-enrolment, a bulk of
+        /// role of an activity's own reach anybody: self-enrollment, a bulk of
         /// temporary accounts and an LTI launch all read it.
         /// </para>
         /// </summary>

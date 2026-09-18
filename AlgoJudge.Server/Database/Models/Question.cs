@@ -10,7 +10,7 @@ namespace AlgoJudge.Server.Database.Models
     /// Scope narrows from the activity down: an activity-wide notice leaves both
     /// optional references null, a series notice sets <see cref="SeriesId"/>, and
     /// a question about one problem sets <see cref="SeriesProblemId"/>.
-    /// <see cref="ActivityId"/> is always present, so authorisation and listing
+    /// <see cref="ActivityId"/> is always present, so authorization and listing
     /// never have to walk the chain upwards to find out where a row belongs.
     /// </para>
     /// </summary>

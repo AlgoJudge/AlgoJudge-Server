@@ -30,7 +30,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// Everything the caller holds in this scope, the system grant included.
-        /// A system administrator gets the whole catalogue, because that is what
+        /// A system administrator gets the whole catalog, because that is what
         /// the bypass means to a grant editor drawing what may be handed on.
         /// </summary>
         Task<IReadOnlySet<string>> EffectiveAsync(Guid? activityId = null, CancellationToken ct = default);

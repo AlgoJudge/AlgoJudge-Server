@@ -103,7 +103,7 @@ public class AccountExpiryTests(ServerFixture server)
     /// <summary>
     /// <b>Expiry and blocking stay tellable apart</b>, because the manager
     /// screen has drawn them as different states since before either was
-    /// enforced. A refusal that called them both "blocked" would make the grey
+    /// enforced. A refusal that called them both "blocked" would make the gray
     /// badge a lie.
     /// </summary>
     [Fact]

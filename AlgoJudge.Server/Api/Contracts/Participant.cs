@@ -112,10 +112,10 @@ namespace AlgoJudge.Server.Api.Contracts
     }
 
     /// <summary>
-    /// What the enrolment form collected. Both fields are conditional on the
+    /// What the enrollment form collected. Both fields are conditional on the
     /// activity, and the Server decides — the Client sends what it collected.
     /// </summary>
-    public record EnrolInputDto
+    public record EnrollInputDto
     {
         public string? Password { get; init; }
         public bool? AcceptedRules { get; init; }
@@ -265,7 +265,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// Opaque: the Client's renderer for the type reads it, the Server does not.
         /// </summary>
         public object? Props { get; init; }
-        /// <summary>`queued` | `running` | `completed` | `failed` | `cancelled`.</summary>
+        /// <summary>`queued` | `running` | `completed` | `failed` | `canceled`.</summary>
         public required string State { get; init; }
         /// <summary>Rescaled into the assignment's scale. Absent while unjudged.</summary>
         public double? Score { get; init; }
@@ -274,7 +274,7 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? Verdict { get; init; }
 
         /// <summary>
-        /// A manager ruled that this counts towards no standing.
+        /// A manager ruled that this counts toward no standing.
         /// <para>
         /// <b>Told rather than left to be inferred</b>: without it this screen
         /// and the ranking describe one submission differently — judged, a

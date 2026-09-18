@@ -16,7 +16,7 @@ namespace AlgoJudge.Server.Database.Models
     /// unchecksummed, and into every backup for ever.
     /// </para>
     /// <para>
-    /// <see cref="ActivityId"/> is always present, so authorisation never has to
+    /// <see cref="ActivityId"/> is always present, so authorization never has to
     /// walk a chain upwards to find out where a row belongs — the same reason
     /// <see cref="Question"/> carries one.
     /// </para>

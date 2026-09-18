@@ -12,7 +12,7 @@ namespace AlgoJudge.Server.Lti.Services
     public record GradeSummaryDto
     {
         public required int Total { get; init; }
-        public required int Synchronised { get; init; }
+        public required int Synchronized { get; init; }
         public required int Pending { get; init; }
 
         /// <summary>Held back until a freeze lifts. Not a failure (§6.3).</summary>
@@ -38,7 +38,7 @@ namespace AlgoJudge.Server.Lti.Services
 
     public interface IGradeVerifier
     {
-        Task<GradeSummaryDto> SummariseAsync(Guid resourceLinkId, bool verify, CancellationToken ct);
+        Task<GradeSummaryDto> SummarizeAsync(Guid resourceLinkId, bool verify, CancellationToken ct);
 
         /// <summary>Marks everything postable as stale, so the worker sends it again.</summary>
         Task<int> ResyncAsync(Guid resourceLinkId, CancellationToken ct);
@@ -57,7 +57,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// <para>
     /// <b>It reports and does not repair.</b> A teacher who edited a grade
     /// deliberately should not have it overwritten by a sweep they did not run;
-    /// resynchronising is a decision, and it has a button rather than a schedule.
+    /// resynchronizing is a decision, and it has a button rather than a schedule.
     /// </para>
     /// </summary>
     public class GradeVerifier(
@@ -67,7 +67,7 @@ namespace AlgoJudge.Server.Lti.Services
         TimeProvider clock
     ) : IGradeVerifier
     {
-        public async Task<GradeSummaryDto> SummariseAsync(
+        public async Task<GradeSummaryDto> SummarizeAsync(
             Guid resourceLinkId, bool verify, CancellationToken ct)
         {
             var link = await db.ResourceLinks.AsNoTracking()
@@ -89,7 +89,7 @@ namespace AlgoJudge.Server.Lti.Services
             return new GradeSummaryDto
             {
                 Total = states.Count,
-                Synchronised = states.Count(s => s.State == GradeSyncStatus.Synchronised),
+                Synchronized = states.Count(s => s.State == GradeSyncStatus.Synchronized),
                 Pending = states.Count(s => s.State == GradeSyncStatus.Pending),
                 Deferred = states.Count(s => s.State == GradeSyncStatus.Deferred),
                 Withheld = states.Count(s => s.State == GradeSyncStatus.Withheld),
@@ -122,7 +122,7 @@ namespace AlgoJudge.Server.Lti.Services
             return await db.GradeSyncStates
                 .Where(s => s.ResourceLinkId == link.Id
                     && (s.State == GradeSyncStatus.Failed
-                        || s.State == GradeSyncStatus.Synchronised
+                        || s.State == GradeSyncStatus.Synchronized
                         || s.State == GradeSyncStatus.Pending))
                 .ExecuteUpdateAsync(set => set
                     .SetProperty(s => s.State, GradeSyncStatus.Pending)
@@ -170,7 +170,7 @@ namespace AlgoJudge.Server.Lti.Services
 
                 foreach (var state in states.Where(s => s.LineItemId == item.Id))
                 {
-                    if (state.State != GradeSyncStatus.Synchronised) continue;
+                    if (state.State != GradeSyncStatus.Synchronized) continue;
                     if (!subjects.TryGetValue(state.UserId, out var subject)) continue;
 
                     var there = byUser.TryGetValue(subject, out var value) ? value : null;

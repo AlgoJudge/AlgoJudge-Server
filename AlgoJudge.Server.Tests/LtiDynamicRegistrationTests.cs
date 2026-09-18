@@ -399,9 +399,9 @@ public class LtiDynamicRegistrationTests(ServerFixture server)
         Assert.DoesNotContain("org.imsglobal.lti.close", page);
 
         // **The reason, not merely a refusal.** Asserting "did not work" alone
-        // passes just as happily when the address was dialled and answered 404 —
-        // which is what the fake does for anything it does not recognise. Only
-        // this message says the address was rejected before anything was dialled.
+        // passes just as happily when the address was dialed and answered 404 —
+        // which is what the fake does for anything it does not recognize. Only
+        // this message says the address was rejected before anything was dialed.
         Assert.True(page.Contains("no usable configuration address"), page);
 
         using var scope = host.Services.CreateScope();

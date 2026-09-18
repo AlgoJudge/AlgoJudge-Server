@@ -50,7 +50,7 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         Task<ManagedActivityDto> SetPublishedAsync(Guid id, bool published, CancellationToken ct);
         Task<ManagedActivityDto> CreateAsync(ActivityInputDto input, CancellationToken ct);
-        Task<ActivityDto> EnrolAsync(string idOrSlug, EnrolInputDto input, CancellationToken ct);
+        Task<ActivityDto> EnrollAsync(string idOrSlug, EnrollInputDto input, CancellationToken ct);
         Task<Activity> ResolveAsync(string idOrSlug, CancellationToken ct);
 
         /// <summary>
@@ -151,7 +151,7 @@ namespace AlgoJudge.Server.Services
 
             // **Null is every, empty is nothing.** Words this product has no name
             // for narrow to nothing rather than to everything: a filter that
-            // cannot be honoured must not widen what it answers with.
+            // cannot be honored must not widen what it answers with.
             if (states is not null)
             {
                 var wanted = states.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -805,19 +805,19 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// Self-enrolment. A manager may always enrol somebody by hand — that is
-        /// what a grant is — so this is the answer to <b>self</b>-enrolment and
+        /// Self-enrollment. A manager may always enroll somebody by hand — that is
+        /// what a grant is — so this is the answer to <b>self</b>-enrollment and
         /// nothing else.
         /// </summary>
-        public async Task<ActivityDto> EnrolAsync(
-            string idOrSlug, EnrolInputDto input, CancellationToken ct)
+        public async Task<ActivityDto> EnrollAsync(
+            string idOrSlug, EnrollInputDto input, CancellationToken ct)
         {
             var activity = await ResolveAsync(idOrSlug, ct);
             var user = await currentUser.RequireAsync(ct);
 
             if (activity.ArchivedAt is not null)
             {
-                throw new ConflictException("An archived activity accepts no enrolment", "activity.archived");
+                throw new ConflictException("An archived activity accepts no enrollment", "activity.archived");
             }
 
             var existing = await context.Grants
@@ -837,7 +837,7 @@ namespace AlgoJudge.Server.Services
             {
                 existing.State = GrantState.Active;
                 await context.SaveChangesAsync(ct);
-                await grants.AnnounceEnrolmentAsync(existing, ct);
+                await grants.AnnounceEnrollmentAsync(existing, ct);
                 return await ProjectAsync(activity, ct);
             }
 
@@ -859,7 +859,7 @@ namespace AlgoJudge.Server.Services
             {
                 case JoinPolicy.Closed:
                     throw new ForbiddenActionException(
-                        "Only an organiser can enrol somebody here", "enrolment.closed");
+                        "Only an organizer can enroll somebody here", "enrollment.closed");
 
                 case JoinPolicy.Password:
                     // Compared in fixed time. It is a join code rather than a
@@ -872,15 +872,15 @@ namespace AlgoJudge.Server.Services
                         || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(given, wanted))
                     {
                         throw new ForbiddenActionException(
-                            "The join password is wrong", "enrolment.password");
+                            "The join password is wrong", "enrollment.password");
                     }
                     break;
             }
 
             // **This activity's participant role**, which is the point of the
             // setting: a manager decides once what joining their course means,
-            // and every later self-enrolment carries it without anybody choosing.
-            var role = await DefaultRoles.ForEnrolmentAsync(context, activity.Id, runsIt: false, ct);
+            // and every later self-enrollment carries it without anybody choosing.
+            var role = await DefaultRoles.ForEnrollmentAsync(context, activity.Id, runsIt: false, ct);
             var joined = new Grant
             {
                 UserId = user.Id,
@@ -898,7 +898,7 @@ namespace AlgoJudge.Server.Services
                 Permissions.Effective(role?.Permissions, joined.Permissions));
             context.Grants.Add(joined);
             await context.SaveChangesAsync(ct);
-            await grants.AnnounceEnrolmentAsync(joined, ct);
+            await grants.AnnounceEnrollmentAsync(joined, ct);
 
             return await ProjectAsync(activity, ct);
         }

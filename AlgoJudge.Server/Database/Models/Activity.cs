@@ -48,7 +48,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>
         /// Whether participants may ask for source on paper.
         /// <para>
-        /// <b>Off by default, unlike its neighbour, and that is deliberate.</b>
+        /// <b>Off by default, unlike its neighbor, and that is deliberate.</b>
         /// Questions cost an installation nothing when nobody asks one; printing
         /// assumes somebody is standing at a printer, and an activity that has
         /// nobody there would offer a button that leads to a queue no one works.
@@ -80,14 +80,14 @@ namespace AlgoJudge.Server.Database.Models
         public ICollection<ActivityGroup> Groups { get; set; } = new List<ActivityGroup>();
 
         /// <summary>
-        /// The roles this activity's own enrolments link to — for somebody
+        /// The roles this activity's own enrollments link to — for somebody
         /// taking part, and for somebody running it.
         /// <para>
         /// Null means the installation's built-in <c>participant</c> and
-        /// <c>manager</c>. Set, they are what self-enrolment, a manager enrolling
+        /// <c>manager</c>. Set, they are what self-enrollment, a manager enrolling
         /// somebody by hand, a bulk of temporary accounts and an LTI launch all
         /// hand out here. <b>Without them an activity's own role could be created
-        /// and never reach anybody</b>: every automatic enrolment would still
+        /// and never reach anybody</b>: every automatic enrollment would still
         /// land on the installation-wide one.
         /// </para>
         /// <para>
@@ -132,7 +132,7 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// Free display metadata, e.g. <c>Prowadzący: Jan Kowalski</c>. Never
-        /// queried, never filtered on, so it is stored rather than modelled.
+        /// queried, never filtered on, so it is stored rather than modeled.
         /// <para>
         /// <b>Opaque since 2026-08-22</b>, and typed <c>{ key, value }[]</c>
         /// before that — a shape the Server invented for a value it does not

@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Tests;
 /// </para>
 /// </summary>
 [Collection("server-1")]
-public class LtiRosterEnrolmentTests(ServerFixture server)
+public class LtiRosterEnrollmentTests(ServerFixture server)
 {
     private const string Directory = "roster-directory";
 
@@ -40,7 +40,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
 
         world.Roster.Members = [FakeRoster.Member("m-1", username: user.UserName, name: "Jan")];
 
-        var enrolled = await EnrolAsync(world);
+        var enrolled = await EnrollAsync(world);
 
         Assert.Equal(1, enrolled.GetProperty("linked").GetInt32());
         Assert.Equal(1, enrolled.GetProperty("granted").GetInt32());
@@ -74,7 +74,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
 
         world.Roster.Members = [FakeRoster.Member("m-2", username: local.UserName)];
 
-        var enrolled = await EnrolAsync(world);
+        var enrolled = await EnrollAsync(world);
 
         Assert.Equal(0, enrolled.GetProperty("linked").GetInt32());
         var skipped = Assert.Single(enrolled.GetProperty("skipped").EnumerateArray().ToList());
@@ -101,7 +101,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
             FakeRoster.Member("m-3", name: user.UserName, email: user.Email),
         ];
 
-        var enrolled = await EnrolAsync(world);
+        var enrolled = await EnrollAsync(world);
 
         Assert.Equal(0, enrolled.GetProperty("linked").GetInt32());
         var skipped = Assert.Single(enrolled.GetProperty("skipped").EnumerateArray().ToList());
@@ -119,7 +119,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
             FakeRoster.Member("m-4", username: user.UserName, status: "Inactive"),
         ];
 
-        var enrolled = await EnrolAsync(world);
+        var enrolled = await EnrollAsync(world);
 
         Assert.Equal(0, enrolled.GetProperty("granted").GetInt32());
         var skipped = Assert.Single(enrolled.GetProperty("skipped").EnumerateArray().ToList());
@@ -140,7 +140,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
         var invented = "nobody-" + Guid.NewGuid().ToString("N")[..8];
         world.Roster.Members = [FakeRoster.Member("m-5", username: invented)];
 
-        var enrolled = await EnrolAsync(world);
+        var enrolled = await EnrollAsync(world);
 
         Assert.Equal(0, enrolled.GetProperty("linked").GetInt32());
         Assert.Equal("unknownAccount",
@@ -152,19 +152,19 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
     }
 
     /// <summary>
-    /// A platform not trusted to say who somebody is cannot enrol from a roster
+    /// A platform not trusted to say who somebody is cannot enroll from a roster
     /// either — the flag governs exactly this, and reading the list is still
     /// allowed.
     /// </summary>
     [Fact]
-    public async Task A_platform_without_identity_authority_cannot_enrol_from_a_roster()
+    public async Task A_platform_without_identity_authority_cannot_enroll_from_a_roster()
     {
         var world = await BuildAsync(authority: false);
         var (user, _) = await DirectoryUserAsync();
         world.Roster.Members = [FakeRoster.Member("m-6", username: user.UserName)];
 
         var refused = await world.Manager.PostAsync(
-            $"/api/v1/lti/placements/{world.LinkId}/roster/enrol", null);
+            $"/api/v1/lti/placements/{world.LinkId}/roster/enroll", null);
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
@@ -182,7 +182,7 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
         var (user, _) = await DirectoryUserAsync();
         world.Roster.Members = [FakeRoster.Member("m-7", username: user.UserName)];
 
-        await EnrolAsync(world);
+        await EnrollAsync(world);
         await UsingLtiAsync(world.Host, async db =>
             Assert.Equal(LinkStrength.Provisional,
                 (await db.ExternalIdentities.FirstAsync(i => i.Subject == "m-7")).Strength));
@@ -268,10 +268,10 @@ public class LtiRosterEnrolmentTests(ServerFixture server)
         return world with { LinkId = linkId };
     }
 
-    private async Task<JsonElement> EnrolAsync(World world)
+    private async Task<JsonElement> EnrollAsync(World world)
     {
         var response = await world.Manager.PostAsync(
-            $"/api/v1/lti/placements/{world.LinkId}/roster/enrol", null);
+            $"/api/v1/lti/placements/{world.LinkId}/roster/enroll", null);
         Assert.True(response.IsSuccessStatusCode,
             $"{(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         return await response.Content.ReadFromJsonAsync<JsonElement>();

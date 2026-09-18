@@ -61,12 +61,12 @@ namespace AlgoJudge.Server.Controllers
         /// Client sends what the form collected and checks nothing.
         /// </para>
         /// </summary>
-        [HttpPost("{idOrSlug}/enrolment")]
+        [HttpPost("{idOrSlug}/enrollment")]
         [ProducesResponseType<ActivityDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status403Forbidden)]
-        public Task<ActivityDto> Enrol(
-            string idOrSlug, [FromBody] EnrolInputDto input, CancellationToken ct) =>
-            activities.EnrolAsync(idOrSlug, input, ct);
+        public Task<ActivityDto> Enroll(
+            string idOrSlug, [FromBody] EnrollInputDto input, CancellationToken ct) =>
+            activities.EnrollAsync(idOrSlug, input, ct);
 
         // ── groups ───────────────────────────────────────────────────────────
         //
@@ -182,7 +182,7 @@ namespace AlgoJudge.Server.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         [Consumes("multipart/form-data")]
         // **A file part as well as a text field, and the file is the honest one.**
-        // A browser normalises every newline in a multipart *text* field to CRLF
+        // A browser normalizes every newline in a multipart *text* field to CRLF
         // before it leaves, so a checksum computed over the bytes the reader
         // picked never matches what arrives — the failure is a 422 on a file
         // nothing is wrong with. A file part travels byte for byte.
@@ -363,7 +363,7 @@ namespace AlgoJudge.Server.Controllers
             // member of a document the Server does not read.
             //
             // There is no default: `main.txt` would be a name the Runner refuses
-            // for every toolchain in the catalogue, so a wrong guess here is a
+            // for every toolchain in the catalog, so a wrong guess here is a
             // compilation error on somebody's correct solution.
             var name = upload.FileName is { Length: > 0 } uploaded
                 ? uploaded
