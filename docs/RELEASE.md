@@ -409,3 +409,19 @@ CI says the full-stack check waits on the first release because
 
 The documentation site cuts its `/server/` snapshot on release day, from
 `AlgoJudge-Docs`.
+### The public website states this component's version
+
+`algojudge.pl` prints **`Server v<version>`** in four places — a card badge and a
+roadmap item, in each of `src/content/pl.json` and `src/content/en.json` of
+`AlgoJudge-Website`. A release makes all four wrong.
+
+**`AlgoJudge-Website` has no CI.** Its fifteen tests run only when somebody types
+`npm test`, so nothing reports the mismatch.
+
+`AlgoJudge-Website/tests/content.test.mjs:125` pins the version literal by regex,
+`Server v0\.1\.0`, and hard-codes the five repository keys. Correcting the content
+turns that suite red: the test asserts the literal and needs the same edit. Change
+content and test in one commit.
+
+The correction is `/website-sync` in the workspace. This runbook's step is to
+record that it is owed.
