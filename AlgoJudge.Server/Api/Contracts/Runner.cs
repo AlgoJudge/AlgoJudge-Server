@@ -72,7 +72,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// <b>The nonce is signed, not the body.</b> The property wanted is only
         /// that the private key was present; signing the request would need a
         /// canonical serialization that a C# record and a serde struct agree on
-        /// for ever, and the first day they disagreed no Runner could restart.
+        /// forever, and the first day they disagreed no Runner could restart.
         /// </para>
         /// <para>
         /// The challenge endpoint deliberately does not require approval, so a

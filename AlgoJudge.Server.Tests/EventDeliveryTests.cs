@@ -82,7 +82,7 @@ public class EventDeliveryTests(ServerFixture server)
             .OfType<SeriesChangedData>()
             .Where(d => d.Change == change)];
 
-    // ── the round, as the people sitting in it experience it ─────────────────
+    // ── the round, as the people taking it experience it ─────────────────────
 
     /// <summary>
     /// <b>The reported defect.</b>

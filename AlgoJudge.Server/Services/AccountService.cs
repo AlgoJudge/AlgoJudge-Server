@@ -288,7 +288,7 @@ namespace AlgoJudge.Server.Services
                     endedAt = Wire.At(s.EndedAt),
                     // Null once the window has passed and `AddressSweeper` has
                     // been through, which is the honest answer: it is not held
-                    // any more.
+                    // anymore.
                     ipAddress = s.IpAddress?.ToString(),
                     userAgent = s.UserAgent,
                 }),

@@ -769,7 +769,7 @@ public class LockdownTests(ServerFixture server)
 
     /// <summary>
     /// And nothing outside that activity notices. This is the whole point of the
-    /// scope: a lecturer marking one round an examination must not lock their
+    /// scope: an instructor marking one round an examination must not lock their
     /// students out of every other course on the installation.
     /// </summary>
     [Fact]
@@ -889,7 +889,7 @@ public class LockdownTests(ServerFixture server)
     /// <summary>
     /// Their own work in a displaced round goes with it — re-reading last week's
     /// accepted solution during an examination is what this exists to stop — and
-    /// their work in the round they are sitting stays.
+    /// their work in the round they are taking stays.
     /// </summary>
     [Fact]
     public async Task Own_submissions_from_a_displaced_round_are_withheld()

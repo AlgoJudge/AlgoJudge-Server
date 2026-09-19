@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Database.Models
     /// possible: resolving the request removes the reference, and
     /// <c>FileService.DeleteUnreferencedAsync</c> takes the bytes with it.
     /// A text column would copy every printed solution into a second table,
-    /// unchecksummed, and into every backup for ever.
+    /// unchecksummed, and into every backup forever.
     /// </para>
     /// <para>
     /// <see cref="ActivityId"/> is always present, so authorization never has to

@@ -122,7 +122,7 @@ public class RoleMigrationTests : IAsyncLifetime
 
         // **The same set in a different order is the same set.** Comparing the
         // stored text, or a sorted list against an unsorted one, would leave this
-        // grant a copy for ever and nobody would know why.
+        // grant a copy forever and nobody would know why.
         Assert.Equal(role.Id, grants["reordered"].RoleId);
 
         // Edited by hand: left exactly as it was, keys renamed and nothing else.

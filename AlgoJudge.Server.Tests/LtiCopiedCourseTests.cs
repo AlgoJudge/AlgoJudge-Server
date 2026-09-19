@@ -128,7 +128,7 @@ public class LtiCopiedCourseTests(ServerFixture server)
         Assert.Equal(newSlug, after.GetProperty("activitySlug").GetString());
         Assert.NotEqual(originalActivity, after.GetProperty("activityId").GetString());
 
-        // **Nothing is shared any more**, so the launch that was refused now
+        // **Nothing is shared anymore**, so the launch that was refused now
         // has nothing to be refused for.
         Assert.True(after.GetProperty("sharingAcknowledged").GetBoolean());
 

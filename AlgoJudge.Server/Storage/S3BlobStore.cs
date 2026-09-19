@@ -49,7 +49,7 @@ namespace AlgoJudge.Server.Storage
         /// never answered was therefore never given up on, and this store takes
         /// <see cref="S3BlobStore.bucketGate"/> across its S3 calls — so one such
         /// request would have queued every upload in the installation behind it,
-        /// for ever.
+        /// forever.
         /// </para>
         /// <para>
         /// Ten minutes, and generous on purpose: a write is a single

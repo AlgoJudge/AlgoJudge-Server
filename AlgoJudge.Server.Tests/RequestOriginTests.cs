@@ -272,7 +272,7 @@ public class RequestOriginTests
 /// <summary>
 /// And the column can answer the question it exists for.
 /// <para>
-/// The two assertions above stop a mapped address being stored. This one is the
+/// The two assertions above stop a mapped address from being stored. This one is the
 /// other half: that what is stored is an <c>inet</c> and not a string, so
 /// "was this inside the examination room's network" is a containment test
 /// rather than a comparison of spellings. It is the query the eventual

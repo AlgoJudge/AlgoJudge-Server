@@ -94,7 +94,7 @@ namespace AlgoJudge.Server.Lti.Data
                 // **Deliberately not unique on ActivityId.** Decided 2026-08-13:
                 // one activity may be placed in more than one course, because a
                 // shared problem set across two groups is real. What stops it
-                // happening silently is `SharingAcknowledged`, not a constraint —
+                // from happening silently is `SharingAcknowledged`, not a constraint —
                 // a constraint here would refuse the case rather than surface it.
                 link.HasIndex(l => l.ActivityId);
 

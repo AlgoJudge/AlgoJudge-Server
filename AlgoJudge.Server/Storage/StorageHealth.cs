@@ -57,7 +57,7 @@ namespace AlgoJudge.Server.Storage
     /// <para>
     /// <b>The smoke test writes a blob</b>, and the container's own healthcheck
     /// polls every ten seconds. Probing on every poll would mean a write, a read
-    /// and a delete six times a minute for ever, which is a strange thing for a
+    /// and a delete six times a minute forever, which is a strange thing for a
     /// health check to do to a bucket somebody pays for. So the answer is cached
     /// for <see cref="Freshness"/> and the store is asked again only when it has
     /// gone stale — §11 says health reports the smoke test, not that it performs

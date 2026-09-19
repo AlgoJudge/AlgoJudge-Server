@@ -152,7 +152,7 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
         builder.UseSetting("ConnectionStrings:DbConnectionString", connectionString);
         builder.UseSetting("Admin:Token", AdminToken);
 
-        // **Named, because nothing is assumed any more.** An installation that
+        // **Named, because nothing is assumed anymore.** An installation that
         // configures no storage refuses to start, and the suite is an
         // installation. `postgres` rather than an object store: the whole point
         // is that everything above IBlobStore behaves identically, and a suite
@@ -227,7 +227,7 @@ public sealed class ServerFixture : WebApplicationFactory<Program>, IAsyncLifeti
             // disposes none, each sweeping the one shared database on its own
             // timer and posting to its own gradebook. A test's pending grade was
             // taken by somebody else's worker and posted somewhere the test could
-            // not see, so its own count stayed at nought.
+            // not see, so its own count stayed at zero.
             // `A_settled_grade_is_not_posted_again_on_every_sweep` and
             // `An_excluded_submission_earns_no_grade` failed on it about one full
             // run in two and never alone. Measured 2026-08-24: three of six runs,

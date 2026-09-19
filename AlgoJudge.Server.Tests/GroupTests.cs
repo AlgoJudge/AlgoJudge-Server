@@ -216,7 +216,7 @@ public class GroupTests(ServerFixture server)
     /// <para>
     /// The ungrouped count is what they sent <b>while not in a group</b>. Count
     /// everything they ever sent and leaving costs them the group's spending;
-    /// count only the group's and leaving is a way round the ceiling.
+    /// count only the group's and leaving is a way around the ceiling.
     /// </para>
     /// </summary>
     [Fact]

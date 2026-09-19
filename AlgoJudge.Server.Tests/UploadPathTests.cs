@@ -24,7 +24,7 @@ public class UploadPathTests(ServerFixture server)
     /// The Client's own form appends <c>file</c> before <c>sha256</c>
     /// (<c>FileApiHttp.upload</c>), and a streamed reader sees the parts in that
     /// order — so an implementation that needed the checksum first would refuse
-    /// every real upload while passing a test that sent them the other way round.
+    /// every real upload while passing a test that sent them the other way around.
     /// Both orders, therefore, and neither is a contract.
     /// </para>
     /// </summary>

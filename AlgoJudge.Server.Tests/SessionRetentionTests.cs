@@ -40,7 +40,7 @@ public class SessionRetentionTests(ServerFixture server)
     /// sets <c>ExpiresAt</c> by hand to make its own case, so deleting the one
     /// line that sets it in the middleware left all of them green — and the
     /// column would have gone back to being what it was for a year: declared,
-    /// indexed, never written, with every address kept for ever.
+    /// indexed, never written, with every address kept forever.
     /// </para>
     /// <para>
     /// The window is pushed out on every touch rather than fixed at creation, so

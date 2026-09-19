@@ -111,7 +111,7 @@ public class ScoringTests(ServerFixture server)
     /// replaced with a percentage.
     ///
     /// <para>
-    /// A package marking out of 70 reported a full solve as <c>100 / 100</c>:
+    /// A package scoring out of 70 reported a full solve as <c>100 / 100</c>:
     /// the problem's own scoring, which the rule says is fixed to the problem,
     /// silently rewritten by a convention nobody chose.
     /// </para>
@@ -138,7 +138,7 @@ public class ScoringTests(ServerFixture server)
         var runner = await Build.RunnerAsync(server);
         var job = await runner.ClaimUntilAsync(submissionId);
         // **Out of 140, and not out of 100.** This test passed under the old
-        // code the first time it was run, because a package marking out of a
+        // code the first time it was run, because a package scoring out of a
         // hundred is the one scale on which a percentage and the package's own
         // scale are the same number — so it was asserting nothing. Found by
         // sabotage, which is what sabotage is for.
@@ -161,7 +161,7 @@ public class ScoringTests(ServerFixture server)
     /// the old code could not tell apart from anything else.
     /// </summary>
     [Fact]
-    public async Task A_problem_marked_out_of_one_is_not_reported_as_a_percentage()
+    public async Task A_problem_scored_out_of_one_is_not_reported_as_a_percentage()
     {
         var (slug, roundId) = await Build.ActivityAsync(server);
 
@@ -179,7 +179,7 @@ public class ScoringTests(ServerFixture server)
 
         var runner = await Build.RunnerAsync(server);
         var job = await runner.ClaimUntilAsync(submissionId);
-        // An external judge marking out of one, which is the shape that first
+        // An external judge scoring out of one, which is the shape that first
         // exposed the assumed scale on 2026-08-16.
         await runner.ReportAsync(
             job.GetProperty("jobId").GetString()!,
@@ -198,7 +198,7 @@ public class ScoringTests(ServerFixture server)
     ///
     /// <para>
     /// Zero is not a problem worth nothing: it is a problem whose every number
-    /// is <c>0 / 0</c>, which a board reads as full marks because zero out of
+    /// is <c>0 / 0</c>, which a board reads as a full score because zero out of
     /// zero is the whole of it. A problem nobody should score is a problem
     /// nobody should attach.
     /// </para>

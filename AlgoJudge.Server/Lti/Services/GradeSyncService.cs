@@ -133,7 +133,7 @@ namespace AlgoJudge.Server.Lti.Services
             // submission remembers the group it was sent as, a gradebook row does
             // not — so moving somebody moves the grade they will next be given.
             // That follows from moves being allowed, and it is worth knowing
-            // before somebody discovers it in a mark.
+            // before somebody discovers it in a grade.
             var groups = await core.Grants.AsNoTracking()
                 .Where(g => g.ActivityId == activity.Id && g.GroupId != null)
                 .Select(g => new { g.UserId, GroupId = g.GroupId!.Value })
@@ -186,8 +186,8 @@ namespace AlgoJudge.Server.Lti.Services
                 .ToList();
 
             // **Best by fraction, not by raw score.** Ordering on `Score` alone
-            // compares numbers marked out of different maxima — a package
-            // republished with more tests, or a type marking out of one — so
+            // compares numbers scored out of different maxima — a package
+            // republished with more tests, or a type scoring out of one — so
             // 70 out of 100 beat 1 out of 1, and the gradebook was sent the
             // worse of somebody's two attempts. Every other reader in the
             // product had already been fixed to compare fractions; this one
@@ -214,7 +214,7 @@ namespace AlgoJudge.Server.Lti.Services
             // **Somebody who had a grade and has stopped earning one.** Excluding
             // the only submission there was drops that contestant out of
             // everything above, and a row nobody computes is a row nobody
-            // corrects — the platform would hold the old mark for ever. So they
+            // corrects — the platform would hold the old grade forever. So they
             // are carried back in at zero, which is what a gradebook column has
             // to say for "no counting work here". Nothing could reach this state
             // before exclusions existed.
@@ -267,7 +267,7 @@ namespace AlgoJudge.Server.Lti.Services
                 // **The policy state and the sync state are different things**,
                 // and conflating them cost an hour: comparing them directly moved
                 // every synchronized row back to pending on every sweep, so every
-                // grade in the installation was reposted every minute for ever.
+                // grade in the installation was reposted every minute forever.
                 // Caught by a test that expected a sweep to leave a teacher's
                 // edit alone.
                 var scoreChanged = Math.Abs(existing.DesiredScore - score) > 0.0001;

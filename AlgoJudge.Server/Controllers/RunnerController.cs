@@ -49,7 +49,7 @@ namespace AlgoJudge.Server.Controllers
         /// How much of the wait to spread the timeouts over.
         /// <para>
         /// Without it every Runner that started together answers its own 204 in
-        /// the same instant and they all ask again together, for ever — the same
+        /// the same instant and they all ask again together, forever — the same
         /// reason the Runner's own backoff carries jitter. A sixteenth is
         /// Consul's figure for the same problem.
         /// </para>
@@ -263,7 +263,7 @@ namespace AlgoJudge.Server.Controllers
         /// A separate endpoint rather than a flag on `jobs/claim`, for the same
         /// reason a trial has its own table (D-9): a Runner that has not been
         /// taught about trials keeps working, and a queue of trials can never
-        /// delay the queue that decides somebody's mark.
+        /// delay the queue that decides somebody's score.
         /// </para>
         /// </summary>
         [HttpPost("trials/claim")]

@@ -135,7 +135,7 @@ namespace AlgoJudge.Server.Database
                     }
 
                     // Said before rather than after: if this is the run that
-                    // hangs or dies half way, the log has to name what it was
+                    // hangs or dies halfway, the log has to name what it was
                     // doing.
                     logger.LogInformation(
                         "Applying {Count} migration(s) to {What}: {Migrations}",

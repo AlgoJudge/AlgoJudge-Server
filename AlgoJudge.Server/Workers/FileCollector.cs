@@ -13,7 +13,7 @@ namespace AlgoJudge.Server.Workers
     }
 
     /// <summary>
-    /// Removes files nothing points at any more.
+    /// Removes files nothing points at anymore.
     /// <para>
     /// <b>Retention is a property of what references a file, not of the file.</b>
     /// The sweep asks two questions in order: is anything still pointing at this,
@@ -23,7 +23,7 @@ namespace AlgoJudge.Server.Workers
     /// <list type="table">
     /// <item><term>Referenced by nothing</term><description>24 hours from upload</description></item>
     /// <item><term>Superseded Runner attachment</term><description>30 days, or past 20 revisions per name</description></item>
-    /// <item><term>Superseded instance document</term><description>for ever — it is the history</description></item>
+    /// <item><term>Superseded instance document</term><description>forever — it is the history</description></item>
     /// <item><term>Referenced by a problem version</term><description>as long as the version exists</description></item>
     /// </list>
     /// <para>

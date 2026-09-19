@@ -124,7 +124,7 @@ public class TrialRunTests(ServerFixture server)
 
     /// <summary>
     /// **A trial's package stops being readable the moment its lease runs out**,
-    /// not when a sweeper next gets round to noticing.
+    /// not when a sweeper next gets around to noticing.
     /// <para>
     /// The check's own comment said <i>"a Runner that has finished or lost the
     /// lease can no longer read the bytes"</i> and the query asked only whether
@@ -132,7 +132,7 @@ public class TrialRunTests(ServerFixture server)
     /// pass. So an expired lease kept the package open for up to a tick, while
     /// the job half of the same test in the controller had been comparing the
     /// deadline all along. Nothing here is swept: the lease is moved into the
-    /// past and the file asked for straight away, which is the window itself.
+    /// past and the file asked for right away, which is the window itself.
     /// </para>
     /// </summary>
     [Fact]
@@ -195,7 +195,7 @@ public class TrialRunTests(ServerFixture server)
     }
 
     /// <summary>
-    /// The ceiling, which is what stops `trial:run` becoming a way to occupy
+    /// The ceiling, which is what stops `trial:run` from becoming a way to occupy
     /// every Runner.
     ///
     /// <para>

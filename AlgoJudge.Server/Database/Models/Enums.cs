@@ -108,7 +108,7 @@ namespace AlgoJudge.Server.Database.Models
     }
 
     /// <summary>
-    /// Where a print request has got to.
+    /// Where a print request stands.
     /// <para>
     /// Three, and one transition. A printout is not an evaluation job: nothing
     /// claims it, nothing leases it, and no Runner ever meets it — so

@@ -445,8 +445,8 @@ namespace AlgoJudge.Server
             //
             // **Public files carry it too**, deliberately. A crawler still
             // fetches them, which is what a rendered page needs, and a `noindex`
-            // on a resource does not stop the page that draws it being indexed.
-            // What it does stop is the terms of service being indexed twice —
+            // on a resource does not stop the page that draws it from being indexed.
+            // What it does is stop the terms of service from being indexed twice —
             // once as the Client's own page and once as the raw document behind
             // it, competing with each other.
             //

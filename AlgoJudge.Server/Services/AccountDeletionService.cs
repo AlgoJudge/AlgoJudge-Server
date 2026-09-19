@@ -342,7 +342,7 @@ namespace AlgoJudge.Server.Services
             // The rows stay, as they do when `AddressSweeper` reaches them: what
             // is deleted is the person, not the record that somebody signed in.
             // **The submissions stay and their origin does not.** A submission
-            // survives erasure by design — it is somebody's mark in a contest —
+            // survives erasure by design — it is somebody's score in a contest —
             // but where it was sent from is a fact about the person, not about
             // the work.
             // **The exclusion reason goes, the exclusion stays.** Whether a

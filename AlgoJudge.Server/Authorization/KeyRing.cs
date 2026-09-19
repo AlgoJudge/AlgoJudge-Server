@@ -129,7 +129,7 @@ namespace AlgoJudge.Server.Authorization
                 // **The first encrypts; every one listed decrypts.** Rotating a
                 // certificate means putting the new one at the head and keeping
                 // the old, because keys encrypted with a certificate nobody
-                // supplies any more are keys nobody can read — which looks
+                // supplies anymore are keys nobody can read — which looks
                 // exactly like having no key ring at all, the failure this class
                 // exists to remove.
                 protection.ProtectKeysWithCertificate(certificates[0]);

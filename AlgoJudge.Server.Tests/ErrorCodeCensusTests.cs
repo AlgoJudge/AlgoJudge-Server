@@ -200,7 +200,7 @@ public class ErrorCodeCensusTests
         foreach (Match word in Word.Matches(text)) codes.Add(word.Groups[1].Value);
     }
 
-    /// <summary>The argument list starting just inside its opening bracket.</summary>
+    /// <summary>The argument list starting just inside its opening parenthesis.</summary>
     private static string Arguments(string source, int start)
     {
         var depth = 1;

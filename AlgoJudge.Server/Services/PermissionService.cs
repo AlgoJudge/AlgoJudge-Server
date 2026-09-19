@@ -54,7 +54,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// An <c>invited</c> grant confers nothing: it is an offer, and the user
         /// is not in the activity until they accept. Filtering it out here rather
-        /// than at each call site is what stops one endpoint forgetting.
+        /// than at each call site is what stops one endpoint from forgetting.
         /// </para>
         /// </summary>
         private async Task<List<Grant>> GrantsAsync(CancellationToken ct)
@@ -159,7 +159,7 @@ namespace AlgoJudge.Server.Services
 
         // Both of these used to short-circuit on the administrator bypass before
         // asking `EffectiveAsync`. They no longer may: the bypass is not the
-        // first rule any more, and a shortcut past the override would let an
+        // first rule anymore, and a shortcut past the override would let an
         // administrator who stepped down inside one activity keep every right
         // there — through whichever of the two call sites forgot.
         public async Task<bool> HasAsync(string permission, Guid? activityId = null, CancellationToken ct = default) =>

@@ -113,7 +113,7 @@ namespace AlgoJudge.Server.Authorization
             {
                 // **Reading the descriptor is the test.** It deserializes, which
                 // decrypts — so a key encrypted with a certificate nobody
-                // supplies any more fails exactly here, which is the failure
+                // supplies anymore fails exactly here, which is the failure
                 // this report exists to find before an operator meets it as
                 // everybody being signed out.
                 var readable = true;
@@ -147,7 +147,7 @@ namespace AlgoJudge.Server.Authorization
             {
                 problems.Add(
                     $"{unreadable} key(s) cannot be read. A certificate that encrypted them is "
-                    + "not in DataProtection:Certificates any more; put it back, at the end of "
+                    + "not in DataProtection:Certificates anymore; put it back, at the end of "
                     + "the list, or every session minted under them is already lost.");
             }
 

@@ -344,8 +344,8 @@ namespace AlgoJudge.Server.Services
         /// Take a waiting row, or take one over.
         /// <para>
         /// **Taking over is allowed and is not a race.** Two people at one
-        /// printer see each other; what the state prevents is each of them
-        /// opening a sheet believing they are alone. Somebody who walked away
+        /// printer see each other; what the state does is keep each of them
+        /// from opening a sheet believing they are alone. Somebody who walked away
         /// with a row is a person the other can ask, and refusing the take-over
         /// would leave the page stuck until an administrator edited a row.
         /// </para>
@@ -438,7 +438,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// <b>Removed, not superseded.</b> <c>FileCollector</c> acts on
         /// <c>SupersededAt</c> only for <see cref="FileOwnerKind.Runner"/>, so
-        /// superseding a printout's reference would protect the bytes for ever —
+        /// superseding a printout's reference would protect the bytes forever —
         /// the exact opposite of what this is for, and the worst possible failure
         /// here, because it would look like a disposal.
         /// </para>

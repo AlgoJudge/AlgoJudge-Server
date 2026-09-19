@@ -11,7 +11,7 @@ activities, problems, submissions, `EvaluationJob`, files, and results.
 
 ## Technology
 
-Not a direction any more — this is what the repository is, read off it on
+Not a direction anymore — this is what the repository is, read off it on
 2026-08-30. `../PROJECT_CONTEXT.md` and the root `README.md` are the longer
 answers; this is the short one.
 
@@ -145,7 +145,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
   `s3` — and a deployment may configure several stores, including several of one
   kind. Six things about it are easy to get wrong later:
   - **An installation that configures no storage does not start.** The default
-    store id is `objects`; there is no synthesized fallback any more.
+    store id is `objects`; there is no synthesized fallback anymore.
   - **`File.StorageId` names a store, not a kind**, and is permanent once a row
     holds it. A read follows its own row, so there is never a global switch-over.
   - **Nothing materializes a whole file.** Uploads are read with
@@ -392,13 +392,13 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     — which gained a second writer on 2026-08-28 when pre-configuration landed.
   - **A conflict answers 409 with the path's own code**, never a 500.
     `Utils/Concurrency.SaveAsync` re-reads and runs the guard again, so the loser
-    gets `deletion.notPending` or `merge.window.closed` — what it would have got
+    gets `deletion.notPending` or `merge.window.closed` — what it would have gotten
     had it read a moment later. An unhandled one is a 500, which is what
     `RunnerService.ExtendAsync` was written to stop.
   - **Both sweepers were already atomic, and that is why they needed no
     reordering.** `AnonymizeAsync` writes nothing of its own — it moves tracked
     entities — so the emptying and its marker land in one `SaveChanges`. An undo
-    or a halt that committed first therefore stops the account being emptied
+    or a halt that committed first therefore stops the account from being emptied
     rather than merely losing a marker.
   - **The migration runs no SQL.** `xmin` is a system column that every table
     already has, so Npgsql drops the `AddColumn` operations and writes only the
@@ -478,7 +478,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     audits transitive packages where .NET 8's audited direct ones only, so
     `Testcontainers.PostgreSql` 3.10.0 had been carrying it unreported. **The
     `NpgsqlCidr` converter is the one this upgrade was written to delete**; that
-    is a model change and wants its own step.
+    is a model change and needs its own step.
 
 - **The suite runs in 2 m 10 s, and it took 4 m 49 s until 2026-08-29.** Nothing
   was deleted and nothing was skipped: 640 tests before and after.
@@ -690,7 +690,7 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     two instances migrating an empty database together kill one with `23505` on
     `PK___EFMigrationsHistory`, not the `42P07` one would expect, because each
     migration runs in a transaction so the collision lands on the history row.
-  - **The explicit unlock is belt and braces and says so.** Removing it *and*
+  - **The explicit unlock is belt and suspenders and says so.** Removing it *and*
     the `CloseConnection` beside it still leaves no lock held, because disposing
     the context returns the connection and Npgsql resets it. It stays so that
     `Ensure` leaves somebody else's `DatabaseFacade` as it found it — and it has

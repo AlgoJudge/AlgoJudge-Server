@@ -138,7 +138,7 @@ public class RunnerConformanceTests(ServerFixture server)
 
     /// <summary>
     /// A nonce is spent by being used. Without this, one captured exchange is
-    /// replayable for ever — which is the replay protection the 2025-03-27
+    /// replayable forever — which is the replay protection the 2025-03-27
     /// proposal listed as an open question.
     /// </summary>
     [Fact]
@@ -407,7 +407,7 @@ public class RunnerConformanceTests(ServerFixture server)
         Assert.Null(stored.FinishedAt);
         Assert.Contains("checksum", stored.FailureReason ?? "", StringComparison.OrdinalIgnoreCase);
 
-        // And it does not count toward what this Runner has got through.
+        // And it does not count toward what this Runner has gotten through.
         var runnerRow = await context.Runners.FirstAsync(r => r.Id == Guid.Parse(runner.Id));
         Assert.Equal(0, runnerRow.CompletedJobs);
     }
@@ -627,7 +627,7 @@ public class RunnerConformanceTests(ServerFixture server)
     /// claim's own filter.
     /// </para>
     /// <para>
-    /// And it must not wait for ever, which is the last clause: finishing the
+    /// And it must not wait forever, which is the last clause: finishing the
     /// running attempt is what releases it, and that nudge had to be added —
     /// a completion used not to be work for anybody.
     /// </para>
@@ -740,7 +740,7 @@ public class RunnerConformanceTests(ServerFixture server)
     /// <para>
     /// **The claim is where this is checked, not the stored row.** A Server that
     /// answered the refusal and wrote the fields anyway would pass a row
-    /// assertion written the other way round; what has to still be true is which
+    /// assertion written the other way around; what has to still be true is which
     /// work this Runner is handed.
     /// </para>
     /// </summary>
@@ -908,13 +908,13 @@ public class RunnerConformanceTests(ServerFixture server)
     }
 
     /// <summary>
-    /// **A caller that claims and goes away cannot refund for ever.**
+    /// **A caller that claims and goes away cannot refund forever.**
     /// <para>
     /// Undoing a handout whose answer was never delivered is right — the
     /// delivery demonstrably did not happen. But it decrements the count the
     /// delivery cap reads, and a caller that claims and aborts in a loop has
     /// exactly the shape the cap exists to stop: a job that poisons every
-    /// Runner it reaches would be refunded back below the cap for ever and
+    /// Runner it reaches would be refunded back below the cap forever and
     /// never fail.
     /// </para>
     /// <para>
@@ -1515,7 +1515,7 @@ public class RunnerConformanceTests(ServerFixture server)
     /// are read.
     /// <para>
     /// Every reader but the grade export assumed a scale of a hundred, so a
-    /// Runner marking out of one — which is what a problem judged elsewhere does,
+    /// Runner scoring out of one — which is what a problem judged elsewhere does,
     /// since an external judge gives no partial information — had its accepted
     /// answer rescaled as `round(1 / 100 × 50)`. That is zero. The export
     /// meanwhile sent fifty, so a board and a gradebook showed two different
@@ -1527,7 +1527,7 @@ public class RunnerConformanceTests(ServerFixture server)
     /// </para>
     /// </summary>
     [Fact]
-    public async Task A_runner_marking_out_of_one_is_not_read_as_a_hundredth()
+    public async Task A_runner_scoring_out_of_one_is_not_read_as_a_hundredth()
     {
         var (slug, _) = await Build.ActivityAsync(server);
         var participant = await Build.ParticipantAsync(server, slug);

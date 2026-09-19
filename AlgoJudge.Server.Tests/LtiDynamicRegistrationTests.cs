@@ -349,7 +349,7 @@ public class LtiDynamicRegistrationTests(ServerFixture server)
     /// The invitation is single-use and only a manager can mint another, so a
     /// refusal that spends one leaves the platform's administrator stuck. It was
     /// claimed by an <c>ExecuteUpdateAsync</c> outside any transaction, before
-    /// either outbound call — so every one of the failures above burnt a code.
+    /// either outbound call — so every one of the failures above burned a code.
     /// </summary>
     [Fact]
     public async Task A_refusal_does_not_spend_the_invitation()

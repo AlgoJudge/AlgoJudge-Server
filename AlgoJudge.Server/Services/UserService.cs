@@ -480,7 +480,7 @@ namespace AlgoJudge.Server.Services
             // It compared `s.UserId` to the caller, which is true of every row
             // when somebody reads their own sessions and false of every row when
             // they read anybody else's — so the marker that exists to stop an
-            // operator ending the session they are working from marked all six
+            // operator from ending the session they are working from marked all six
             // of their browsers, or none.
             var current = origin.SessionId;
 

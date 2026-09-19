@@ -48,7 +48,7 @@ public class QueueSignalTests
     /// **A nudge that has already been and gone is not delivered again.**
     /// <para>
     /// The other half, and the reason the source is replaced rather than reset:
-    /// without it a capture would inherit a completed task for ever and every
+    /// without it a capture would inherit a completed task forever and every
     /// wait would return at once, turning a held claim back into the busy poll
     /// the whole arrangement replaced. The generous five seconds above and the
     /// short deadline here are deliberate — this one has to prove a timeout, so

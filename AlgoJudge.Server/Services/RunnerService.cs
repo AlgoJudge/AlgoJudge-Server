@@ -660,7 +660,7 @@ namespace AlgoJudge.Server.Services
             // computed — and the stored result is what it computed.
             //
             // **But only for the Runner whose result it is.** The ownership term
-            // is not a second lease check; it is what stops this branch being an
+            // is not a second lease check; it is what stops this branch from being an
             // oracle. Without it any approved Runner naming a finished job and
             // any well-formed GUID was handed that job's result id and state,
             // having held nothing. A completed report leaves `RunnerId` where it
@@ -920,7 +920,7 @@ namespace AlgoJudge.Server.Services
             // happen — but a caller that claims and aborts in a loop has the
             // same shape as a row that throws after every commit, and that is
             // what `FreeRefunds` exists to stop. Without the bound this path
-            // resets the count for ever and `DeliveryCap` never fires; without
+            // resets the count forever and `DeliveryCap` never fires; without
             // the counter, nothing downstream can tell how often work was
             // really handed out, because `Deliveries` alone no longer says.
             if (job.Refunds < FreeRefunds && job.Deliveries > 0)

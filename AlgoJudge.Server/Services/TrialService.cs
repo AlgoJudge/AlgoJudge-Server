@@ -47,9 +47,9 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// The ceiling exists because `trial:run` is grantable to participants,
         /// and a separate table keeps trials out of the queue that decides
-        /// somebody's mark but **not** off the machines: a Runner claiming from
+        /// somebody's score but **not** off the machines: a Runner claiming from
         /// both spends the same minutes either way. Thirty people each timing a
-        /// slow program is thirty containers nobody is being marked for.
+        /// slow program is thirty containers nobody is being graded for.
         /// </para>
         /// <para>
         /// Counted on the unfinished rather than on a lifetime total, so it
@@ -403,8 +403,8 @@ namespace AlgoJudge.Server.Services
                 if (trial.Deliveries >= 5)
                 {
                     // Handed out five times and never answered. Something about
-                    // this package stops a Runner finishing, and returning it
-                    // again would spend the machine on it for ever.
+                    // this package stops a Runner from finishing, and returning it
+                    // again would spend the machine on it forever.
                     trial.State = EvaluationJobState.Failed;
                     trial.FailureReason = "No Runner finished this trial after five attempts";
                     trial.FinishedAt = now;

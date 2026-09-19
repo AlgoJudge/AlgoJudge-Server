@@ -9,7 +9,7 @@ namespace AlgoJudge.Server.Tests;
 /// written, and put <c>type=</c> on every request. <b>Nothing bound it.</b> The
 /// action beside it comma-split <c>state</c> on the very next line, so the
 /// convention existed and was simply not carried across — and because ASP.NET
-/// Core discards a query key nothing binds, ticking the chip answered 200 with
+/// Core discards a query key nothing binds, selecting the chip answered 200 with
 /// the unfiltered list and the same page count.
 /// </para>
 /// <para>

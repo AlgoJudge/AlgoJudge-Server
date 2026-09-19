@@ -150,7 +150,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// <para>
     /// <b>It links nobody yet.</b> This is the half of milestone 2 that can be
     /// built without deciding §13 #2 — what a provisional link may be made from —
-    /// and it is deliberately first, because that decision should be taken
+    /// and it is deliberately first, because that decision should be made
     /// against a roster somebody has actually looked at.
     /// </para>
     /// </summary>

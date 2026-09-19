@@ -35,7 +35,7 @@ namespace AlgoJudge.Server.Services
         /// <b>The ungrouped half is the one that is easy to get wrong.</b> It is
         /// not "everything this person sent" — it is what they sent <i>while not
         /// in a group</i>. Leaving that out would let somebody leave a group and
-        /// find their allowance topped up with the group's spending, or come back
+        /// find the group's spending added to their allowance, or come back
         /// to a fresh one; keeping it in means a move changes what happens next
         /// and nothing that already happened, which is the rule the whole
         /// stamping arrangement exists for.

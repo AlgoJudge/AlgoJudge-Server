@@ -256,7 +256,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// Whether this round's standings may be seen at all. Absent `from` means
-        /// the round's own start; absent `to` means for ever.
+        /// the round's own start; absent `to` means forever.
         /// </summary>
         private static bool WindowOpen(Series round, DateTime now)
         {

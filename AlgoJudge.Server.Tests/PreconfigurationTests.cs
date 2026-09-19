@@ -359,7 +359,7 @@ public class PreconfigurationTests(ServerFixture server) : IDisposable
     /// A setting the file does not state is left as it was, never reset.
     /// <para>
     /// <b>Two flags, and they are chosen rather than picked.</b> One ships
-    /// <c>true</c> and is moved to <c>false</c>, the other the other way round —
+    /// <c>true</c> and is moved to <c>false</c>, the other the other way around —
     /// so neither "reset to the shipped default" nor "reset to the type's
     /// default" can pass. The first draft of this test used one flag and a
     /// sabotage walked straight through it.
@@ -651,7 +651,7 @@ public class PreconfigurationTests(ServerFixture server) : IDisposable
     /// <b>A first start it cannot read does not happen.</b> Discovered by
     /// writing the tests above: a fresh installation applies at start, so a
     /// directory it refuses is a deployment that stops rather than one that
-    /// comes up half configured. That is the right way round — the only start
+    /// comes up half configured. That is the right way around — the only start
     /// this can happen on is the one somebody is watching, and every later
     /// restart reads nothing at all.
     /// </summary>

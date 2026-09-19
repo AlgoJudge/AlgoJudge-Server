@@ -31,7 +31,7 @@ namespace AlgoJudge.Server.Controllers
     public class AdminKeyRingController(IKeyRingOperations keyring) : ControllerBase
     {
         /// <summary>
-        /// What is in force, what is stored, and what needs doing — including
+        /// What is in force, what is stored, and what needs to be done — including
         /// the validation nothing else performs: whether every stored key can
         /// still be read with the certificates configured today.
         /// </summary>

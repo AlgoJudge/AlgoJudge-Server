@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// A trial round of a real competition. <b>Above <see cref="Exam"/></b>,
         /// by the owner's decision — a national final's warm-up displaces a
-        /// midterm rather than the other way round.
+        /// midterm rather than the other way around.
         /// </summary>
         public const int OfficialPractice = 40;
 

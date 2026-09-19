@@ -18,7 +18,7 @@ namespace AlgoJudge.Server.Workers
     /// <para>
     /// A job that keeps being reclaimed is a job that keeps killing Runners.
     /// Past the delivery cap it is failed with a reason rather than returned to
-    /// the queue, because retrying it for ever is how one bad package stops an
+    /// the queue, because retrying it forever is how one bad package stops an
     /// installation.
     /// </para>
     /// </summary>
@@ -67,7 +67,7 @@ namespace AlgoJudge.Server.Workers
         /// <para>
         /// Swept beside jobs rather than by a second worker: it is the same
         /// deadline doing the same thing, and a trial whose lease expired with
-        /// nobody to reclaim it would sit `running` for ever — visible to
+        /// nobody to reclaim it would sit `running` forever — visible to
         /// whoever asked for it, and counting against their ceiling.
         /// </para>
         /// </summary>
@@ -118,7 +118,7 @@ namespace AlgoJudge.Server.Workers
                 // Told apart from a Runner that took the job and died judging it
                 // by a single fact: whether anything ever came back against this
                 // lease. Bounded by `FreeRefunds`, or a row that throws after
-                // every commit is refunded for ever and never reaches the cap.
+                // every commit is refunded forever and never reaches the cap.
                 if (job.AcknowledgedAt is null && job.Refunds < RunnerService.FreeRefunds)
                 {
                     job.Deliveries -= 1;

@@ -50,7 +50,7 @@ public class ActivityDuplicationTests(ServerFixture server)
 
         // **Every date on the entity, found by reflection rather than listed.**
         // A round has seven of them and the list grows; a test naming them one by
-        // one passes for ever after somebody adds the eighth and forgets to shift
+        // one passes forever after somebody adds the eighth and forgets to shift
         // it, and the failure shows up as a copy that reveals a ranking early.
         var dated = typeof(Series).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.PropertyType == typeof(DateTime?))
@@ -350,7 +350,7 @@ public class ActivityDuplicationTests(ServerFixture server)
 
         // A copy is the only activity born unpublished. Everything made through
         // `POST /activities` is published from birth, which is exactly why the
-        // button could send `published: true` for ever and change nothing.
+        // button could send `published: true` forever and change nothing.
         var before = await manager.GetFromJsonAsync<JsonElement>(
             $"/api/v1/manager/activities/{copy}");
         Assert.False(before.TryGetProperty("publishedAt", out _));

@@ -109,7 +109,7 @@ public class SubmissionOriginTests(ServerFixture server)
     /// <summary>
     /// Erasing an account leaves the work and takes where it was sent from.
     /// <para>
-    /// A submission survives erasure by design — it is somebody's mark in a
+    /// A submission survives erasure by design — it is somebody's score in a
     /// contest — but the address is a fact about the person rather than about
     /// the work.
     /// </para>

@@ -196,7 +196,7 @@ public class OpaqueEnvelopeTests(ServerFixture server)
     /// <para>
     /// <b>Rewritten 2026-08-22, an hour after it was written.</b> It proved a
     /// deep merge in the Server, of the problem version's configuration under
-    /// the assignment's. There is no version layer any more: the chain is the
+    /// the assignment's. There is no version layer anymore: the chain is the
     /// package and the assignment, the Runner performs the one merge that
     /// remains, and what this can still prove — and has to — is that the
     /// Server hands the document over <b>whole</b>.
