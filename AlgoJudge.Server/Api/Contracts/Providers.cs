@@ -29,11 +29,43 @@ namespace AlgoJudge.Server.Api.Contracts
 
     public record MappingRuleDto
     {
-        /// <summary>The value at the provider's claim path, matched exactly.</summary>
+        /// <summary>
+        /// The value at the provider's claim path, matched exactly. For an LTI
+        /// platform it is the role a launch carries — <c>Learner</c>,
+        /// <c>Instructor</c>, or a sub-role such as
+        /// <c>Instructor#TeachingAssistant</c>.
+        /// </summary>
         public required string ClaimValue { get; init; }
 
-        /// <summary>The permission role that value grants.</summary>
-        public required string RoleName { get; init; }
+        /// <summary>
+        /// What this value grants, as a set: the union of every target.
+        /// <para>
+        /// A list rather than one role, because a grant links several and a rule
+        /// that could name only one would be the place the model stopped being
+        /// able to say what an installation means.
+        /// </para>
+        /// </summary>
+        public required IReadOnlyList<MappingTargetDto> Targets { get; init; }
+    }
+
+    /// <summary>One thing a rule hands out.</summary>
+    public record MappingTargetDto
+    {
+        /// <summary>
+        /// `role` | `activityParticipants` | `activityManagers`. The last two
+        /// resolve against the activity a launch names, so only a platform's
+        /// rules may use them.
+        /// </summary>
+        public required string Kind { get; init; }
+
+        /// <summary>The role's id, under `role`. Null for a slot.</summary>
+        public string? RoleId { get; init; }
+
+        /// <summary>
+        /// The role's name, on the way out only, so a screen reads a rule
+        /// without a second lookup.
+        /// </summary>
+        public string? RoleName { get; init; }
     }
 
     public record IdentityProviderDto
@@ -51,10 +83,14 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? DeletionUrl { get; init; }
         public required string ClaimPath { get; init; }
 
-        /// <summary>`deny` | `defaultTemplate`.</summary>
+        /// <summary>`deny` | `defaultRole`.</summary>
         public required string UnmappedBehavior { get; init; }
 
-        public string? DefaultRoleName { get; init; }
+        /// <summary>
+        /// The roles granted when nothing matched, under `defaultRole`. Empty
+        /// under `deny`, where there is nothing to grant.
+        /// </summary>
+        public required IReadOnlyList<string> DefaultRoleIds { get; init; }
         public required bool DeletionChannelEnabled { get; init; }
 
         /// <summary>
@@ -113,10 +149,15 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? DeletionUrl { get; init; }
         public string? ClaimPath { get; init; }
 
-        /// <summary>`deny` | `defaultTemplate`. Absent is `deny`.</summary>
+        /// <summary>`deny` | `defaultRole`. Absent is `deny`.</summary>
         public string? UnmappedBehavior { get; init; }
 
-        public string? DefaultRoleName { get; init; }
+        /// <summary>
+        /// The roles granted when nothing matched. Required under
+        /// `defaultRole`; ignored under `deny`, where a stored list would be a
+        /// setting that looks live and is not.
+        /// </summary>
+        public IReadOnlyList<string>? DefaultRoleIds { get; init; }
         public bool DeletionChannelEnabled { get; init; }
 
         /// <summary>Absent means "leave the stored one alone", as above.</summary>

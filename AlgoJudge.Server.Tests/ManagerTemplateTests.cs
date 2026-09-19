@@ -119,7 +119,7 @@ public class ManagerTemplateTests(ServerFixture server)
             userId = id,
             activityId = await ActivityIdAsync(slug),
             permissions = Array.Empty<string>(),
-            roleId = await Build.RoleIdAsync(admin, "manager"),
+            roleIds = new[] { await Build.RoleIdAsync(admin, "manager") },
         }));
 
         return client;
@@ -344,7 +344,7 @@ public class ManagerTemplateTests(ServerFixture server)
             type = current.GetProperty("type").GetString(),
             rankingType = current.GetProperty("rankingType").GetString(),
             timeZone = current.GetProperty("timeZone").GetString(),
-            participantRoleId = await Build.RoleIdAsync(admin, "admin"),
+            participantRoleIds = new[] { await Build.RoleIdAsync(admin, "admin") },
         });
 
         // Refused by the first arm of the shared rule — `system:administrator`
@@ -354,10 +354,7 @@ public class ManagerTemplateTests(ServerFixture server)
         Assert.False(refused.IsSuccessStatusCode, await refused.Content.ReadAsStringAsync());
 
         var after = await Build.GetAsync(manager, $"/api/v1/manager/activities/{slug}");
-        Assert.True(
-            after.TryGetProperty("participantRoleId", out var role) is false
-            || role.ValueKind == JsonValueKind.Null,
-            "the activity still enrolls into the shipped role");
+        Assert.Empty(after.GetProperty("participantRoleIds").EnumerateArray());
     }
 
     /// <summary>

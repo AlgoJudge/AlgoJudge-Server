@@ -42,7 +42,7 @@ public class MembershipTests(ServerFixture server)
         {
             userId = id,
             permissions = Array.Empty<string>(),
-            roleId = await Build.RoleIdAsync(admin, "participant"),
+            roleIds = new[] { await Build.RoleIdAsync(admin, "participant") },
         }));
 
         return client;

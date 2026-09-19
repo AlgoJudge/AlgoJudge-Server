@@ -39,6 +39,7 @@ namespace AlgoJudge.Server.Services
     public partial class IdentityProviderService(
         ApplicationDbContext context,
         IPermissionService permissions,
+        IProviderMappingService mapping,
         IProviderRegistry registry
     ) : IIdentityProviderService
     {
@@ -63,8 +64,21 @@ namespace AlgoJudge.Server.Services
             return Project(provider, await CountsAsync(ct));
         }
 
+        /// <summary>
+        /// The providers this screen owns: the doors people sign in through.
+        /// <para>
+        /// An LTI platform carries a provider row so a grant's roles can say
+        /// where they came from, and it is not one of these. Listed as one it
+        /// came with an enable switch and a delete button, and deleting it broke
+        /// every launch from that course while looking like tidying up.
+        /// </para>
+        /// </summary>
         private IQueryable<IdentityProvider> Loaded() =>
-            context.IdentityProviders.AsNoTracking().Include(p => p.MappingRules);
+            context.IdentityProviders
+                .AsNoTracking()
+                .Where(p => p.Kind == ProviderKind.SignIn)
+                .Include(p => p.MappingRules).ThenInclude(r => r.Role)
+                .Include(p => p.DefaultRoles);
 
         private async Task<Dictionary<Guid, int>> CountsAsync(CancellationToken ct) =>
             await context.UserIdentities
@@ -77,7 +91,7 @@ namespace AlgoJudge.Server.Services
         /// secret</b>, because <see cref="IdentityProviderDto"/> has no field for
         /// one — the type is the enforcement, not this method's discipline.
         /// </summary>
-        private static IdentityProviderDto Project(IdentityProvider p, Dictionary<Guid, int> counts) => new()
+        private IdentityProviderDto Project(IdentityProvider p, Dictionary<Guid, int> counts) => new()
         {
             Id = Wire.Id(p.Id),
             Slug = p.Slug,
@@ -92,17 +106,14 @@ namespace AlgoJudge.Server.Services
             UnmappedBehavior = p.UnmappedBehavior == UnmappedBehavior.DefaultRole
                 ? "defaultRole"
                 : "deny",
-            DefaultRoleName = p.DefaultRoleName,
+            DefaultRoleIds = [.. p.DefaultRoles.Select(d => Wire.Id(d.RoleId))],
             DeletionChannelEnabled = p.DeletionChannelEnabled,
             // Built from the same string the OIDC options are built from, so the
             // panel and the handler cannot disagree about it.
             CallbackPath = Program.ApiPathBase + FederatedSchemes.CallbackPath(p.Slug),
             HasClientSecret = !string.IsNullOrEmpty(p.ClientSecret),
             HasDeletionSecret = !string.IsNullOrEmpty(p.DeletionSecret),
-            MappingRules = p.MappingRules
-                .OrderBy(r => r.ClaimValue, StringComparer.Ordinal)
-                .Select(r => new MappingRuleDto { ClaimValue = r.ClaimValue, RoleName = r.RoleName })
-                .ToList(),
+            MappingRules = mapping.Projected(p),
             LinkedAccounts = counts.TryGetValue(p.Id, out var n) ? n : 0,
             CreatedAt = Wire.At(p.CreatedAt),
         };
@@ -150,7 +161,8 @@ namespace AlgoJudge.Server.Services
 
             var provider = await context.IdentityProviders
                 .Include(p => p.MappingRules)
-                .FirstOrDefaultAsync(p => p.Id == id, ct)
+                .Include(p => p.DefaultRoles)
+                .FirstOrDefaultAsync(p => p.Id == id && p.Kind == ProviderKind.SignIn, ct)
                 ?? throw new NotFoundException("Identity provider");
 
             var slug = (input.Slug ?? "").Trim().ToLowerInvariant();
@@ -240,170 +252,36 @@ namespace AlgoJudge.Server.Services
                     "provider.deletionSecret.required");
             }
 
-            var defaultRole = string.IsNullOrWhiteSpace(input.DefaultRoleName)
-                ? null
-                : input.DefaultRoleName.Trim();
-
-            if (provider.UnmappedBehavior == UnmappedBehavior.DefaultRole)
-            {
-                if (defaultRole is null)
-                {
-                    throw new ValidationException(
-                        "unmappedBehavior is defaultRole, so defaultRoleName must name a role",
-                        "provider.defaultRole.required");
-                }
-                await RequireMappableAsync(defaultRole, ct);
-            }
-            else if (defaultRole is not null)
-            {
-                // Under `deny` there is nothing to grant, and a name left behind
-                // in the row would be a setting that looks live and is not.
-                defaultRole = null;
-            }
-            provider.DefaultRoleName = defaultRole;
-
             if (input.MappingRules is { } wanted)
             {
-                await ReplaceRulesAsync(provider, wanted, ct);
+                await mapping.ReplaceRulesAsync(provider, wanted, allowSlots: false, ct);
             }
-        }
 
-        private async Task ReplaceRulesAsync(
-            IdentityProvider provider, IReadOnlyList<MappingRuleDto> wanted, CancellationToken ct)
-        {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            var rules = new List<IdentityProviderMappingRule>();
-
-            foreach (var rule in wanted)
+            var defaults = input.DefaultRoleIds ?? [];
+            if (provider.UnmappedBehavior == UnmappedBehavior.DefaultRole)
             {
-                var value = (rule.ClaimValue ?? "").Trim();
-                var template = (rule.RoleName ?? "").Trim();
-
-                if (value.Length == 0)
+                if (defaults.Count == 0)
                 {
-                    throw new ValidationException("A rule needs a claim value", "provider.rule.claimValue.required");
-                }
-                if (!seen.Add(value))
-                {
-                    // Two rules for one value is not a merge — it is a question
-                    // about ordering that this model deliberately does not have.
                     throw new ValidationException(
-                        $"The claim value \"{value}\" is mapped twice", "provider.rule.duplicate");
-                }
-
-                await RequireMappableAsync(template, ct);
-                rules.Add(new IdentityProviderMappingRule
-                {
-                    ProviderId = provider.Id,
-                    ClaimValue = value,
-                    RoleName = template,
-                });
-            }
-
-            // **Matched up by claim value rather than emptied and refilled**, and
-            // the reason is not tidiness.
-            //
-            // `MappingRules.Clear()` followed by `Add` of fresh objects made
-            // **every update of a provider that had rules answer 500**: EF wrote
-            // `UPDATE` for the new rows instead of `INSERT`, and the update
-            // matched nothing — `DbUpdateConcurrencyException`, "expected to
-            // affect 1 row(s), but actually affected 0". Every entity here
-            // assigns its own key in its initializer, so a rule reached through
-            // a *tracked* parent's navigation already carries a non-default `Id`
-            // and is taken for a row that exists. The create path never showed it
-            // because there the parent itself is `Add`ed and the whole graph goes
-            // in as new.
-            //
-            // Reusing the row for a claim value that is staying also means no
-            // pair is deleted and re-inserted in one `SaveChanges`, which the
-            // unique index on `(ProviderId, ClaimValue)` would otherwise be
-            // entitled to reject depending on the order EF chose. And
-            // `CreatedAt` survives an edit that did not touch that rule.
-            var existing = provider.MappingRules.ToDictionary(r => r.ClaimValue, StringComparer.Ordinal);
-
-            foreach (var rule in rules)
-            {
-                if (existing.Remove(rule.ClaimValue, out var kept))
-                {
-                    kept.RoleName = rule.RoleName;
-                }
-                else
-                {
-                    // Stated to the context, not only to the collection: that is
-                    // what marks it `Added` in spite of the key it arrived with.
-                    provider.MappingRules.Add(rule);
-                    context.IdentityProviderMappingRules.Add(rule);
+                        "unmappedBehavior is defaultRole, so defaultRoleIds must name at least one role",
+                        "provider.defaultRole.required");
                 }
             }
-
-            foreach (var gone in existing.Values)
+            else
             {
-                provider.MappingRules.Remove(gone);
-                context.IdentityProviderMappingRules.Remove(gone);
+                // Under `deny` there is nothing to grant, and roles left behind
+                // in the row would be a setting that looks live and is not.
+                defaults = [];
             }
-        }
-
-        /// <summary>
-        /// The two guards, in one place so neither can be applied without the
-        /// other.
-        /// <para>
-        /// Both refusals name the permission at fault. A validation message that
-        /// says only "not allowed" turns a five-second correction into an
-        /// afternoon of guessing which entry in a template of thirty is the
-        /// problem.
-        /// </para>
-        /// </summary>
-        private async Task RequireMappableAsync(string templateName, CancellationToken ct)
-        {
-            if (templateName.Length == 0)
-            {
-                throw new ValidationException("A rule needs a role", "provider.rule.role.required");
-            }
-
-            // Global roles only, for the reason `ClaimMappingService` resolves
-            // only those: a mapping is the installation's, and an activity's role
-            // is not the installation's to hand out.
-            var template = await context.PermissionRoles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.ActivityId == null && t.Name == templateName, ct)
-                ?? throw new ValidationException(
-                    $"No role named \"{templateName}\"", "provider.rule.role.unknown");
-
-            var granted = Parse(template.Permissions);
-
-            // Unreachable in every configuration, and not merely absent from the
-            // templates that ship. An installation may invent a template, and one
-            // carrying this key would otherwise turn a directory group into a way
-            // of becoming an administrator here.
-            if (granted.Contains(Permissions.SystemAdministrator))
-            {
-                throw new ForbiddenActionException(
-                    $"\"{templateName}\" grants {Permissions.SystemAdministrator}, which no claim may ever grant",
-                    "provider.rule.administrator");
-            }
-
-            // The same rule that governs writing a grant. Without it, holding
-            // `provider:manage` would be a way of granting yourself anything: map
-            // a group you are in onto a template you could not otherwise assign,
-            // then sign in through the provider.
-            var mine = await permissions.EffectiveAsync(null, ct);
-            if (!mine.Contains(Permissions.SystemAdministrator))
-            {
-                var excess = granted.Where(p => !mine.Contains(p)).ToList();
-                if (excess.Count > 0)
-                {
-                    throw new ForbiddenActionException(
-                        "Cannot map onto permissions you do not hold: " + string.Join(", ", excess),
-                        "provider.rule.excess");
-                }
-            }
+            await mapping.ReplaceDefaultRolesAsync(provider, defaults, ct);
         }
 
         public async Task DeleteAsync(Guid id, CancellationToken ct)
         {
             await permissions.RequireAsync(Permissions.ProviderManage, null, ct);
 
-            var provider = await context.IdentityProviders.FirstOrDefaultAsync(p => p.Id == id, ct)
+            var provider = await context.IdentityProviders
+                .FirstOrDefaultAsync(p => p.Id == id && p.Kind == ProviderKind.SignIn, ct)
                 ?? throw new NotFoundException("Identity provider");
 
             // Refused rather than cascaded. Removing a provider that people sign
@@ -483,16 +361,5 @@ namespace AlgoJudge.Server.Services
             }
         }
 
-        private static IReadOnlyList<string> Parse(string json)
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<List<string>>(json) ?? [];
-            }
-            catch (JsonException)
-            {
-                return [];
-            }
-        }
     }
 }

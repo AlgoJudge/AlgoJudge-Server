@@ -47,7 +47,7 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser
     ) : IPermissionService
     {
-        private List<Grant>? grants;
+        private List<HeldGrant>? grants;
 
         /// <summary>
         /// Every grant this user holds, loaded once.
@@ -57,21 +57,22 @@ namespace AlgoJudge.Server.Services
         /// than at each call site is what stops one endpoint from forgetting.
         /// </para>
         /// </summary>
-        private async Task<List<Grant>> GrantsAsync(CancellationToken ct)
+        private async Task<List<HeldGrant>> GrantsAsync(CancellationToken ct)
         {
             if (grants is not null) return grants;
 
             var user = await currentUser.GetAsync(ct);
             if (user is null) return grants = [];
 
-            // `Include`, because a grant's permissions are its role's and its
-            // own together. Without it every linked grant would resolve to its
-            // additions alone, which for an ordinary participant is nothing at
-            // all — a silent lockout rather than a visible error.
+            // The projection in `GrantReads` carries the roles, because a grant's
+            // permissions are its roles' and its own together. Read without them
+            // every linked grant resolves to its additions alone, which for an
+            // ordinary participant is nothing at all — a silent lockout rather
+            // than a visible error.
             grants = await context.Grants
                 .AsNoTracking()
-                .Include(g => g.Role)
                 .Where(g => g.UserId == user.Id && g.State == GrantState.Active)
+                .Held()
                 .ToListAsync(ct);
             return grants;
         }
@@ -83,8 +84,7 @@ namespace AlgoJudge.Server.Services
         /// every screen, and the only other way to be wrong is to treat it as an
         /// administrator.
         /// </summary>
-        private static IReadOnlyList<string> Parse(Grant grant) =>
-            Permissions.Effective(grant.Role?.Permissions, grant.Permissions);
+        private static IReadOnlyList<string> Parse(HeldGrant grant) => grant.Confers();
 
         private async Task<bool> IsAdministratorAsync(CancellationToken ct)
         {
@@ -106,7 +106,7 @@ namespace AlgoJudge.Server.Services
         /// there is one. Its presence is what makes the rest of the model stop
         /// applying inside that activity.
         /// </summary>
-        private async Task<Grant?> OverrideAsync(Guid activityId, CancellationToken ct) =>
+        private async Task<HeldGrant?> OverrideAsync(Guid activityId, CancellationToken ct) =>
             (await GrantsAsync(ct))
                 .FirstOrDefault(g => g.ActivityId == activityId && g.OverrideSystem);
 

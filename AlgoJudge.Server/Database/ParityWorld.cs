@@ -426,8 +426,8 @@ namespace AlgoJudge.Server.Database
             }
             context.Activities.Add(activity);
 
-            var managerRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Manager, ct);
-            var participantRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Participant, ct);
+            var managerRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Manager, ct);
+            var participantRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Participant, ct);
 
             var managerGrant = new Grant
             {
@@ -435,7 +435,7 @@ namespace AlgoJudge.Server.Database
                 ActivityId = activity.Id,
                 IsSystem = true,
             };
-            DefaultRoles.Carry(managerGrant, managerRole, Permissions.ManagerTemplate, DefaultRoles.Manager);
+            DefaultRoles.Carry(context, managerGrant, managerRole is null ? [] : [managerRole], DateTime.UtcNow);
             context.Grants.Add(managerGrant);
 
             var accounts = new Dictionary<string, User>();
@@ -450,7 +450,7 @@ namespace AlgoJudge.Server.Database
                     IsSystem = false,
                 };
                 DefaultRoles.Carry(
-                    grant, participantRole, Permissions.ParticipantTemplate, DefaultRoles.Participant);
+                    context, grant, participantRole is null ? [] : [participantRole], DateTime.UtcNow);
                 context.Grants.Add(grant);
             }
 

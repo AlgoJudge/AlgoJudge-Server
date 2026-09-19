@@ -80,7 +80,10 @@ namespace AlgoJudge.Server.Lti
     /// </summary>
     public static class LtiRoles
     {
-        private const string Membership = "http://purl.imsglobal.org/vocab/lis/v2/membership#";
+        /// <summary>The context vocabulary, without the separator a bare role adds.</summary>
+        private const string MembershipRoot = "http://purl.imsglobal.org/vocab/lis/v2/membership";
+
+        private const string Membership = MembershipRoot + "#";
         private const string System = "http://purl.imsglobal.org/vocab/lis/v2/system/person#";
         private const string Institution = "http://purl.imsglobal.org/vocab/lis/v2/institution/person#";
 
@@ -92,48 +95,78 @@ namespace AlgoJudge.Server.Lti
         public const string InstitutionInstructor = Institution + "Instructor";
 
         /// <summary>
-        /// Whether this set of roles runs the course rather than takes part in it.
+        /// The values a platform's rules may be written against, for one set of
+        /// roles: the principal role of each, and the principal plus its
+        /// sub-role where one was sent.
         /// <para>
         /// <b>A launch decides membership, not privilege.</b> What the resulting
-        /// grant actually carries comes from a permission role an operator
-        /// chose, the same as every other grant — so this answers one question
-        /// only: which of the two templates the platform's roles point at.
+        /// grant carries comes from rules an operator wrote, the same as every
+        /// other grant — so this answers one question: which values to match.
         /// </para>
         /// <para>
-        /// <c>Administrator</c> is deliberately <b>not</b> here. A system role at
-        /// the platform says what somebody may do in Moodle; reading it as
-        /// authority inside AlgoJudge would let a claim mint privilege, which is
-        /// the one thing the permission model forbids everywhere else.
+        /// <b>Context roles only.</b> An institution or system role says what
+        /// somebody may do at the platform: an <c>Administrator</c> there
+        /// administers Moodle, and an institution <c>Instructor</c> teaches
+        /// somewhere in the institution, not in this course. Reading either as
+        /// authority here would let a claim mint privilege, which is the one
+        /// thing the permission model forbids everywhere else. The institution
+        /// vocabulary was read as a context role until 2026-09-19, so a lecturer
+        /// enrolled as a student in a colleague's course ran it.
         /// </para>
-        /// </summary>
         /// <para>
         /// <b>Both spellings are accepted, because platforms send both.</b> A
         /// launch carries the full vocabulary IRI; Moodle's roster service
         /// answers with the bare term — <c>Learner</c>, <c>Instructor</c> —
         /// measured on 5.2.2, 2026-08-15. Matching IRIs alone would read every
-        /// instructor on a roster as a participant, silently, which is the same
-        /// shape of defect as the flattened roles claim that made every launch a
-        /// learner.
+        /// instructor on a roster as a participant, silently.
         /// </para>
-        public static bool RunsTheCourse(IEnumerable<string> roles) =>
-            roles.Any(role => Term(role) is "Instructor" or "ContentDeveloper" or "Mentor");
-
-        /// <summary>
-        /// The role itself, with any vocabulary in front of it removed.
         /// <para>
-        /// <c>InstitutionInstructor</c> is the institution vocabulary's own
-        /// <c>Instructor</c>, so trimming the namespace makes the two one term —
-        /// which is what the list above wants anyway.
+        /// A sub-role yields both values, most specific first:
+        /// <c>Instructor#TeachingAssistant</c> and <c>Instructor</c>. Reading
+        /// only the text after the <c>#</c> made a teaching assistant a
+        /// participant and read the sub-role as though it were the role.
         /// </para>
         /// </summary>
-        private static string Term(string role)
+        public static IReadOnlyList<string> Values(IEnumerable<string> roles)
         {
-            var hash = role.LastIndexOf('#');
-            var term = hash >= 0 ? role[(hash + 1)..] : role;
-            // A context role may arrive as `Instructor#TeachingAssistant`; the
-            // part before the sub-role is the one that decides.
-            var slash = term.LastIndexOf('/');
-            return slash >= 0 ? term[(slash + 1)..] : term;
+            var values = new List<string>();
+
+            foreach (var role in roles)
+            {
+                if (role is null) continue;
+                var trimmed = role.Trim();
+                if (trimmed.Length == 0) continue;
+
+                // A vocabulary IRI, or a bare term. Only the context vocabulary
+                // — `.../membership` — and bare terms are read.
+                var hash = trimmed.LastIndexOf('#');
+                var vocabulary = hash >= 0 ? trimmed[..hash] : "";
+                var tail = hash >= 0 ? trimmed[(hash + 1)..] : trimmed;
+
+                if (vocabulary.Length > 0 && !vocabulary.StartsWith(MembershipRoot, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // `.../membership/Instructor#TeachingAssistant` — the principal
+                // role is the last segment of the vocabulary, the sub-role the
+                // text after the hash. `.../membership#Instructor` has no
+                // sub-role, and the vocabulary ends where the root does.
+                var slash = vocabulary.LastIndexOf('/');
+                var hasSubRole = vocabulary.Length > MembershipRoot.Length && slash >= 0;
+                var principal = hasSubRole ? vocabulary[(slash + 1)..] : tail;
+                var sub = hasSubRole ? tail : null;
+
+                if (sub is not null) Add(values, $"{principal}#{sub}");
+                Add(values, principal);
+            }
+
+            return values;
+
+            static void Add(List<string> into, string value)
+            {
+                if (value.Length > 0 && !into.Contains(value, StringComparer.Ordinal)) into.Add(value);
+            }
         }
     }
 }

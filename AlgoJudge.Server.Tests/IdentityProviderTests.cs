@@ -64,8 +64,8 @@ public class IdentityProviderTests(ServerFixture server)
         var created = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("editable", new[]
             {
-                new { claimValue = "staff", roleName = "manager" },
-                new { claimValue = "students", roleName = "participant" },
+                await Build.RuleAsync(admin, "staff", "manager"),
+                await Build.RuleAsync(admin, "students", "participant"),
             }));
         await Sign.Succeeded(created);
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
@@ -74,15 +74,16 @@ public class IdentityProviderTests(ServerFixture server)
         var edited = await admin.PutAsJsonAsync($"/api/v1/identity/providers/{id}",
             Registration("editable", new[]
             {
-                new { claimValue = "staff", roleName = "participant" },
-                new { claimValue = "guests", roleName = "participant" },
+                await Build.RuleAsync(admin, "staff", "participant"),
+                await Build.RuleAsync(admin, "guests", "participant"),
             }));
         await Sign.Succeeded(edited);
 
         var read = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/identity/providers/{id}");
         var rules = read.GetProperty("mappingRules").EnumerateArray()
             .ToDictionary(r => r.GetProperty("claimValue").GetString()!,
-                          r => r.GetProperty("roleName").GetString());
+                          r => r.GetProperty("targets").EnumerateArray()
+                                .Single().GetProperty("roleName").GetString());
 
         Assert.Equal(["guests", "staff"], rules.Keys.OrderBy(k => k));
         Assert.Equal("participant", rules["staff"]);
@@ -92,8 +93,8 @@ public class IdentityProviderTests(ServerFixture server)
         await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/identity/providers/{id}",
             Registration("editable", new[]
             {
-                new { claimValue = "staff", roleName = "participant" },
-                new { claimValue = "guests", roleName = "participant" },
+                await Build.RuleAsync(admin, "staff", "participant"),
+                await Build.RuleAsync(admin, "guests", "participant"),
             })));
     }
 
@@ -205,7 +206,7 @@ public class IdentityProviderTests(ServerFixture server)
         var refused = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("with-a-back-door", new[]
             {
-                new { claimValue = "staff", roleName = "back-door" },
+                await Build.RuleAsync(admin, "staff", "back-door"),
             }));
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
@@ -239,7 +240,7 @@ public class IdentityProviderTests(ServerFixture server)
         var refused = await operatorClient.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("over-reaching", new[]
             {
-                new { claimValue = "lecturers", roleName = "manager" },
+                await Build.RuleAsync(admin, "lecturers", "manager"),
             }));
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
@@ -257,7 +258,7 @@ public class IdentityProviderTests(ServerFixture server)
         var allowed = await operatorClient.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("within-reach", new[]
             {
-                new { claimValue = "lecturers", roleName = "just-templates" },
+                await Build.RuleAsync(admin, "lecturers", "just-templates"),
             }));
         await Sign.Succeeded(allowed);
     }
@@ -274,7 +275,7 @@ public class IdentityProviderTests(ServerFixture server)
     /// </para>
     /// </summary>
     [Fact]
-    public async Task A_mapped_template_cannot_be_deleted_and_follows_a_rename()
+    public async Task A_mapped_role_cannot_be_deleted_and_a_rename_moves_nothing()
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
 
@@ -289,7 +290,7 @@ public class IdentityProviderTests(ServerFixture server)
         var created = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("maps-a-template", new[]
             {
-                new { claimValue = "students", roleName = "mapped-set" },
+                await Build.RuleAsync(admin, "students", "mapped-set"),
             }));
         await Sign.Succeeded(created);
 
@@ -297,8 +298,10 @@ public class IdentityProviderTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Equal("role.mapped", await Code(refused));
 
-        // A rename has to reach the rule, or the provider goes on naming
-        // something that no longer answers.
+        // A rename changes a label and nothing else. The rule names the role
+        // by id, so nothing has to follow it — and nothing else's rule is
+        // rewritten because it happened to share the old name, which is what
+        // let one activity's manager repoint the installation's mapping.
         var renamed = await admin.PutAsJsonAsync($"/api/v1/roles/{templateId}", new
         {
             name = "mapped-set-renamed",
@@ -309,8 +312,10 @@ public class IdentityProviderTests(ServerFixture server)
         await using var context = server.NewContext();
         var rule = await context.IdentityProviderMappingRules
             .Include(r => r.Provider)
+            .Include(r => r.Role)
             .FirstAsync(r => r.Provider!.Slug == "maps-a-template");
-        Assert.Equal("mapped-set-renamed", rule.RoleName);
+        Assert.Equal(Guid.Parse(templateId!), rule.RoleId);
+        Assert.Equal("mapped-set-renamed", rule.Role!.Name);
     }
 
     /// <summary>
@@ -397,8 +402,8 @@ public class IdentityProviderTests(ServerFixture server)
         var refused = await admin.PostAsJsonAsync("/api/v1/identity/providers",
             Registration("mapped-twice", new[]
             {
-                new { claimValue = "staff", roleName = "participant" },
-                new { claimValue = "staff", roleName = "participant" },
+                await Build.RuleAsync(admin, "staff", "participant"),
+                await Build.RuleAsync(admin, "staff", "participant"),
             }));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);

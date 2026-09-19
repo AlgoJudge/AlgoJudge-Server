@@ -17,8 +17,35 @@ namespace AlgoJudge.Server.Database.Models
         /// </summary>
         Deny = 0,
 
-        /// <summary>Admit, and grant the provider's configured default role.</summary>
+        /// <summary>Admit, and grant the provider's configured default roles.</summary>
         DefaultRole = 1,
+    }
+
+    /// <summary>What a provider row is for.</summary>
+    public enum ProviderKind
+    {
+        /// <summary>A door people sign in through, offered on the sign-in screen.</summary>
+        SignIn = 0,
+
+        /// <summary>
+        /// A system that vouches for people without being a door: it names the
+        /// source of a grant's roles and nothing else. Never listed as a
+        /// provider, never enabled, never deleted from the providers screen.
+        /// </summary>
+        Attribution = 1,
+    }
+
+    /// <summary>What one mapping rule hands out.</summary>
+    public enum MappingTarget
+    {
+        /// <summary>The role named by <see cref="IdentityProviderMappingRule.RoleId"/>.</summary>
+        Role = 0,
+
+        /// <summary>Whatever the activity enrolls participants into.</summary>
+        ActivityParticipants = 1,
+
+        /// <summary>Whatever the activity enrolls its managers into.</summary>
+        ActivityManagers = 2,
     }
 
     /// <summary>
@@ -146,10 +173,34 @@ namespace AlgoJudge.Server.Database.Models
         public UnmappedBehavior UnmappedBehavior { get; set; } = UnmappedBehavior.Deny;
 
         /// <summary>
-        /// The role granted under <see cref="UnmappedBehavior.DefaultRole"/>.
-        /// Null under <c>Deny</c>, where there is nothing to grant.
+        /// What this row is for: somebody signing in through it, or somebody an
+        /// LTI platform vouched for.
+        /// <para>
+        /// A platform needs a provider row so a grant's roles can say where they
+        /// came from and so a launch can be attributed, but it is not a door
+        /// anybody signs in through. Without this field the panel offered one as
+        /// an ordinary provider, complete with an enable switch and a delete
+        /// button that break every launch from that course.
+        /// </para>
+        /// <para>
+        /// Named for what the row does rather than for the module that writes
+        /// it: nothing in the core knows what an LTI platform is, and this field
+        /// does not teach it.
+        /// </para>
         /// </summary>
-        public string? DefaultRoleName { get; set; }
+        public ProviderKind Kind { get; set; } = ProviderKind.SignIn;
+
+        /// <summary>
+        /// The roles granted under <see cref="UnmappedBehavior.DefaultRole"/>.
+        /// Empty under <c>Deny</c>, where there is nothing to grant.
+        /// <para>
+        /// A set, like a rule's: a default that could name only one role while a
+        /// matched rule may name several would be a distinction an operator
+        /// trips over rather than one the model needs.
+        /// </para>
+        /// </summary>
+        public ICollection<IdentityProviderDefaultRole> DefaultRoles { get; set; }
+            = new List<IdentityProviderDefaultRole>();
 
         /// <summary>
         /// Whether this provider may report a deleted account over the back
@@ -180,18 +231,19 @@ namespace AlgoJudge.Server.Database.Models
     /// <summary>
     /// One line of the allowlist: this claim value grants this role.
     /// <para>
-    /// <b>The contribution this writes is a copy, and it is the one grant that
-    /// still is one.</b> A claim may match several rules at once and the
-    /// contribution is the union of every role they name, which a single link
-    /// cannot express. It loses nothing by being a copy: it is rewritten from
-    /// the rules at every sign-in, so editing a role it names reaches those
-    /// people the next time they sign in rather than immediately.
+    /// <b>The contribution this writes is a set of links.</b> A claim may match
+    /// several rules at once and what the person holds is the union of every
+    /// role they name — which is what a grant linking several roles can express
+    /// and a single link could not. It is still rewritten from the rules at
+    /// every sign-in, so a group taken away at the directory is taken away here.
     /// </para>
     /// <para>
-    /// It names the role by <see cref="RoleName"/> rather than by id because
-    /// that is what an operator configures and what the provider's documentation
-    /// will talk about. Only a global role may be named — mapping is system
-    /// scope — and deleting a named role is refused.
+    /// It names the role by <see cref="RoleId"/>. By name it was a reference
+    /// nothing enforced: names are unique only within a scope, so renaming an
+    /// activity's role rewrote the rules of every provider that named an
+    /// installation role of the same name — one course's manager deciding what a
+    /// directory group buys installation-wide. Only an installation role may be
+    /// named, and deleting a named one is refused.
     /// </para>
     /// </summary>
     public class IdentityProviderMappingRule
@@ -202,16 +254,44 @@ namespace AlgoJudge.Server.Database.Models
         public IdentityProvider? Provider { get; set; }
 
         /// <summary>
-        /// The value to match at <see cref="IdentityProvider.ClaimPath"/>,
-        /// compared by exact string equality. No patterns and no prefixes: a
-        /// wildcard in an allowlist is how an allowlist stops being one.
+        /// The value to match at <see cref="IdentityProvider.ClaimPath"/>, or —
+        /// for a platform — the role a launch carries, compared by exact string
+        /// equality. No patterns and no prefixes: a wildcard in an allowlist is
+        /// how an allowlist stops being one.
         /// </summary>
         public required string ClaimValue { get; set; }
 
-        /// <summary>The <see cref="Role.Name"/> this value grants.</summary>
-        public required string RoleName { get; set; }
+        /// <summary>
+        /// What this value grants: a named role, or one of the activity's two
+        /// enrollment sets. Only a platform's rules may aim at a slot — an OIDC
+        /// contribution is system scope, where there is no activity to resolve
+        /// one against.
+        /// </summary>
+        public MappingTarget Target { get; set; } = MappingTarget.Role;
+
+        /// <summary>
+        /// The role this value grants, or null when <see cref="Target"/> names a
+        /// slot instead.
+        /// </summary>
+        public Guid? RoleId { get; set; }
+        public Role? Role { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One role a provider hands out when a token matched no rule and
+    /// <see cref="UnmappedBehavior.DefaultRole"/> is set.
+    /// </summary>
+    public class IdentityProviderDefaultRole
+    {
+        public Guid Id { get; set; } = Uuid.New();
+
+        public Guid ProviderId { get; set; }
+        public IdentityProvider? Provider { get; set; }
+
+        public Guid RoleId { get; set; }
+        public Role? Role { get; set; }
     }
 
     /// <summary>

@@ -80,26 +80,26 @@ namespace AlgoJudge.Server.Database.Models
         public ICollection<ActivityGroup> Groups { get; set; } = new List<ActivityGroup>();
 
         /// <summary>
-        /// The roles this activity's own enrollments link to — for somebody
-        /// taking part, and for somebody running it.
+        /// The roles this activity's own enrollments link to — a set for
+        /// somebody taking part, and a set for somebody running it.
         /// <para>
-        /// Null means the installation's built-in <c>participant</c> and
-        /// <c>manager</c>. Set, they are what self-enrollment, a manager enrolling
-        /// somebody by hand, a bulk of temporary accounts and an LTI launch all
-        /// hand out here. <b>Without them an activity's own role could be created
-        /// and never reach anybody</b>: every automatic enrollment would still
-        /// land on the installation-wide one.
+        /// An empty slot means the installation's built-in <c>participant</c> or
+        /// <c>manager</c>. Filled, they are what self-enrollment, a manager
+        /// enrolling somebody by hand, a bulk of temporary accounts and an LTI
+        /// rule aimed at a slot all hand out here. <b>Without them an activity's
+        /// own role could be created and never reach anybody</b>: every automatic
+        /// enrollment would still land on the installation-wide one.
         /// </para>
         /// <para>
-        /// Only a global role or one of this activity's own may be named, which
-        /// is checked where they are written rather than by the foreign key.
+        /// Sets rather than single roles, because a grant links several: an
+        /// activity may enroll into the shipped role and its own beside it.
+        /// Only an installation role or one of this activity's own may be named,
+        /// which is checked where they are written rather than by the foreign
+        /// key.
         /// </para>
         /// </summary>
-        public Guid? ParticipantRoleId { get; set; }
-        public Role? ParticipantRole { get; set; }
-
-        public Guid? ManagerRoleId { get; set; }
-        public Role? ManagerRole { get; set; }
+        public ICollection<ActivityEnrollmentRole> EnrollmentRoles { get; set; }
+            = new List<ActivityEnrollmentRole>();
 
         /// <summary>Every role this activity owns.</summary>
         public ICollection<Role> Roles { get; set; } = new List<Role>();

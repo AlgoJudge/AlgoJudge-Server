@@ -19,6 +19,21 @@ namespace AlgoJudge.Server.Services
         Task RevokeAsync(Guid id, CancellationToken ct);
 
         /// <summary>
+        /// Adds roles to somebody's grant on an activity, creating the grant if
+        /// there is none. <b>Never removes one</b>, and never revises what a
+        /// person decided.
+        /// <para>
+        /// The one path an assertion from outside takes — a launch, a roster
+        /// read — and it is here rather than in the module that calls it so that
+        /// the staff flag, the announcement and the one-grant-per-activity rule
+        /// have a single implementation.
+        /// </para>
+        /// </summary>
+        Task<EnrollmentOutcome> AddRolesAsync(
+            string userId, Guid activityId, IReadOnlyList<Guid> roleIds,
+            Guid? sourceProviderId, CancellationToken ct);
+
+        /// <summary>
         /// Somebody has just joined an activity, or accepted an invitation to.
         /// <para>
         /// Announced from here because this owns who hears a grant change — the
@@ -39,13 +54,41 @@ namespace AlgoJudge.Server.Services
         /// to "may this person hand this out", and the copies drift.
         /// </para>
         /// </summary>
+        /// <param name="already">
+        /// What the thing being written already carries, exempt from the rule:
+        /// the excess check is about what this write <b>adds</b>.
+        /// </param>
         Task RequireGrantableRoleAsync(
-            Guid? activityId, IReadOnlyList<string> wanted, CancellationToken ct);
+            Guid? activityId, IReadOnlyList<string> wanted,
+            IReadOnlyList<string>? already, CancellationToken ct);
 
         Task<IReadOnlyList<RoleDto>> ListRolesAsync(Guid? activityId, CancellationToken ct);
+
+        /// <summary>The shipped role of this kind, by its key rather than its name.</summary>
+        Task<Role?> BuiltInRoleAsync(string builtInKey, CancellationToken ct);
         Task<RoleDto> CreateRoleAsync(RoleInputDto input, CancellationToken ct);
         Task<RoleDto> UpdateRoleAsync(Guid id, RoleInputDto input, CancellationToken ct);
         Task DeleteRoleAsync(Guid id, CancellationToken ct);
+    }
+
+    /// <summary>What an assertion from outside did to somebody's membership.</summary>
+    public enum EnrollmentOutcome
+    {
+        /// <summary>The grant existed and already carried every role. Nothing was written.</summary>
+        Unchanged = 0,
+
+        /// <summary>Roles were added to a grant that already existed.</summary>
+        Added = 1,
+
+        /// <summary>There was no grant, so there is one now.</summary>
+        Created = 2,
+
+        /// <summary>
+        /// The grant carries the override flag, so nothing was touched:
+        /// stepping down inside one activity is a decision a launch may not
+        /// undo.
+        /// </summary>
+        SkippedOverride = 3,
     }
 
     public class GrantService(
@@ -53,7 +96,8 @@ namespace AlgoJudge.Server.Services
         ICurrentUserService currentUser,
         IPermissionService permissions,
         IEventHub events,
-        IEventAudience audience
+        IEventAudience audience,
+        TimeProvider clock
     ) : IGrantService
     {
 
@@ -112,14 +156,7 @@ namespace AlgoJudge.Server.Services
             // activity they manage.
             var allowed = await permissions.ListScopeAsync(Permissions.GrantReadAll, activityId, ct);
 
-            var query = context.Grants
-                .AsNoTracking()
-                .Include(g => g.User)
-                .Include(g => g.Activity)
-                .Include(g => g.SourceProvider)
-                .Include(g => g.Group)
-                .Include(g => g.Role)
-                .AsQueryable();
+            var query = Loaded(context.Grants.AsNoTracking());
 
             // **A system grant is not an activity's business.** Somebody holding
             // the key on activities alone reads those activities' grants and no
@@ -168,19 +205,54 @@ namespace AlgoJudge.Server.Services
             GroupId = grant.GroupId is { } group ? Wire.Id(group) : null,
             GroupName = grant.Group?.Name,
             Permissions = Parse(grant.Permissions),
-            RoleId = grant.RoleId is { } role ? Wire.Id(role) : null,
-            RoleName = grant.Role?.Name,
-            RolePermissions = Parse(grant.Role?.Permissions ?? "[]"),
+            Roles = [.. grant.Roles
+                .Where(r => r.DismissedAt is null)
+                .OrderBy(r => r.Role?.Name, StringComparer.Ordinal)
+                .Select(ProjectedRoleLink)],
+            DismissedRoles = [.. grant.Roles
+                .Where(r => r.DismissedAt is not null)
+                .OrderBy(r => r.Role?.Name, StringComparer.Ordinal)
+                .Select(ProjectedRoleLink)],
             IsSystem = grant.IsSystem,
-            CopiedFromRoleName = grant.CopiedFromRoleName,
+            StaffByHand = grant.StaffByHand,
             State = grant.State == GrantState.Invited ? "invited" : "active",
             CreatedAt = Wire.At(grant.CreatedAt),
             Source = grant.SourceProviderId is null ? "manual" : "provider",
             SourceProviderId = grant.SourceProviderId is { } p ? Wire.Id(p) : null,
             SourceProviderName = grant.SourceProvider?.DisplayName,
-            Managed = grant.SourceProviderId is not null,
+            // A provider's system contribution, and nothing else. An activity
+            // grant is editable whoever wrote it.
+            Managed = grant.ActivityId is null && grant.SourceProviderId is not null,
             OverrideSystem = grant.OverrideSystem,
         };
+
+        private static GrantRoleDto ProjectedRoleLink(GrantRole link) => new()
+        {
+            RoleId = Wire.Id(link.RoleId),
+            Name = link.Role?.Name ?? "",
+            Permissions = Parse(link.Role?.Permissions ?? "[]"),
+            ActivityId = link.Role?.ActivityId is { } owner ? Wire.Id(owner) : null,
+            SourceProviderId = link.SourceProviderId is { } source ? Wire.Id(source) : null,
+            SourceProviderName = link.SourceProvider?.DisplayName,
+            DismissedAt = link.DismissedAt is { } at ? Wire.At(at) : null,
+        };
+
+        /// <summary>
+        /// Everything a grant's wire shape needs: the person, the activity, the
+        /// group, the source, and every role with its own source.
+        /// <para>
+        /// One place, because a reader that forgot the roles used to answer with
+        /// an empty set rather than with an error — which is how a group move
+        /// came to report a grant carrying no permissions at all.
+        /// </para>
+        /// </summary>
+        internal static IQueryable<Grant> Loaded(IQueryable<Grant> grants) => grants
+            .Include(g => g.User)
+            .Include(g => g.Activity)
+            .Include(g => g.SourceProvider)
+            .Include(g => g.Group)
+            .Include(g => g.Roles).ThenInclude(r => r.Role)
+            .Include(g => g.Roles).ThenInclude(r => r.SourceProvider);
 
         private static IReadOnlyList<string> Parse(string json)
         {
@@ -207,12 +279,10 @@ namespace AlgoJudge.Server.Services
             var systemGrants = await context.Grants
                 .AsNoTracking()
                 .Where(g => g.UserId == userId && g.ActivityId == null && g.State == GrantState.Active)
-                .Select(g => new { g.Permissions, Role = g.Role != null ? g.Role.Permissions : null })
+                .Held()
                 .ToListAsync(ct);
 
-            return systemGrants.Any(g => Permissions
-                .Effective(g.Role, g.Permissions)
-                .Contains(Permissions.SystemAdministrator));
+            return systemGrants.Any(g => g.Confers().Contains(Permissions.SystemAdministrator));
         }
 
         /// <summary>
@@ -237,12 +307,10 @@ namespace AlgoJudge.Server.Services
             var others = await context.Grants
                 .AsNoTracking()
                 .Where(g => g.Id != excluding && g.ActivityId == null && g.State == GrantState.Active)
-                .Select(g => new { g.Permissions, Role = g.Role != null ? g.Role.Permissions : null })
+                .Held()
                 .ToListAsync(ct);
 
-            return others.Any(g => Permissions
-                .Effective(g.Role, g.Permissions)
-                .Contains(Permissions.SystemAdministrator));
+            return others.Any(g => g.Confers().Contains(Permissions.SystemAdministrator));
         }
 
         /// <summary>
@@ -289,16 +357,16 @@ namespace AlgoJudge.Server.Services
         /// default. Both count: either way, deleting it leaves a provider
         /// pointing at nothing.
         /// </summary>
-        private async Task<IReadOnlyList<string>> ReferencingProvidersAsync(string name, CancellationToken ct)
+        private async Task<IReadOnlyList<string>> ReferencingProvidersAsync(Guid roleId, CancellationToken ct)
         {
             var byRule = await context.IdentityProviderMappingRules
-                .Where(r => r.RoleName == name)
+                .Where(r => r.RoleId == roleId)
                 .Select(r => r.Provider!.Slug)
                 .ToListAsync(ct);
 
-            var byDefault = await context.IdentityProviders
-                .Where(p => p.DefaultRoleName == name)
-                .Select(p => p.Slug)
+            var byDefault = await context.IdentityProviderDefaultRoles
+                .Where(d => d.RoleId == roleId)
+                .Select(d => d.Provider!.Slug)
                 .ToListAsync(ct);
 
             return [.. byRule.Concat(byDefault).Distinct().OrderBy(s => s, StringComparer.Ordinal)];
@@ -314,12 +382,19 @@ namespace AlgoJudge.Server.Services
         /// first.
         /// </para>
         /// <para>
-        /// <b>It never touches a managed contribution.</b> Those belong to a
-        /// provider's mapping and are rewritten at every sign-in, so an edit here
-        /// would last exactly until that person next signed in — and a change
-        /// that silently reverts is worse than one that is refused. The lookup
-        /// below therefore matches on a null source rather than filtering
-        /// afterwards: there is no path through this method that could find one.
+        /// <b>At system scope it never touches a provider's contribution.</b>
+        /// Those belong to a provider's mapping and are rewritten at every
+        /// sign-in, so an edit here would last exactly until that person next
+        /// signed in — and a change that silently reverts is worse than one that
+        /// is refused.
+        /// </para>
+        /// <para>
+        /// <b>At activity scope there is one grant, whoever wrote it</b>, and
+        /// this edits that one. A launch used to make a membership
+        /// uncorrectable: the lookup matched a null source, missed the row a
+        /// platform had written, inserted a second and broke on the unique index
+        /// — a manager saw "concurrency.conflict" and could neither change
+        /// somebody's role nor take a staff flag off them.
         /// </para>
         /// </summary>
         public async Task<GrantDto> SetAsync(GrantInputDto input, CancellationToken ct)
@@ -340,57 +415,16 @@ namespace AlgoJudge.Server.Services
                     "No such permission: " + string.Join(", ", unknown), "grant.permission.unknown");
             }
 
-            var role = await RoleForGrantAsync(input.RoleId, activityId, ct);
+            // Absent leaves the links alone; a list replaces them. What is
+            // already linked is what the excess rule exempts either way.
+            var roles = await RolesForGrantAsync(input.RoleIds, activityId, ct);
 
             // **Every rule below reads the union, not the additions.** A grant
-            // carries its role's permissions as surely as its own, so an excess
+            // carries its roles' permissions as surely as its own, so an excess
             // check that looked only at what was typed in would let anybody with
             // `grant:update` hand out an administrator's role by pointing at it.
-            var held = Permissions.Effective(role?.Permissions, JsonSerializer.Serialize(wanted));
-
-            // Nobody may grant a permission they do not themselves hold. Without
-            // this the model is decorative: anybody who could edit a grant could
-            // write `system:administrator` into it.
-            var mine = await permissions.EffectiveAsync(activityId, ct);
-            if (!mine.Contains(Permissions.SystemAdministrator))
-            {
-                var excess = held.Where(p => !mine.Contains(p)).ToList();
-                if (excess.Count > 0)
-                {
-                    throw new ForbiddenActionException(
-                        "Cannot grant permissions you do not hold: " + string.Join(", ", excess),
-                        "grant.excess");
-                }
-            }
-
-            // **`system:administrator` is a system grant's key, and only ever
-            // one.** `PermissionService.IsAdministratorAsync` requires
-            // `ActivityId is null` before honoring it, so written into an
-            // activity grant it confers nothing at all — and the danger is
-            // exactly that it looks as though it does: the panel shows somebody
-            // holding it while every check disagrees, silently.
-            //
-            // **After the rule above, and that is where it belongs.** Anybody
-            // else writing this key is already refused by the excess rule, for a
-            // better reason — they do not hold it. The one actor that rule
-            // exempts is an administrator, and this is the case it leaves.
-            //
-            // **Only this key; the general rule is not enforced.** The catalog
-            // declares a scope for all 52, but five of the shipped `manager`
-            // template's are `Global` — the `problem:*` ones — and the panel
-            // applies that template to activity grants. Refusing every misplaced
-            // global key would refuse the template this product ships.
-            //
-            // Those five are no longer inert there: since 2026-09-09 the problem
-            // library asks for them **anywhere** rather than at system scope, so
-            // an activity grant carries them. What the declaration means is
-            // therefore documentation, and only this key's scope is a rule.
-            if (activityId is not null && held.Contains(Permissions.SystemAdministrator))
-            {
-                throw new ValidationException(
-                    "system:administrator is installation-wide; it means nothing in an activity grant",
-                    "grant.permission.scope");
-            }
+            var held = Permissions.Effective(
+                roles.Select(r => (string?)r.Permissions), JsonSerializer.Serialize(wanted));
 
             if (!await context.Users.AnyAsync(u => u.Id == input.UserId, ct))
             {
@@ -401,12 +435,16 @@ namespace AlgoJudge.Server.Services
                 throw new NotFoundException("Activity");
             }
 
+            // **One grant per activity, whoever wrote it; the manual one at
+            // system scope.** The source filter belongs to system scope alone,
+            // where a person's permissions are the union of several rows and
+            // this endpoint owns exactly one of them.
             var grant = await context.Grants
-                .Include(g => g.Role)
+                .Include(g => g.Roles).ThenInclude(r => r.Role)
                 .FirstOrDefaultAsync(
                     g => g.UserId == input.UserId
                         && g.ActivityId == activityId
-                        && g.SourceProviderId == null, ct);
+                        && (activityId != null || g.SourceProviderId == null), ct);
 
             if (grant is null)
             {
@@ -417,6 +455,55 @@ namespace AlgoJudge.Server.Services
                     GrantedByUserId = issuer.Id,
                 };
                 context.Grants.Add(grant);
+            }
+
+            // What this write adds, which is what the excess rule asks about.
+            // **The difference, not the whole set**: a manager re-saving a
+            // membership a platform gave an instance role they do not hold would
+            // otherwise be refused forever, and removing a permission would be
+            // refused for adding one.
+            var alreadyLinked = grant.Roles
+                .Where(r => r.DismissedAt is null && r.Role is not null)
+                .Select(r => r.Role!.Permissions);
+            var alreadyHeld = new HashSet<string>(
+                Permissions.Effective(alreadyLinked, grant.Permissions), StringComparer.Ordinal);
+
+            var mine = await permissions.EffectiveAsync(activityId, ct);
+            if (!mine.Contains(Permissions.SystemAdministrator))
+            {
+                var excess = held
+                    .Where(p => !mine.Contains(p) && !alreadyHeld.Contains(p))
+                    .ToList();
+                if (excess.Count > 0)
+                {
+                    throw new ForbiddenActionException(
+                        "Cannot grant permissions you do not hold: " + string.Join(", ", excess),
+                        "grant.excess");
+                }
+            }
+
+            // **`system:administrator` is a system grant's key, and only ever
+            // one.** The resolver requires `ActivityId is null` before honoring
+            // it, so written into an activity grant it confers nothing at all —
+            // and the danger is exactly that it looks as though it does: the
+            // panel shows somebody holding it while every check disagrees,
+            // silently.
+            //
+            // **After the rule above, and that is where it belongs.** Anybody
+            // else writing this key is already refused by the excess rule, for a
+            // better reason — they do not hold it. The one actor that rule
+            // exempts is an administrator, and this is the case it leaves.
+            //
+            // **Only this key; the general rule is not enforced.** The catalog
+            // declares a scope for all of them, but five of the shipped
+            // `manager` role's are `Global` — the `problem:*` ones — and the
+            // panel hands that role to activity grants. Refusing every misplaced
+            // global key would refuse the role this product ships.
+            if (activityId is not null && held.Contains(Permissions.SystemAdministrator))
+            {
+                throw new ValidationException(
+                    "system:administrator is installation-wide; it means nothing in an activity grant",
+                    "grant.permission.scope");
             }
 
             // The override, and the one rule about who may set it.
@@ -446,35 +533,130 @@ namespace AlgoJudge.Server.Services
             // so creating one is never refused.
             var stillAdministers = held.Contains(Permissions.SystemAdministrator)
                 && input.State != "invited";
-            var before = Permissions.Effective(grant.Role?.Permissions, grant.Permissions);
-            await RefuseLosingTheLastAdministratorAsync(grant, before, stillAdministers, ct);
+            await RefuseLosingTheLastAdministratorAsync(grant, [.. alreadyHeld], stillAdministers, ct);
 
-            grant.RoleId = role?.Id;
+            if (input.RoleIds is not null)
+            {
+                LinkRoles(
+                    grant, [.. roles.Select(r => r.Id)], source: null, clock.GetUtcNow().UtcDateTime);
+            }
             grant.Permissions = JsonSerializer.Serialize(wanted);
-            // The label describes where a *copied* set started, so a link erases
-            // it: two fields both claiming to say which role this is would
-            // eventually disagree.
-            grant.CopiedFromRoleName = role is null ? input.CopiedFromRoleName : null;
             grant.State = input.State == "invited" ? GrantState.Invited : GrantState.Active;
             // Settled here, never taken from the caller: a grant carrying any
             // permission a participant does not hold is staff, always — and that
-            // is what keeps a jury member out of the ranking.
-            grant.IsSystem = Permissions.IsStaff(held) || input.IsSystem == true;
+            // is what keeps a jury member out of the ranking. What a person
+            // decided lives in its own column, so this can be lowered again when
+            // the permissions stop implying it.
+            grant.StaffByHand = input.StaffByHand == true;
+            grant.IsSystem = grant.StaffByHand || Permissions.IsStaff(held);
 
             await context.SaveChangesAsync(ct);
 
-            var stored = await context.Grants
-                .AsNoTracking()
-                .Include(g => g.User)
-                .Include(g => g.Activity)
-                .Include(g => g.SourceProvider)
-                .Include(g => g.Group)
-                .Include(g => g.Role)
+            var stored = await Loaded(context.Grants.AsNoTracking())
                 .FirstAsync(g => g.Id == grant.Id, ct);
             var projected = Projected(stored);
             await AnnounceGrantAsync(stored.ActivityId, stored.UserId, new { grant = projected }, ct);
             return projected;
         }
+
+        /// <inheritdoc />
+        public async Task<EnrollmentOutcome> AddRolesAsync(
+            string userId, Guid activityId, IReadOnlyList<Guid> roleIds,
+            Guid? sourceProviderId, CancellationToken ct)
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+
+            // One row per person per activity, whoever wrote it. Looking this up
+            // by source as well found nothing when a second course had already
+            // granted the same activity, and the insert then broke on the unique
+            // index — a launch from the second Moodle answering 500.
+            var grant = await context.Grants
+                .Include(g => g.Roles).ThenInclude(r => r.Role)
+                .FirstOrDefaultAsync(g => g.UserId == userId && g.ActivityId == activityId, ct);
+
+            // **An override is somebody standing down inside this activity.**
+            // A launch adding roles to it would hand back exactly what they gave
+            // up, on the platform's word rather than on theirs.
+            if (grant is { OverrideSystem: true }) return EnrollmentOutcome.SkippedOverride;
+
+            var created = grant is null;
+            if (grant is null)
+            {
+                grant = new Grant { UserId = userId, ActivityId = activityId };
+                context.Grants.Add(grant);
+            }
+
+            var added = false;
+            foreach (var roleId in roleIds.Distinct())
+            {
+                var existing = grant.Roles.FirstOrDefault(r => r.RoleId == roleId);
+
+                // **A role somebody took away stays away.** Adding it back is
+                // the whole of what "a launch never removes" would otherwise
+                // undo, one relaunch later, with nothing on screen to explain
+                // it.
+                if (existing is not null) continue;
+
+                // **Through the set as well as the collection.** A dependent
+                // reached only through a navigation is tracked as `Modified`
+                // when its key is already set — every id here is — so the save
+                // updates a row that does not exist and fails as a concurrency
+                // conflict on a grant nobody else touched.
+                var link = new GrantRole
+                {
+                    GrantId = grant.Id,
+                    RoleId = roleId,
+                    SourceProviderId = sourceProviderId,
+                    AddedAt = now,
+                };
+                grant.Roles.Add(link);
+                context.GrantRoles.Add(link);
+                added = true;
+            }
+
+            if (!created && !added) return EnrollmentOutcome.Unchanged;
+
+            // An enrollment never demotes: it adds, and `invited` is an offer
+            // that an assertion from the platform answers.
+            grant.State = GrantState.Active;
+
+            var roleJsons = await RoleJsonsAsync(grant, ct);
+            grant.IsSystem = grant.StaffByHand
+                || Permissions.IsStaff(Permissions.Effective(roleJsons, grant.Permissions));
+
+            await context.SaveChangesAsync(ct);
+
+            var stored = await Loaded(context.Grants.AsNoTracking())
+                .FirstAsync(g => g.Id == grant.Id, ct);
+            await AnnounceGrantAsync(activityId, userId, new { grant = Projected(stored) }, ct);
+
+            return created ? EnrollmentOutcome.Created : EnrollmentOutcome.Added;
+        }
+
+        /// <summary>
+        /// The stored permission sets of every role a grant holds, including the
+        /// links this request has just added, which are not in the database yet.
+        /// </summary>
+        private async Task<List<string?>> RoleJsonsAsync(Grant grant, CancellationToken ct)
+        {
+            var ids = grant.Roles
+                .Where(r => r.DismissedAt is null)
+                .Select(r => r.RoleId)
+                .Distinct()
+                .ToList();
+
+            return await context.PermissionRoles
+                .AsNoTracking()
+                .Where(r => ids.Contains(r.Id))
+                .Select(r => (string?)r.Permissions)
+                .ToListAsync(ct);
+        }
+
+        /// <inheritdoc />
+        public Task<Role?> BuiltInRoleAsync(string builtInKey, CancellationToken ct) =>
+            context.PermissionRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.BuiltInKey == builtInKey, ct);
 
         /// <summary>
         /// Revoking removes the row — a grant has no revoked state, only
@@ -485,18 +667,22 @@ namespace AlgoJudge.Server.Services
         public async Task RevokeAsync(Guid id, CancellationToken ct)
         {
             var grant = await context.Grants
-                .Include(g => g.Role)
+                .Include(g => g.Roles).ThenInclude(r => r.Role)
                 .FirstOrDefaultAsync(g => g.Id == id, ct)
                 ?? throw new NotFoundException("Grant");
 
             await permissions.RequireAsync(Permissions.GrantUpdate, grant.ActivityId, ct);
 
-            // A managed contribution is the provider's, and revoking one here
+            // A provider's contribution is the provider's, and revoking one here
             // would last until that person next signed in. What actually takes it
             // away is changing the mapping, unlinking the provider, or blocking
             // the account — the coarse instruments a union leaves, and the cost
             // recorded when the union was accepted.
-            if (grant.SourceProviderId is not null)
+            //
+            // **System scope only.** An activity grant is somebody's membership
+            // whoever wrote it; a launch may put them back, and a manager saying
+            // "not in this course" is still a thing a manager may say.
+            if (grant.ActivityId is null && grant.SourceProviderId is not null)
             {
                 throw new ForbiddenActionException(
                     "This contribution comes from an identity provider and is rewritten at every sign-in. "
@@ -508,7 +694,9 @@ namespace AlgoJudge.Server.Services
             // specific when both apply.
             await RefuseLosingTheLastAdministratorAsync(
                 grant,
-                Permissions.Effective(grant.Role?.Permissions, grant.Permissions),
+                Permissions.Effective(
+                    grant.Roles.Where(r => r.DismissedAt is null).Select(r => r.Role?.Permissions),
+                    grant.Permissions),
                 stillAdministers: false,
                 ct);
 
@@ -534,24 +722,83 @@ namespace AlgoJudge.Server.Services
         /// and then hand it out in somebody else's.
         /// </para>
         /// </summary>
-        private async Task<Role?> RoleForGrantAsync(string? raw, Guid? activityId, CancellationToken ct)
+        private async Task<IReadOnlyList<Role>> RolesForGrantAsync(
+            IReadOnlyList<string>? raw, Guid? activityId, CancellationToken ct)
         {
-            if (raw is null || !Guid.TryParse(raw, out var roleId)) return null;
+            var ids = (raw ?? [])
+                .Select(value => Guid.TryParse(value, out var id) ? id : (Guid?)null)
+                .Where(id => id is not null)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+            if (ids.Count == 0) return [];
 
-            var role = await context.PermissionRoles.AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == roleId, ct)
-                ?? throw new NotFoundException("Role");
+            var roles = await context.PermissionRoles.AsNoTracking()
+                .Where(r => ids.Contains(r.Id))
+                .ToListAsync(ct);
 
-            if (role.ActivityId is { } owner && owner != activityId)
+            if (roles.Count != ids.Count) throw new NotFoundException("Role");
+
+            foreach (var role in roles)
             {
-                throw new ValidationException(
-                    activityId is null
-                        ? $"\"{role.Name}\" belongs to an activity and cannot be granted at system scope"
-                        : $"\"{role.Name}\" belongs to another activity",
-                    "grant.role.scope");
+                if (role.ActivityId is { } owner && owner != activityId)
+                {
+                    throw new ValidationException(
+                        activityId is null
+                            ? $"\"{role.Name}\" belongs to an activity and cannot be granted at system scope"
+                            : $"\"{role.Name}\" belongs to another activity",
+                        "grant.role.scope");
+                }
             }
 
-            return role;
+            return roles;
+        }
+
+        /// <summary>
+        /// Makes a grant's links say exactly this — a person's decision, so a
+        /// role left out is taken away rather than ignored.
+        /// <para>
+        /// <b>Taking one away leaves a tombstone.</b> An LTI launch adds the
+        /// roles its platform's rules name and never removes one, so without the
+        /// mark a manager's correction would come back at that student's next
+        /// launch. Granting the role again clears it: the mark says somebody
+        /// decided against this role, and re-adding it is that decision
+        /// reversed.
+        /// </para>
+        /// </summary>
+        private void LinkRoles(
+            Grant grant, IReadOnlyList<Guid> wanted, Guid? source, DateTime clock)
+        {
+            foreach (var roleId in wanted)
+            {
+                var existing = grant.Roles.FirstOrDefault(r => r.RoleId == roleId);
+                if (existing is null)
+                {
+                    // Through the set as well, for the reason `AddRolesAsync`
+                    // gives: a link added only to the collection is written as
+                    // an update to a row that was never inserted.
+                    var link = new GrantRole
+                    {
+                        GrantId = grant.Id,
+                        RoleId = roleId,
+                        SourceProviderId = source,
+                        AddedAt = clock,
+                    };
+                    grant.Roles.Add(link);
+                    context.GrantRoles.Add(link);
+                    continue;
+                }
+
+                existing.DismissedAt = null;
+                // A person taking a role back is taking it as their own: the
+                // next launch must not treat it as something it may revise.
+                if (source is null) existing.SourceProviderId = null;
+            }
+
+            foreach (var link in grant.Roles.Where(r => r.DismissedAt is null))
+            {
+                if (!wanted.Contains(link.RoleId)) link.DismissedAt = clock;
+            }
         }
 
         /// <summary>
@@ -567,7 +814,8 @@ namespace AlgoJudge.Server.Services
         /// </para>
         /// </summary>
         public async Task RequireGrantableRoleAsync(
-            Guid? activityId, IReadOnlyList<string> wanted, CancellationToken ct)
+            Guid? activityId, IReadOnlyList<string> wanted,
+            IReadOnlyList<string>? already, CancellationToken ct)
         {
             var unknown = Permissions.Unknown(wanted);
             if (unknown.Count > 0)
@@ -589,7 +837,12 @@ namespace AlgoJudge.Server.Services
             var mine = await permissions.EffectiveAsync(activityId, ct);
             if (mine.Contains(Permissions.SystemAdministrator)) return;
 
-            var excess = wanted.Where(p => !mine.Contains(p)).ToList();
+            // **What is being added, not what is already there.** Applied to the
+            // whole set, this refused a manager any edit at all to a role that
+            // already carried a key they lack — including removing that key —
+            // and it refused an activity's settings to be saved unchanged.
+            var held = new HashSet<string>(already ?? [], StringComparer.Ordinal);
+            var excess = wanted.Where(p => !mine.Contains(p) && !held.Contains(p)).ToList();
             if (excess.Count > 0)
             {
                 throw new ForbiddenActionException(
@@ -609,13 +862,13 @@ namespace AlgoJudge.Server.Services
         /// failure a live role invites, so the recompute is not optional.
         /// </para>
         /// <para>
-        /// <b>It raises the flag and never lowers it</b>, because the column
-        /// holds two things: what the permissions imply, and a decision somebody
-        /// made by hand about this person — a jury member holding nothing but a
-        /// participant's keys is marked systemic on purpose. A role edit knows
-        /// the first and cannot see the second, so it enforces the direction that
-        /// matters and leaves the other where it was made. Clearing the flag
-        /// stays a per-grant act.
+        /// <b>It moves in both directions.</b> It used to raise the flag and
+        /// never lower it, because the column held two things at once — what the
+        /// permissions imply and what a person decided — and a role edit could
+        /// see only the first. The decision has its own column now, so undoing
+        /// an edit undoes the flag it raised: a course whose learners all
+        /// vanished from the ranking because a key was added and removed again
+        /// comes back.
         /// </para>
         /// <para>
         /// Only the rows whose answer actually moved are announced: an edit
@@ -627,18 +880,23 @@ namespace AlgoJudge.Server.Services
         {
             var linked = await context.Grants
                 .Include(g => g.Activity)
-                .Where(g => g.RoleId == role.Id && !g.IsSystem)
+                .Include(g => g.Roles).ThenInclude(r => r.Role)
+                .Where(g => g.Roles.Any(r => r.RoleId == role.Id && r.DismissedAt == null))
                 .ToListAsync(ct);
 
             var moved = new List<Grant>();
             foreach (var grant in linked)
             {
-                if (!Permissions.IsStaff(Permissions.Effective(role.Permissions, grant.Permissions)))
-                {
-                    continue;
-                }
+                var effective = Permissions.Effective(
+                    grant.Roles
+                        .Where(r => r.DismissedAt is null)
+                        .Select(r => r.RoleId == role.Id ? role.Permissions : r.Role?.Permissions),
+                    grant.Permissions);
 
-                grant.IsSystem = true;
+                var isSystem = grant.StaffByHand || Permissions.IsStaff(effective);
+                if (isSystem == grant.IsSystem) continue;
+
+                grant.IsSystem = isSystem;
                 moved.Add(grant);
             }
 
@@ -666,6 +924,19 @@ namespace AlgoJudge.Server.Services
                 throw new AccessDeniedException(Permissions.RoleRead);
             }
 
+            // **An activity's roles answer to that activity.** Asking "anywhere"
+            // and then reading whatever activity the caller named let a manager
+            // of one course read the names, permissions and reach of another
+            // course's roles — so a named activity is checked at its own scope.
+            if (activityId is { } scope)
+            {
+                var here = await permissions.EffectiveAsync(scope, ct);
+                if (!here.Contains(Permissions.RoleRead) && !here.Contains(Permissions.GrantUpdate))
+                {
+                    throw new AccessDeniedException(Permissions.RoleRead);
+                }
+            }
+
             // The installation's roles, plus the asked-for activity's own. An
             // activity's role is only ever grantable there, so listing every
             // activity's would offer a manager roles they cannot use.
@@ -679,26 +950,50 @@ namespace AlgoJudge.Server.Services
                 .ToListAsync(ct);
 
             var ids = roles.Select(r => r.Id).ToList();
-            var counts = await context.Grants
+
+            // Through the links, so a contribution a provider wrote counts.
+            // Those were copies until 2026-09-19 and counted as nothing, which
+            // is how a role eight hundred people held could report that editing
+            // it reached nobody.
+            var counts = await context.GrantRoles
                 .AsNoTracking()
-                .Where(g => g.RoleId != null && ids.Contains(g.RoleId!.Value))
-                .GroupBy(g => g.RoleId!.Value)
+                .Where(r => r.DismissedAt == null && ids.Contains(r.RoleId))
+                .GroupBy(r => r.RoleId)
                 .Select(g => new { RoleId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(g => g.RoleId, g => g.Count, ct);
 
-            return [.. roles.Select(r => ProjectRole(r, counts.GetValueOrDefault(r.Id)))];
+            var mapped = await context.IdentityProviderMappingRules
+                .AsNoTracking()
+                .Where(r => r.RoleId != null && ids.Contains(r.RoleId!.Value))
+                .Select(r => new { RoleId = r.RoleId!.Value, r.Provider!.Slug })
+                .Union(context.IdentityProviderDefaultRoles
+                    .AsNoTracking()
+                    .Where(d => ids.Contains(d.RoleId))
+                    .Select(d => new { d.RoleId, d.Provider!.Slug }))
+                .ToListAsync(ct);
+
+            var mappedBy = mapped
+                .GroupBy(m => m.RoleId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<string>)[.. g.Select(m => m.Slug).Distinct().Order(StringComparer.Ordinal)]);
+
+            return [.. roles.Select(r => ProjectRole(
+                r, counts.GetValueOrDefault(r.Id), mappedBy.GetValueOrDefault(r.Id, [])))];
         }
 
-        private static RoleDto ProjectRole(Role role, int grants) => new()
+        private static RoleDto ProjectRole(Role role, int grants, IReadOnlyList<string> mappedBy) => new()
         {
             Id = Wire.Id(role.Id),
             Name = role.Name,
             Description = role.Description,
             Permissions = Parse(role.Permissions),
             IsBuiltIn = role.IsBuiltIn,
+            BuiltInKey = role.BuiltInKey,
             ActivityId = role.ActivityId is { } a ? Wire.Id(a) : null,
             ActivityName = role.Activity?.Name,
             Grants = grants,
+            MappedBy = mappedBy,
         };
 
         /// <summary>
@@ -724,11 +1019,7 @@ namespace AlgoJudge.Server.Services
                 ? parsed
                 : null;
 
-            // At the scope the role will live in: `role:manage` at system scope
-            // writes the installation's roles, and held in an activity grant it
-            // writes that activity's. One key, and the scope is the whole of the
-            // difference between correcting one course and correcting all of them.
-            await permissions.RequireAsync(Permissions.RoleManage, activityId, ct);
+            await RequireRoleWriteAsync(activityId, ct);
 
             if (activityId is { } scoped && !await context.Activities.AnyAsync(a => a.Id == scoped, ct))
             {
@@ -740,7 +1031,7 @@ namespace AlgoJudge.Server.Services
             await RefuseADuplicateNameAsync(name, activityId, null, ct);
 
             var wanted = input.Permissions.Distinct().ToList();
-            await RequireGrantableRoleAsync(activityId, wanted, ct);
+            await RequireGrantableRoleAsync(activityId, wanted, already: null, ct);
 
             var role = new Role
             {
@@ -753,7 +1044,7 @@ namespace AlgoJudge.Server.Services
             context.PermissionRoles.Add(role);
             await context.SaveChangesAsync(ct);
 
-            var created = ProjectRole(role, 0);
+            var created = ProjectRole(role, 0, []);
             await AnnounceRoleAsync(created, null, ct);
             return created;
         }
@@ -775,7 +1066,19 @@ namespace AlgoJudge.Server.Services
                 .FirstOrDefaultAsync(r => r.Id == id, ct)
                 ?? throw new NotFoundException("Role");
 
-            await permissions.RequireAsync(Permissions.RoleManage, role.ActivityId, ct);
+            await RequireRoleWriteAsync(role.ActivityId, ct);
+
+            // **The shipped administrator's role is fixed.** Everything else an
+            // administrator may edit; this one carries the key the installation
+            // is administered with, and an empty set here takes the installation
+            // away from everybody linked to it at once — which is a thing that
+            // happened, from the panel, in one save.
+            if (role.BuiltInKey == DefaultRoles.Admin)
+            {
+                throw new ConflictException(
+                    "The administrator's role is fixed. Grant or revoke it instead",
+                    "role.builtIn.fixed");
+            }
 
             // **A role does not move between scopes.** Making a global role an
             // activity's would strip it from every grant elsewhere that points at
@@ -796,7 +1099,8 @@ namespace AlgoJudge.Server.Services
             await RefuseADuplicateNameAsync(name, role.ActivityId, id, ct);
 
             var wanted = input.Permissions.Distinct().ToList();
-            await RequireGrantableRoleAsync(role.ActivityId, wanted, ct);
+            var before = Parse(role.Permissions);
+            await RequireGrantableRoleAsync(role.ActivityId, wanted, before, ct);
 
             // **The other half of "unreachable through a mapping".** The provider
             // service refuses a rule pointing at a role that carries
@@ -804,7 +1108,7 @@ namespace AlgoJudge.Server.Services
             // writing the rule first and adding the permission afterwards.
             if (wanted.Contains(Permissions.SystemAdministrator))
             {
-                var mapped = await ReferencingProvidersAsync(role.Name, ct);
+                var mapped = await ReferencingProvidersAsync(role.Id, ct);
                 if (mapped.Count > 0)
                 {
                     throw new ForbiddenActionException(
@@ -814,24 +1118,21 @@ namespace AlgoJudge.Server.Services
                 }
             }
 
-            // A rename has to reach the mapping rules that name it, or a provider
-            // would go on referring to a role that no longer answers and quietly
-            // grant nothing at the next sign-in. Grants need no such care: they
-            // hold the id.
-            if (role.Name != name)
+            // **Taking the last administrator away is refused here too.** A role
+            // is what most administrators hold their key through, so emptying
+            // one can end an installation's administration as completely as
+            // revoking a grant — and neither `aj-admin` nor the seeder can undo
+            // it while another administrator exists.
+            if (before.Contains(Permissions.SystemAdministrator)
+                && !wanted.Contains(Permissions.SystemAdministrator))
             {
-                foreach (var rule in await context.IdentityProviderMappingRules
-                    .Where(r => r.RoleName == role.Name).ToListAsync(ct))
-                {
-                    rule.RoleName = name;
-                }
-                foreach (var provider in await context.IdentityProviders
-                    .Where(p => p.DefaultRoleName == role.Name).ToListAsync(ct))
-                {
-                    provider.DefaultRoleName = name;
-                }
+                await RefuseLosingTheLastAdministratorThroughRoleAsync(role, ct);
             }
 
+            // Nothing follows a rename any more: a rule, a default and an
+            // activity's enrollment set all name the role by id. Rewriting every
+            // rule that shared the old name was how one course's manager could
+            // rewrite what a directory group bought installation-wide.
             role.Name = name;
             role.Description = input.Description;
             role.Permissions = JsonSerializer.Serialize(wanted);
@@ -839,8 +1140,9 @@ namespace AlgoJudge.Server.Services
             var restated = await RestateLinkedGrantsAsync(role, ct);
             await context.SaveChangesAsync(ct);
 
-            var linked = await context.Grants.CountAsync(g => g.RoleId == role.Id, ct);
-            var updated = ProjectRole(role, linked);
+            var linked = await context.GrantRoles
+                .CountAsync(r => r.RoleId == role.Id && r.DismissedAt == null, ct);
+            var updated = ProjectRole(role, linked, await ReferencingProvidersAsync(role.Id, ct));
             await AnnounceRoleAsync(updated, null, ct);
 
             // The rows whose staff flag moved are announced individually as well:
@@ -867,11 +1169,16 @@ namespace AlgoJudge.Server.Services
                 throw new ConflictException("A built-in role cannot be deleted", "role.builtIn");
             }
 
-            // **A grant points at it, so deleting one takes rights away.** The
+            // **A grant links it, so deleting one takes rights away.** The
             // foreign key refuses this too, at the end of the statement; the
             // refusal is written here so it arrives as a sentence rather than as
             // a constraint violation.
-            var held = await context.Grants.CountAsync(g => g.RoleId == role.Id, ct);
+            //
+            // A dismissed link is a record of a role somebody took away, so it
+            // holds nothing and must never stand between an administrator and a
+            // deletion. Those rows go with the role.
+            var held = await context.GrantRoles
+                .CountAsync(r => r.RoleId == role.Id && r.DismissedAt == null, ct);
             if (held > 0)
             {
                 throw new ConflictException(
@@ -879,10 +1186,10 @@ namespace AlgoJudge.Server.Services
                     "role.inUse");
             }
 
-            // An identity provider's mapping rule names it, and the contribution
-            // is re-derived from that name at every sign-in. Deleting it would
-            // leave a rule granting nothing, silently, at the next sign-in.
-            var referencing = await ReferencingProvidersAsync(role.Name, ct);
+            // An identity provider's rule names it, and the contribution is
+            // re-derived at every sign-in. Deleting it would leave a rule
+            // granting nothing, silently, at the next sign-in.
+            var referencing = await ReferencingProvidersAsync(role.Id, ct);
             if (referencing.Count > 0)
             {
                 throw new ConflictException(
@@ -890,10 +1197,80 @@ namespace AlgoJudge.Server.Services
                     "role.mapped");
             }
 
+            // An activity enrolls into it. Deleting it would take that slot back
+            // to the shipped role without anybody choosing that.
+            var enrolling = await context.ActivityEnrollmentRoles
+                .Where(r => r.RoleId == role.Id)
+                .Select(r => r.Activity!.Name)
+                .Distinct()
+                .ToListAsync(ct);
+            if (enrolling.Count > 0)
+            {
+                throw new ConflictException(
+                    $"\"{role.Name}\" is what {string.Join(", ", enrolling)} enrolls into",
+                    "role.enrolling");
+            }
+
+            var dismissed = await context.GrantRoles
+                .Where(r => r.RoleId == role.Id)
+                .ToListAsync(ct);
+            context.GrantRoles.RemoveRange(dismissed);
+
             var removedRole = Wire.Id(role.Id);
             context.PermissionRoles.Remove(role);
             await context.SaveChangesAsync(ct);
             await AnnounceRoleAsync(null, removedRole, ct);
+        }
+
+        /// <summary>
+        /// Who may write a role at this scope.
+        /// <para>
+        /// <b>Two keys, because the two scopes are two different powers.</b> The
+        /// installation's roles are what every manager and every participant in
+        /// every activity holds their permissions through, so writing them is an
+        /// administrator's — <c>role:manage</c>, global. An activity's roles are
+        /// its manager's, through a key of its own.
+        /// </para>
+        /// <para>
+        /// One key with both scopes was a way out of an activity: a directory
+        /// group mapped onto the <c>manager</c> role granted it at system scope,
+        /// so anybody in that group could rewrite the installation's roles.
+        /// </para>
+        /// </summary>
+        private Task RequireRoleWriteAsync(Guid? activityId, CancellationToken ct) =>
+            activityId is { } scope
+                ? permissions.RequireAsync(Permissions.RoleManageActivity, scope, ct)
+                : permissions.RequireAsync(Permissions.RoleManage, null, ct);
+
+        /// <summary>
+        /// Refuses an edit that would leave nobody administering the
+        /// installation, when the key is held through this role.
+        /// </summary>
+        private async Task RefuseLosingTheLastAdministratorThroughRoleAsync(
+            Role role, CancellationToken ct)
+        {
+            var throughThisRole = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.ActivityId == null && g.State == GrantState.Active
+                    && g.Roles.Any(r => r.RoleId == role.Id && r.DismissedAt == null))
+                .Select(g => g.Id)
+                .ToListAsync(ct);
+
+            if (throughThisRole.Count == 0) return;
+
+            var elsewhere = await context.Grants
+                .AsNoTracking()
+                .Where(g => g.ActivityId == null && g.State == GrantState.Active
+                    && !throughThisRole.Contains(g.Id))
+                .Held()
+                .ToListAsync(ct);
+
+            if (elsewhere.Any(g => g.Confers().Contains(Permissions.SystemAdministrator))) return;
+
+            throw new ForbiddenActionException(
+                $"\"{role.Name}\" is how the installation's last administrator holds "
+                    + "system:administrator. Grant it to somebody else first",
+                "role.administrator.last");
         }
     }
 }

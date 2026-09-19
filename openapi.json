@@ -12584,12 +12584,18 @@
             },
             "nullable": true
           },
-          "participantRoleId": {
-            "type": "string",
+          "participantRoleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
-          "managerRoleId": {
-            "type": "string",
+          "managerRoleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           }
         },
@@ -13627,13 +13633,15 @@
       "GrantDto": {
         "required": [
           "createdAt",
+          "dismissedRoles",
           "id",
           "isSystem",
           "managed",
           "overrideSystem",
           "permissions",
-          "rolePermissions",
+          "roles",
           "source",
+          "staffByHand",
           "state",
           "userId",
           "userLogin",
@@ -13672,27 +13680,25 @@
             },
             "nullable": true
           },
-          "roleId": {
-            "type": "string",
-            "nullable": true
-          },
-          "roleName": {
-            "type": "string",
-            "nullable": true
-          },
-          "rolePermissions": {
+          "roles": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GrantRoleDto"
+            },
+            "nullable": true
+          },
+          "dismissedRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantRoleDto"
             },
             "nullable": true
           },
           "isSystem": {
             "type": "boolean"
           },
-          "copiedFromRoleName": {
-            "type": "string",
-            "nullable": true
+          "staffByHand": {
+            "type": "boolean"
           },
           "state": {
             "type": "string",
@@ -13794,16 +13800,15 @@
             },
             "nullable": true
           },
-          "roleId": {
-            "type": "string",
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
-          "isSystem": {
+          "staffByHand": {
             "type": "boolean",
-            "nullable": true
-          },
-          "copiedFromRoleName": {
-            "type": "string",
             "nullable": true
           },
           "state": {
@@ -13812,6 +13817,48 @@
           },
           "overrideSystem": {
             "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GrantRoleDto": {
+        "required": [
+          "name",
+          "permissions",
+          "roleId"
+        ],
+        "type": "object",
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "activityId": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceProviderId": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceProviderName": {
+            "type": "string",
+            "nullable": true
+          },
+          "dismissedAt": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -13891,6 +13938,7 @@
           "claimPath",
           "clientId",
           "createdAt",
+          "defaultRoleIds",
           "deletionChannelEnabled",
           "displayName",
           "enabled",
@@ -13949,8 +13997,11 @@
             "type": "string",
             "nullable": true
           },
-          "defaultRoleName": {
-            "type": "string",
+          "defaultRoleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
           "deletionChannelEnabled": {
@@ -14036,8 +14087,11 @@
             "type": "string",
             "nullable": true
           },
-          "defaultRoleName": {
-            "type": "string",
+          "defaultRoleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
           "deletionChannelEnabled": {
@@ -14870,12 +14924,14 @@
           "hideEndedSeriesProblems",
           "id",
           "joinPolicy",
+          "managerRoleIds",
           "matchingRunners",
           "maxAttachments",
           "maxUploadBytes",
           "modules",
           "name",
           "participantCount",
+          "participantRoleIds",
           "problemCount",
           "rankingType",
           "runnerTags",
@@ -15006,12 +15062,18 @@
             "type": "integer",
             "format": "int32"
           },
-          "participantRoleId": {
-            "type": "string",
+          "participantRoleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
-          "managerRoleId": {
-            "type": "string",
+          "managerRoleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           }
         },
@@ -16284,11 +16346,35 @@
       "MappingRuleDto": {
         "required": [
           "claimValue",
-          "roleName"
+          "targets"
         ],
         "type": "object",
         "properties": {
           "claimValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MappingTargetDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MappingTargetDto": {
+        "required": [
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleId": {
             "type": "string",
             "nullable": true
           },
@@ -17859,6 +17945,7 @@
           "grants",
           "id",
           "isBuiltIn",
+          "mappedBy",
           "name",
           "permissions"
         ],
@@ -17886,6 +17973,10 @@
           "isBuiltIn": {
             "type": "boolean"
           },
+          "builtInKey": {
+            "type": "string",
+            "nullable": true
+          },
           "activityId": {
             "type": "string",
             "nullable": true
@@ -17897,6 +17988,13 @@
           "grants": {
             "type": "integer",
             "format": "int32"
+          },
+          "mappedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false

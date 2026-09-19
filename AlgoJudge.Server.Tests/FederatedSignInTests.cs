@@ -91,9 +91,10 @@ public class FederatedSignInTests(ServerFixture server)
 
         var contribution = await ContributionAsync(provider, outcome.User.Id);
         Assert.NotNull(contribution);
-        Assert.Contains("submission:read:all", Parse(contribution!.Permissions));
-        // The manager template does not carry it, and nothing may add it.
-        Assert.DoesNotContain("system:administrator", Parse(contribution.Permissions));
+        var conferred = await ConferredAsync(provider, outcome.User.Id);
+        Assert.Contains("submission:read:all", conferred);
+        // The manager role does not carry it, and nothing may add it.
+        Assert.DoesNotContain("system:administrator", conferred);
     }
 
     /// <summary>
@@ -178,9 +179,9 @@ public class FederatedSignInTests(ServerFixture server)
             ("groups", "nothing-we-map"), ("preferred_username", "a-newcomer")));
 
         Assert.True(outcome.Admitted);
-        var contribution = await ContributionAsync(provider, outcome.User!.Id);
-        Assert.Contains("submission:create", Parse(contribution!.Permissions));
-        Assert.DoesNotContain("submission:read:all", Parse(contribution.Permissions));
+        var conferred = await ConferredAsync(provider, outcome.User!.Id);
+        Assert.Contains("submission:create", conferred);
+        Assert.DoesNotContain("submission:read:all", conferred);
     }
 
     /// <summary>
@@ -196,19 +197,19 @@ public class FederatedSignInTests(ServerFixture server)
         var first = await SignInAsync(provider, Token("rewriting-0001",
             ("groups", "students"), ("preferred_username", "moves-up")));
         Assert.DoesNotContain("submission:read:all",
-            Parse((await ContributionAsync(provider, first.User!.Id))!.Permissions));
+            await ConferredAsync(provider, first.User!.Id));
 
         await SignInAsync(provider, Token("rewriting-0001",
             ("groups", "lecturers"), ("preferred_username", "moves-up")));
         Assert.Contains("submission:read:all",
-            Parse((await ContributionAsync(provider, first.User.Id))!.Permissions));
+            await ConferredAsync(provider, first.User.Id));
 
         // Back down again — a union that only ever grew would be a promotion
         // nobody could undo.
         await SignInAsync(provider, Token("rewriting-0001",
             ("groups", "students"), ("preferred_username", "moves-up")));
         Assert.DoesNotContain("submission:read:all",
-            Parse((await ContributionAsync(provider, first.User.Id))!.Permissions));
+            await ConferredAsync(provider, first.User.Id));
 
         // One contribution from this provider, however many sign-ins.
         await using var context = server.NewContext();
@@ -218,9 +219,16 @@ public class FederatedSignInTests(ServerFixture server)
 
     /// <summary>
     /// **Unreachable through a mapping, in every configuration** — including one
-    /// reached by writing the rule first and editing the template afterwards.
-    /// The edit is refused; and if a template ever carries it anyway, the
-    /// mapping strips it rather than trusting that it cannot happen.
+    /// reached by writing the rule first and editing the role afterwards. The
+    /// edit is refused; and if a role ever carries it anyway, the mapping leaves
+    /// that role out rather than trusting that it cannot happen.
+    /// <para>
+    /// <b>The whole role, not the one key.</b> A contribution copied permissions
+    /// until 2026-09-19 and could strip a key on the way in; it links roles now,
+    /// and a link is all or nothing. So the rule stops granting anything, which
+    /// is the safe direction and is visible: the role vanishes from the person's
+    /// grant at their next sign-in.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task No_claim_grants_administrator_however_the_template_got_it()
@@ -248,12 +256,12 @@ public class FederatedSignInTests(ServerFixture server)
         Assert.Equal("role.mapped.administrator",
             (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
 
-        // And the belt to that pair of braces: written past the API, it is still
-        // stripped when the mapping is used.
+        // And the belt to that pair of braces: written past the API, the role is
+        // still skipped when the mapping is used.
         await using (var context = server.NewContext())
         {
-            var template = await context.PermissionRoles.FirstAsync(t => t.Name == "innocent-at-first");
-            template.Permissions = """["activity:read","system:administrator"]""";
+            var role = await context.PermissionRoles.FirstAsync(t => t.Name == "innocent-at-first");
+            role.Permissions = """["activity:read","system:administrator"]""";
             await context.SaveChangesAsync();
         }
 
@@ -261,8 +269,7 @@ public class FederatedSignInTests(ServerFixture server)
             ("groups", "staff"), ("preferred_username", "not-an-admin")));
 
         Assert.True(outcome.Admitted);
-        var contribution = await ContributionAsync(provider, outcome.User!.Id);
-        Assert.Equal(["activity:read"], Parse(contribution!.Permissions));
+        Assert.Empty(await ConferredAsync(provider, outcome.User!.Id));
     }
 
     /// <summary>
@@ -697,7 +704,7 @@ public class FederatedSignInTests(ServerFixture server)
             clientId = "algojudge",
             claimPath = "groups",
             deletionUrl = "https://auth.example.invalid/if/flow/unenrolment/",
-            mappingRules = new[] { new { claimValue = "lecturers", roleName = "manager" } },
+            mappingRules = new[] { await Build.RuleAsync(admin, "lecturers", "manager") },
         }));
 
         var after = await person.GetFromJsonAsync<JsonElement>("/api/v1/account/links");
@@ -744,11 +751,12 @@ public class FederatedSignInTests(ServerFixture server)
 
         var contribution = await ContributionAsync(provider, outcome.User.Id);
         Assert.NotNull(contribution);
-        Assert.Contains("submission:read:all", Parse(contribution!.Permissions));
+        var conferred = await ConferredAsync(provider, outcome.User.Id);
+        Assert.Contains("submission:read:all", conferred);
 
         // The value beside it in the same array maps to nothing, and mapping
         // nothing is not the same as mapping everything.
-        Assert.DoesNotContain("system:administrator", Parse(contribution.Permissions));
+        Assert.DoesNotContain("system:administrator", conferred);
     }
 
     /// <summary>
@@ -799,12 +807,18 @@ public class FederatedSignInTests(ServerFixture server)
 
     private async Task<Guid> NewProviderAsync(
         string slug,
-        (string Value, string Template)[] rules,
+        (string Value, string Role)[] rules,
         string? unmapped = null,
         string? defaultRole = null,
         string claimPath = "groups")
     {
         var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var mapped = new List<object>();
+        foreach (var rule in rules)
+        {
+            mapped.Add(await Build.RuleAsync(admin, rule.Value, rule.Role));
+        }
 
         var created = await admin.PostAsJsonAsync("/api/v1/identity/providers", new
         {
@@ -815,8 +829,10 @@ public class FederatedSignInTests(ServerFixture server)
             clientSecret = "secret-for-the-suite",
             claimPath,
             unmappedBehavior = unmapped,
-            defaultRoleName = defaultRole,
-            mappingRules = rules.Select(r => new { claimValue = r.Value, roleName = r.Template }),
+            defaultRoleIds = defaultRole is null
+                ? Array.Empty<string>()
+                : new[] { await Build.RoleIdAsync(admin, defaultRole) },
+            mappingRules = mapped,
         });
         await Sign.Succeeded(created);
 
@@ -829,6 +845,27 @@ public class FederatedSignInTests(ServerFixture server)
         await using var context = server.NewContext();
         return await context.Grants.FirstOrDefaultAsync(
             g => g.UserId == userId && g.ActivityId == null && g.SourceProviderId == providerId);
+    }
+
+    /// <summary>
+    /// What a contribution confers, which since 2026-09-19 is what the roles it
+    /// links carry. The grant's own set stays empty: a provider writes links, so
+    /// reading <c>Permissions</c> alone reads nothing and would pass every
+    /// "does not contain" assertion for the wrong reason.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ConferredAsync(Guid providerId, string userId)
+    {
+        await using var context = server.NewContext();
+        var grant = await context.Grants
+            .Include(g => g.Roles).ThenInclude(r => r.Role)
+            .FirstOrDefaultAsync(
+                g => g.UserId == userId && g.ActivityId == null && g.SourceProviderId == providerId);
+
+        if (grant is null) return [];
+
+        return Permissions.Effective(
+            grant.Roles.Where(r => r.DismissedAt is null).Select(r => r.Role?.Permissions),
+            grant.Permissions);
     }
 
     private static IReadOnlyList<string> Parse(string json) =>

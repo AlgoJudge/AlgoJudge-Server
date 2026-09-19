@@ -87,7 +87,8 @@ namespace AlgoJudge.Server.Lti.Services
     public class PlatformService(
         LtiDbContext db,
         ApplicationDbContext core,
-        IPermissionService permissions
+        IPermissionService permissions,
+        IPlatformRoleRules roleRules
     ) : IPlatformService
     {
         public async Task<IReadOnlyList<Platform>> ListAsync(CancellationToken ct)
@@ -138,6 +139,11 @@ namespace AlgoJudge.Server.Lti.Services
                 ClientSecret = "",
                 // See the class summary. This is the guard, not a default.
                 Enabled = false,
+                // Not a door: this row exists so a grant's roles can say what
+                // asserted them. The providers screen leaves it alone, which is
+                // what stops somebody tidying it away and breaking every launch
+                // from that course.
+                Kind = ProviderKind.Attribution,
             };
             core.IdentityProviders.Add(provider);
             await core.SaveChangesAsync(ct);
@@ -162,6 +168,11 @@ namespace AlgoJudge.Server.Lti.Services
 
             db.Platforms.Add(platform);
             await db.SaveChangesAsync(ct);
+
+            // The rules a platform starts with: what the Server used to do in
+            // code, written down where an operator can read and change it.
+            await roleRules.EnsureDefaultsAsync(provider.Id, ct);
+
             return platform;
         }
 

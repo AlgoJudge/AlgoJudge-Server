@@ -350,12 +350,12 @@ namespace AlgoJudge.Server.Api
                 ParticipantCount = participantCount,
                 RunnerTags = activity.RunnerTags,
                 MatchingRunners = matchingRunners,
-                ParticipantRoleId = activity.ParticipantRoleId is { } taking
-                    ? Contracts.Wire.Id(taking)
-                    : null,
-                ManagerRoleId = activity.ManagerRoleId is { } running
-                    ? Contracts.Wire.Id(running)
-                    : null,
+                ParticipantRoleIds = [.. activity.EnrollmentRoles
+                    .Where(r => r.Slot == EnrollmentSlot.Participants)
+                    .Select(r => Contracts.Wire.Id(r.RoleId))],
+                ManagerRoleIds = [.. activity.EnrollmentRoles
+                    .Where(r => r.Slot == EnrollmentSlot.Managers)
+                    .Select(r => Contracts.Wire.Id(r.RoleId))],
             };
 
         // ── series ────────────────────────────────────────────────────────────

@@ -213,6 +213,10 @@ public class PermissionResolutionTests(ServerFixture server)
         {
             userId = adminId,
             activityId,
+            // The roles go with it: an override is "this, and nothing else",
+            // and the grant being rewritten is the one that made them the
+            // activity's manager.
+            roleIds = Array.Empty<string>(),
             permissions = new[] { "activity:read", "submission:create", "result:read:own" },
             overrideSystem = true,
         }));
@@ -557,12 +561,13 @@ public class PermissionResolutionTests(ServerFixture server)
 
             await using var context = server.NewContext();
             var still = await context.Grants
-                .Include(g => g.Role)
+                .Include(g => g.Roles).ThenInclude(r => r.Role)
                 .FirstAsync(g => g.UserId == adminId && g.ActivityId == null);
             Assert.Equal(GrantState.Active, still.State);
             Assert.Contains(
                 "system:administrator",
-                Permissions.Effective(still.Role?.Permissions, still.Permissions));
+                Permissions.Effective(
+                    still.Roles.Select(r => r.Role?.Permissions), still.Permissions));
         }
         finally
         {

@@ -109,14 +109,15 @@ namespace AlgoJudge.Server.Database
                     + string.Join("; ", created.Errors.Select(e => e.Description)));
             }
 
-            var adminRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Admin, ct);
+            var adminRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Admin, ct);
             var grant = new Grant
             {
                 UserId = admin.Id,
                 ActivityId = null,
                 IsSystem = true,
+                StaffByHand = true,
             };
-            DefaultRoles.Carry(grant, adminRole, Permissions.AdminTemplate, DefaultRoles.Admin);
+            DefaultRoles.Carry(context, grant, adminRole is null ? [] : [adminRole], DateTime.UtcNow);
             context.Grants.Add(grant);
             await context.SaveChangesAsync(ct);
 
@@ -151,28 +152,20 @@ namespace AlgoJudge.Server.Database
         /// </summary>
         private async Task RestoreAdministratorGrantAsync(User existing, CancellationToken ct)
         {
-            static bool Administers(string permissions)
-            {
-                try
-                {
-                    return JsonSerializer.Deserialize<List<string>>(permissions)
-                        ?.Contains(Permissions.SystemAdministrator) == true;
-                }
-                catch (JsonException)
-                {
-                    return false;
-                }
-            }
-
             // Anybody's, not this account's: an operator who moved the role onto
             // a named person has an administrator, and this must leave them be.
+            //
+            // **Through the roles, not the grant's own entries.** Read without
+            // them, the seeded administrator — who holds the key through the
+            // shipped `admin` role — looked like nobody at all, so every start
+            // announced that the installation had no administrator.
             var system = await context.Grants
                 .AsNoTracking()
                 .Where(g => g.ActivityId == null && g.State == GrantState.Active)
-                .Select(g => g.Permissions)
+                .Held()
                 .ToListAsync(ct);
 
-            if (system.Any(Administers)) return;
+            if (system.Any(g => g.Confers().Contains(Permissions.SystemAdministrator))) return;
 
             if (await context.Grants.AnyAsync(
                     g => g.UserId == existing.Id
@@ -186,14 +179,15 @@ namespace AlgoJudge.Server.Database
                 return;
             }
 
-            var adminRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Admin, ct);
+            var adminRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Admin, ct);
             var restored = new Grant
             {
                 UserId = existing.Id,
                 ActivityId = null,
                 IsSystem = true,
+                StaffByHand = true,
             };
-            DefaultRoles.Carry(restored, adminRole, Permissions.AdminTemplate, DefaultRoles.Admin);
+            DefaultRoles.Carry(context, restored, adminRole is null ? [] : [adminRole], DateTime.UtcNow);
             context.Grants.Add(restored);
             await context.SaveChangesAsync(ct);
 
@@ -263,17 +257,36 @@ namespace AlgoJudge.Server.Database
                     Permissions.AdminTemplate),
             };
 
-            foreach (var (name, description, permissions) in shipped)
+            foreach (var (key, description, permissions) in shipped)
             {
-                var existing = await context.PermissionRoles.FirstOrDefaultAsync(t => t.Name == name, ct);
+                // **By key, and a same-named row is adopted rather than
+                // duplicated.** Found by name, a renamed built-in left this
+                // creating a second one at the next start — two `participant`
+                // roles, one of them the one everybody was linked to.
+                var existing = await context.PermissionRoles
+                    .FirstOrDefaultAsync(r => r.BuiltInKey == key, ct);
+
+                if (existing is null)
+                {
+                    existing = await context.PermissionRoles.FirstOrDefaultAsync(
+                        r => r.ActivityId == null && r.Name == key, ct);
+                    if (existing is not null)
+                    {
+                        existing.BuiltInKey = key;
+                        existing.IsBuiltIn = true;
+                        continue;
+                    }
+                }
+
                 if (existing is not null) continue;
 
                 context.PermissionRoles.Add(new Role
                 {
-                    Name = name,
+                    Name = key,
                     Description = description,
                     Permissions = JsonSerializer.Serialize(permissions),
                     IsBuiltIn = true,
+                    BuiltInKey = key,
                 });
             }
             await context.SaveChangesAsync(ct);
@@ -328,7 +341,7 @@ namespace AlgoJudge.Server.Database
             });
             context.Activities.Add(activity);
 
-            var participantRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Participant, ct);
+            var participantRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Participant, ct);
             var studentGrant = new Grant
             {
                 UserId = student.Id,
@@ -336,7 +349,7 @@ namespace AlgoJudge.Server.Database
                 IsSystem = false,
             };
             DefaultRoles.Carry(
-                studentGrant, participantRole, Permissions.ParticipantTemplate, DefaultRoles.Participant);
+                context, studentGrant, participantRole is null ? [] : [participantRole], DateTime.UtcNow);
             context.Grants.Add(studentGrant);
 
             // Somebody runs this activity, and it is not a participation. The
@@ -344,14 +357,14 @@ namespace AlgoJudge.Server.Database
             // is here because an activity nobody manages is not a state worth
             // developing against — and because it is what makes "staff are not
             // counted among the competitors" visible in the seeded data.
-            var managerRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Manager, ct);
+            var managerRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Manager, ct);
             var managerGrant = new Grant
             {
                 UserId = admin.Id,
                 ActivityId = activity.Id,
                 IsSystem = true,
             };
-            DefaultRoles.Carry(managerGrant, managerRole, Permissions.ManagerTemplate, DefaultRoles.Manager);
+            DefaultRoles.Carry(context, managerGrant, managerRole is null ? [] : [managerRole], DateTime.UtcNow);
             context.Grants.Add(managerGrant);
 
             var series = new Series

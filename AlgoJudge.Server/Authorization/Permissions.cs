@@ -166,15 +166,33 @@ namespace AlgoJudge.Server.Authorization
         /// <summary>
         /// Read the roles, and create, edit and delete them.
         /// <para>
-        /// <b>Both scopes, because a role has both.</b> Held at system scope
-        /// these reach the installation's roles; held in an activity grant they
-        /// reach that activity's roles and nothing else. A manager may run their
-        /// own group's roles without being able to rewrite what every manager in
-        /// the installation may do.
+        /// <b>Reading has both scopes; writing has two keys.</b> A manager reads
+        /// the installation's roles and their own activity's, because they hand
+        /// both out. Writing them is split: the installation's roles are an
+        /// administrator's, and an activity's are its manager's.
+        /// </para>
+        /// <para>
+        /// It was one key with both scopes until 2026-09-19, and that was a way
+        /// out of an activity: a directory group mapped onto the <c>manager</c>
+        /// role granted <c>role:manage</c> at <i>system</i> scope, so anybody in
+        /// it could rewrite the installation's roles — including emptying the
+        /// built-in <c>admin</c> one.
         /// </para>
         /// </summary>
         public const string RoleRead = "role:read";
+
+        /// <summary>
+        /// Writing the installation's roles. <b>Global scope</b>, shipped in the
+        /// <c>admin</c> role alone, and not something a claim can reach.
+        /// </summary>
         public const string RoleManage = "role:manage";
+
+        /// <summary>
+        /// Writing one activity's own roles. Held in an activity grant it reaches
+        /// that activity's roles; held at system scope it reaches every
+        /// activity's, the way every activity-scoped key held there does.
+        /// </summary>
+        public const string RoleManageActivity = "role:manage:activity";
 
         public const string RunnerRead = "runner:read";
         public const string RunnerApprove = "runner:approve";
@@ -310,7 +328,8 @@ namespace AlgoJudge.Server.Authorization
             Define(GrantUpdate, "grant", PermissionScope.Both),
 
             Define(RoleRead, "role", PermissionScope.Both),
-            Define(RoleManage, "role", PermissionScope.Both),
+            Define(RoleManage, "role", PermissionScope.Global),
+            Define(RoleManageActivity, "role", PermissionScope.Both),
 
             Define(RunnerRead, "runner", PermissionScope.Global),
             Define(RunnerApprove, "runner", PermissionScope.Global),
@@ -370,20 +389,29 @@ namespace AlgoJudge.Server.Authorization
         }
 
         /// <summary>
-        /// What a grant carries: the role it points at, unioned with its own
+        /// What a grant carries: every role it links, unioned with its own
         /// entries. Either half may be absent — a grant with no role holds the
-        /// whole set itself, which is what every hand-made one does.
+        /// whole set itself, which is what every hand-made one may still be.
         /// <para>
-        /// <b>One reader, and the arguments are separate on purpose.</b> Three
-        /// places resolve grants — <c>PermissionService</c>, <c>EventAudience</c>
-        /// and <c>GrantService</c> — and a join added to two of them would leave
-        /// the third quietly answering without the role. Passing the role's json
-        /// explicitly makes the <c>Include</c> each caller owes visible where it
-        /// is owed.
+        /// <b>One reader, and the arguments are separate on purpose.</b> Several
+        /// places resolve grants, and a join added to some of them would leave
+        /// the others quietly answering without the roles — which is exactly how
+        /// the ranking push, the merge blocker, the deletion hold and the
+        /// seeder's administrator check all came to read an empty set off a
+        /// linked grant. Passing the roles' json explicitly makes the
+        /// <c>Include</c> each caller owes visible where it is owed.
         /// </para>
         /// </summary>
-        public static IReadOnlyList<string> Effective(string? roleJson, string? ownJson) =>
-            roleJson is null ? Parse(ownJson) : [.. Parse(roleJson).Union(Parse(ownJson))];
+        public static IReadOnlyList<string> Effective(
+            IEnumerable<string?>? roleJsons, string? ownJson)
+        {
+            var effective = new HashSet<string>(Parse(ownJson), StringComparer.Ordinal);
+            foreach (var role in roleJsons ?? [])
+            {
+                effective.UnionWith(Parse(role));
+            }
+            return [.. effective];
+        }
 
         public static IReadOnlyList<string> Unknown(IEnumerable<string> permissions) =>
             permissions.Where(key => !Known.Contains(key)).Distinct().ToList();
@@ -421,7 +449,7 @@ namespace AlgoJudge.Server.Authorization
             UserReadAll,
             UserCreateTemporary,
             GrantReadAll, GrantUpdate,
-            RoleRead, RoleManage,
+            RoleRead, RoleManageActivity,
         ];
 
         public static readonly IReadOnlyList<string> ParticipantTemplate = [.. ParticipantKeys];

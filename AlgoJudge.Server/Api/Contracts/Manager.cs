@@ -125,12 +125,12 @@ namespace AlgoJudge.Server.Api.Contracts
         public required int MatchingRunners { get; init; }
 
         /// <summary>
-        /// The roles this activity enrolls into, or null for the installation's
-        /// shipped ones. What self-enrollment, a bulk of temporary accounts and an
-        /// LTI launch hand out here.
+        /// The roles this activity enrolls into, or empty for the installation's
+        /// shipped ones. What self-enrollment, a bulk of temporary accounts and
+        /// an LTI rule aimed at a slot hand out here.
         /// </summary>
-        public string? ParticipantRoleId { get; init; }
-        public string? ManagerRoleId { get; init; }
+        public required IReadOnlyList<string> ParticipantRoleIds { get; init; }
+        public required IReadOnlyList<string> ManagerRoleIds { get; init; }
     }
 
     /// <summary>
@@ -204,17 +204,18 @@ namespace AlgoJudge.Server.Api.Contracts
         public IReadOnlyList<string>? RunnerTags { get; init; }
 
         /// <summary>
-        /// The roles this activity enrolls into — one for taking part, one for
-        /// running it. Absent leaves them alone; an empty string clears one back
-        /// to the installation's shipped role.
+        /// The roles this activity enrolls into — a set for taking part, a set
+        /// for running it. Absent leaves a set alone; an empty list clears it
+        /// back to the installation's shipped role.
         /// <para>
-        /// A global role, or one belonging to this activity. This is what lets a
-        /// role of an activity's own reach anybody: self-enrollment, a bulk of
-        /// temporary accounts and an LTI launch all read it.
+        /// Installation roles, or ones belonging to this activity. This is what
+        /// lets a role of an activity's own reach anybody: self-enrollment, a
+        /// bulk of temporary accounts and an LTI rule aimed at a slot all read
+        /// it.
         /// </para>
         /// </summary>
-        public string? ParticipantRoleId { get; init; }
-        public string? ManagerRoleId { get; init; }
+        public IReadOnlyList<string>? ParticipantRoleIds { get; init; }
+        public IReadOnlyList<string>? ManagerRoleIds { get; init; }
     }
 
     public record ManagedSeriesProblemDto

@@ -116,18 +116,25 @@ public class LtiRegistrationTests(ServerFixture server)
         var providers = await (await admin.GetAsync("/api/v1/identity/providers"))
             .Content.ReadFromJsonAsync<JsonElement>();
 
-        var row = providers.EnumerateArray()
-            .Single(p => p.GetProperty("id").GetString() == providerId);
+        // **Not in the list at all**, since 2026-09-19. It used to be listed as
+        // an ordinary provider — disabled, with no secret, and with a delete
+        // button beside it. Deleting it succeeded, because no account signs in
+        // through it, and every launch from that course stopped enrolling
+        // anybody.
+        Assert.DoesNotContain(providers.EnumerateArray(),
+            p => p.GetProperty("id").GetString() == providerId);
 
-        Assert.False(row.GetProperty("enabled").GetBoolean());
-        Assert.False(row.GetProperty("hasClientSecret").GetBoolean());
+        // Nor reachable one at a time, or removable.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await admin.GetAsync($"/api/v1/identity/providers/{providerId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await admin.DeleteAsync($"/api/v1/identity/providers/{providerId}")).StatusCode);
 
         // And the list the sign-in screen is built from does not offer it.
         //
         // Compared by **slug**, because that answer carries a slug and a display
         // name and no id at all — asserting the id is absent would pass whatever
         // the code did, which is a test that reads like one and is not.
-        var slug = row.GetProperty("slug").GetString();
         var anonymous = server.CreateClient();
         var instance = await (await anonymous.GetAsync("/api/v1/instance"))
             .Content.ReadFromJsonAsync<JsonElement>();
@@ -136,7 +143,7 @@ public class LtiRegistrationTests(ServerFixture server)
             .Select(p => p.GetProperty("slug").GetString())
             .ToArray();
 
-        Assert.DoesNotContain(slug, offered);
+        Assert.DoesNotContain("not-a-sign-in", offered);
     }
 
     /// <summary>

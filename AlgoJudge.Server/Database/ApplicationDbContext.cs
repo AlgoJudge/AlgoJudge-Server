@@ -48,10 +48,13 @@ namespace AlgoJudge.Server.Database
         /// </summary>
         public DbSet<Role> PermissionRoles { get; set; }
         public DbSet<Grant> Grants { get; set; }
+        public DbSet<GrantRole> GrantRoles { get; set; }
+        public DbSet<ActivityEnrollmentRole> ActivityEnrollmentRoles { get; set; }
         public DbSet<ActivityGroup> ActivityGroups { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
         public DbSet<IdentityProvider> IdentityProviders { get; set; }
         public DbSet<IdentityProviderMappingRule> IdentityProviderMappingRules { get; set; }
+        public DbSet<IdentityProviderDefaultRole> IdentityProviderDefaultRoles { get; set; }
         public DbSet<UserIdentity> UserIdentities { get; set; }
         public DbSet<FederatedSignInAttempt> FederatedSignInAttempts { get; set; }
         public DbSet<AccountDeletionRequest> AccountDeletionRequests { get; set; }
@@ -135,22 +138,6 @@ namespace AlgoJudge.Server.Database
                 // Listing filters on it on every arrival at the activity list.
                 e.HasIndex(a => new { a.Unlisted, a.ArchivedAt });
 
-                // The two roles this activity enrolls into. `SetNull`, so a role
-                // that goes away leaves the activity falling back to the shipped
-                // one rather than pointing at nothing.
-                //
-                // This and `Roles` above make a cycle between the two tables, so
-                // nothing may create an activity and a role of its own in one
-                // `SaveChanges` — EF cannot order that, and says so. Every caller
-                // here writes the activity first.
-                e.HasOne(a => a.ParticipantRole)
-                    .WithMany()
-                    .HasForeignKey(a => a.ParticipantRoleId)
-                    .OnDelete(DeleteBehavior.SetNull);
-                e.HasOne(a => a.ManagerRole)
-                    .WithMany()
-                    .HasForeignKey(a => a.ManagerRoleId)
-                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<AttachmentRule>(e =>
@@ -665,6 +652,18 @@ namespace AlgoJudge.Server.Database
                     .HasDatabaseName("IX_Roles_ActivityId_Name")
                     .HasFilter("\"ActivityId\" IS NOT NULL");
 
+                // The shipped three, found by this rather than by name: a name is
+                // a label an installation may translate, and every enrollment
+                // path needs an answer that a rename cannot take away.
+                e.Property(t => t.BuiltInKey).HasMaxLength(32);
+                e.HasIndex(t => t.BuiltInKey)
+                    .IsUnique()
+                    .HasDatabaseName("IX_Roles_BuiltInKey")
+                    .HasFilter("\"BuiltInKey\" IS NOT NULL");
+                e.ToTable(t => t.HasCheckConstraint(
+                    "CK_Roles_BuiltInIsGlobal",
+                    "\"BuiltInKey\" IS NULL OR \"ActivityId\" IS NULL"));
+
                 e.HasOne(t => t.Activity)
                     .WithMany(a => a.Roles)
                     .HasForeignKey(t => t.ActivityId)
@@ -725,19 +724,63 @@ namespace AlgoJudge.Server.Database
                     .HasForeignKey(g => g.ActivityId)
                     .OnDelete(DeleteBehavior.Cascade);
 
+                // A source belongs to system scope only. At activity scope there
+                // is one grant per person whoever wrote it, so a source on the
+                // row would claim the whole membership for one platform; the
+                // roles a platform added carry it instead.
+                e.ToTable(t => t.HasCheckConstraint(
+                    "CK_Grants_SourceIsSystemScope",
+                    "\"ActivityId\" IS NULL OR \"SourceProviderId\" IS NULL"));
+            });
+
+            builder.Entity<GrantRole>(e =>
+            {
+                e.ToTable("GrantRoles");
+                e.HasIndex(r => new { r.GrantId, r.RoleId }).IsUnique();
+                e.HasIndex(r => r.RoleId);
+
+                e.HasOne(r => r.Grant)
+                    .WithMany(g => g.Roles)
+                    .HasForeignKey(r => r.GrantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
                 // **`NoAction`, not `Restrict`, and the difference is load-bearing.**
-                // Deleting a role that grants still point at must be refused, and
-                // the service refuses it by name. But deleting an *activity*
-                // removes its grants and its own roles in one statement, and
-                // Postgres checks a `RESTRICT` immediately — mid-cascade, before
-                // those grants are gone — while `NO ACTION` checks once the
-                // statement has finished. The second is the one that can tell the
-                // two cases apart.
-                e.HasOne(g => g.Role)
+                // Deleting a role that grants still link must be refused, and the
+                // service refuses it in words. But deleting an *activity* removes
+                // its grants and its own roles in one statement, and Postgres
+                // checks a `RESTRICT` immediately — mid-cascade, before those
+                // links are gone — while `NO ACTION` checks once the statement has
+                // finished. The second is the one that can tell the two cases
+                // apart.
+                e.HasOne(r => r.Role)
                     .WithMany()
-                    .HasForeignKey(g => g.RoleId)
+                    .HasForeignKey(r => r.RoleId)
                     .OnDelete(DeleteBehavior.NoAction);
-                e.HasIndex(g => g.RoleId);
+
+                // Attribution outlives the provider: a platform removed from the
+                // installation leaves the roles it granted in place, saying only
+                // that nobody knows where they came from any more.
+                e.HasOne(r => r.SourceProvider)
+                    .WithMany()
+                    .HasForeignKey(r => r.SourceProviderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            builder.Entity<ActivityEnrollmentRole>(e =>
+            {
+                e.ToTable("ActivityEnrollmentRoles");
+                e.HasIndex(r => new { r.ActivityId, r.Slot, r.RoleId }).IsUnique();
+                e.HasOne(r => r.Activity)
+                    .WithMany(a => a.EnrollmentRoles)
+                    .HasForeignKey(r => r.ActivityId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Deleting a role an activity enrolls into is refused in the
+                // service, for the same reason as a linked one: the slot would
+                // silently fall back to the shipped role.
+                e.HasOne(r => r.Role)
+                    .WithMany()
+                    .HasForeignKey(r => r.RoleId)
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             builder.Entity<ActivityGroup>(e =>
@@ -783,25 +826,54 @@ namespace AlgoJudge.Server.Database
                 e.Property(p => p.AccountUrl).HasMaxLength(512);
                 e.Property(p => p.DeletionUrl).HasMaxLength(512);
                 e.Property(p => p.ClaimPath).HasMaxLength(128);
-                e.Property(p => p.DefaultRoleName).HasMaxLength(64);
                 // The slug appears in a sign-in path and in the redirect URI
                 // registered on the provider's side, so it has to be unique and
                 // it is expensive to change.
                 e.HasIndex(p => p.Slug).IsUnique();
+                // The providers screen asks for this one; a row that is only
+                // there to attribute a grant is not a door.
+                e.HasIndex(p => p.Kind);
             });
 
             builder.Entity<IdentityProviderMappingRule>(e =>
             {
                 e.ToTable("IdentityProviderMappingRules");
                 e.Property(r => r.ClaimValue).HasMaxLength(256);
-                e.Property(r => r.RoleName).HasMaxLength(64);
-                // One rule per value per provider. Two would be a question about
-                // ordering, and this model deliberately has no answer to it.
-                e.HasIndex(r => new { r.ProviderId, r.ClaimValue }).IsUnique();
+                // One line per value per target. A value may name several roles
+                // now — the contribution is their union — so the old rule of one
+                // line per value is gone, and with it the ordering question it
+                // was protecting: a union has none.
+                e.HasIndex(r => new { r.ProviderId, r.ClaimValue, r.Target, r.RoleId })
+                    .IsUnique()
+                    .AreNullsDistinct(false);
                 e.HasOne(r => r.Provider)
                     .WithMany(p => p.MappingRules)
                     .HasForeignKey(r => r.ProviderId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // Deleting a role a rule names is refused in the service, and
+                // here too: a rule pointing at nothing grants nothing, silently.
+                e.HasOne(r => r.Role)
+                    .WithMany()
+                    .HasForeignKey(r => r.RoleId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.ToTable(t => t.HasCheckConstraint(
+                    "CK_MappingRules_RoleForRoleTarget",
+                    "(\"Target\" = 0 AND \"RoleId\" IS NOT NULL) "
+                        + "OR (\"Target\" <> 0 AND \"RoleId\" IS NULL)"));
+            });
+
+            builder.Entity<IdentityProviderDefaultRole>(e =>
+            {
+                e.ToTable("IdentityProviderDefaultRoles");
+                e.HasIndex(r => new { r.ProviderId, r.RoleId }).IsUnique();
+                e.HasOne(r => r.Provider)
+                    .WithMany(p => p.DefaultRoles)
+                    .HasForeignKey(r => r.ProviderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(r => r.Role)
+                    .WithMany()
+                    .HasForeignKey(r => r.RoleId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<UserIdentity>(e =>

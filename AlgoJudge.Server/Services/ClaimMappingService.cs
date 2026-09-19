@@ -11,15 +11,17 @@ namespace AlgoJudge.Server.Services
     /// What a provider's token buys, and nothing more.
     /// </summary>
     /// <param name="Matched">The claim values that matched a rule, for the log.</param>
-    /// <param name="Permissions">
-    /// The union of the matched templates. Empty is a real answer and is what
+    /// <param name="RoleIds">
+    /// The roles those rules name. The contribution <b>links</b> these, so
+    /// editing one reaches its holders at their next sign-in and the panel can
+    /// count them. Empty is a real answer and is what
     /// <see cref="UnmappedBehavior"/> then decides about.
     /// </param>
-    /// <param name="Templates">Which templates were used, for the log and the panel.</param>
+    /// <param name="RoleNames">Which roles were used, for the log and the panel.</param>
     public record MappedContribution(
         IReadOnlyList<string> Matched,
-        IReadOnlySet<string> Permissions,
-        IReadOnlyList<string> Templates)
+        IReadOnlyList<Guid> RoleIds,
+        IReadOnlyList<string> RoleNames)
     {
         public bool Any => Matched.Count > 0;
     }
@@ -60,7 +62,7 @@ namespace AlgoJudge.Server.Services
             var present = ValuesAt(principal, provider.ClaimPath);
             if (present.Count == 0)
             {
-                return new MappedContribution([], new HashSet<string>(), []);
+                return new MappedContribution([], [], []);
             }
 
             var rules = provider.MappingRules.Count > 0
@@ -71,61 +73,67 @@ namespace AlgoJudge.Server.Services
                     .ToListAsync(ct);
 
             var matched = new List<string>();
-            var templates = new List<string>();
+            var wanted = new List<Guid>();
 
             foreach (var value in present)
             {
-                var rule = rules.FirstOrDefault(r => string.Equals(r.ClaimValue, value, StringComparison.Ordinal));
-                if (rule is null) continue;
+                var named = rules
+                    .Where(r => string.Equals(r.ClaimValue, value, StringComparison.Ordinal))
+                    .ToList();
+                if (named.Count == 0) continue;
 
                 matched.Add(value);
-                if (!templates.Contains(rule.RoleName)) templates.Add(rule.RoleName);
+                foreach (var rule in named)
+                {
+                    // A slot means nothing here: an OIDC contribution is system
+                    // scope, and there is no activity to resolve one against.
+                    // The write path refuses one; this is the second lock.
+                    if (rule.Target != MappingTarget.Role || rule.RoleId is not { } roleId) continue;
+                    if (!wanted.Contains(roleId)) wanted.Add(roleId);
+                }
             }
 
             if (matched.Count == 0)
             {
-                return new MappedContribution([], new HashSet<string>(), []);
+                return new MappedContribution([], [], []);
             }
 
-            return new MappedContribution(
-                matched, await PermissionsOfAsync(templates, ct), templates);
+            var grantable = await GrantableAsync(wanted, ct);
+            return new MappedContribution(matched, [.. grantable.Keys], [.. grantable.Values]);
         }
 
         /// <summary>
-        /// The union of the named templates, with the two things a claim may
-        /// never carry stripped: <c>system:administrator</c>, and any key the
-        /// catalog does not describe.
+        /// The roles a contribution may link, by id and name.
         /// <para>
-        /// A template naming a permission this Server has never heard of would
-        /// otherwise be stored into a grant, and <c>Permissions.IsStaff</c> counts
-        /// an unknown key as staff — so a typo in a template would quietly take
-        /// somebody out of a ranking.
+        /// <b>A role carrying <c>system:administrator</c> is skipped.</b> The
+        /// write path refuses a rule naming one, and a copied contribution used
+        /// to be able to strip the key on the way in — a link cannot, so the
+        /// role is left out entirely. "Unreachable through a mapping, in every
+        /// configuration" has to hold after somebody edits a role a rule already
+        /// names.
+        /// </para>
+        /// <para>
+        /// Installation roles only. An activity's role is somebody else's
+        /// course's, and a mapping is the installation's.
         /// </para>
         /// </summary>
-        private async Task<IReadOnlySet<string>> PermissionsOfAsync(
-            IReadOnlyList<string> templateNames, CancellationToken ct)
+        private async Task<Dictionary<Guid, string>> GrantableAsync(
+            IReadOnlyList<Guid> wanted, CancellationToken ct)
         {
-            // Global roles only. A mapping is system scope, and an activity's
-            // role of the same name is a different object belonging to somebody
-            // else's course — matching it here would let one activity's manager
-            // decide what a directory group buys installation-wide.
-            var stored = await context.PermissionRoles
+            if (wanted.Count == 0) return [];
+
+            var roles = await context.PermissionRoles
                 .AsNoTracking()
-                .Where(t => t.ActivityId == null && templateNames.Contains(t.Name))
-                .Select(t => t.Permissions)
+                .Where(r => r.ActivityId == null && wanted.Contains(r.Id))
                 .ToListAsync(ct);
 
-            var permissions = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var json in stored)
+            var grantable = new Dictionary<Guid, string>();
+            foreach (var role in roles)
             {
-                foreach (var key in Parse(json))
-                {
-                    if (key == Permissions.SystemAdministrator) continue;
-                    if (Permissions.Unknown([key]).Count > 0) continue;
-                    permissions.Add(key);
-                }
+                if (Parse(role.Permissions).Contains(Permissions.SystemAdministrator)) continue;
+                grantable[role.Id] = role.Name;
             }
-            return permissions;
+            return grantable;
         }
 
         /// <summary>
