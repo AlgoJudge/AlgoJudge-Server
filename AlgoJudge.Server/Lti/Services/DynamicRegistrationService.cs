@@ -130,7 +130,7 @@ namespace AlgoJudge.Server.Lti.Services
             // **The claim is a reservation, not a spend.** It used to be written
             // outside any transaction and before the two outbound calls below, so
             // every refusal — a platform answering something malformed, most of
-            // all — burnt a single-use code that only a manager could reissue.
+            // all — burned a single-use code that only a manager could reissue.
             // Inside a transaction the row is still locked for the duration, so
             // two platforms racing for one invitation is still one admission.
             await using var transaction = await db.Database.BeginTransactionAsync(ct);

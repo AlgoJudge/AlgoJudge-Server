@@ -93,7 +93,7 @@ namespace AlgoJudge.Server.Controllers
         /// opaque, and a 403 would confirm that the bytes exist.
         /// </para>
         /// <para>
-        /// Cached for ever, because bytes are immutable — there is no replace,
+        /// Cached forever, because bytes are immutable — there is no replace,
         /// and a corrected file is a new upload with a new id. `private` unless
         /// the answer does not depend on who is asking, which is only true of an
         /// instance document and the logo.

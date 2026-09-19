@@ -319,7 +319,7 @@ public sealed class StorageMigrationTests : IAsyncLifetime
         await RequestAsync();
 
         // The first run is cut short after two files, exactly as a killed process
-        // would be — no cleanup, no note of where it got to.
+        // would be — no cleanup, no note of how far it got.
         await using (var context = NewContext())
         {
             var migration = await context.StorageMigrations.FirstAsync();
@@ -579,7 +579,7 @@ public sealed class StorageMigrationTests : IAsyncLifetime
     /// <para>
     /// An installation with nothing to migrate is the common case and the
     /// permanent one, and a thirty-second tick there is two indexed queries
-    /// every thirty seconds for ever, to learn nothing. What decides the pace is
+    /// every thirty seconds forever, to learn nothing. What decides the pace is
     /// whether anything is in flight, so that is what a run reports.
     /// </para>
     /// </summary>

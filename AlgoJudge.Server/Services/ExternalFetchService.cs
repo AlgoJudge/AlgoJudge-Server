@@ -60,8 +60,9 @@ namespace AlgoJudge.Server.Services
 
             var instance = await context.Instance.AsNoTracking().FirstOrDefaultAsync(ct);
 
-            // The same switch that stops external work being handed out stops
-            // external content being pulled in. One decision, both directions.
+            // The same switch that stops external work from being handed out
+            // stops external content from being pulled in. One decision, both
+            // directions.
             if (instance is null || !instance.ExternalJudgingEnabled)
             {
                 throw new ValidationException(

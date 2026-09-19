@@ -3,7 +3,7 @@ using AlgoJudge.Server.Services;
 namespace AlgoJudge.Server.Workers
 {
     /// <summary>
-    /// Removes the accounts a merge emptied, once nobody can undo it any more.
+    /// Removes the accounts a merge emptied, once nobody can undo it anymore.
     /// <para>
     /// <b>Its own worker rather than a second job in the deletion sweep</b>, for
     /// the reason every other one here is its own: a sweep that fails takes only

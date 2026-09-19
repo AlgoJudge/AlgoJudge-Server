@@ -124,7 +124,7 @@ namespace AlgoJudge.Server.Lti.Services
 
         /// <summary>
         /// A ceiling on paging, so a platform that answers with a `Link` header
-        /// pointing at itself cannot hold this open for ever. Reached means
+        /// pointing at itself cannot hold this open forever. Reached means
         /// something is wrong at the platform, and it is logged rather than
         /// silently truncating a roster.
         /// </summary>

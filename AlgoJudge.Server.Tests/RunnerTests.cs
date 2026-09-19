@@ -551,7 +551,7 @@ public class RunnerTests(ServerFixture server)
 
     /// <summary>
     /// A job that keeps being reclaimed is a job that keeps killing Runners.
-    /// Retrying it for ever is how one bad package stops an installation.
+    /// Retrying it forever is how one bad package stops an installation.
     /// <para>
     /// **Each round renews the lease, and that is load-bearing.** Since
     /// 2026-09-04 a claim nobody was ever heard from about is refunded rather
@@ -789,10 +789,10 @@ public class RunnerTests(ServerFixture server)
     }
 
     /// <summary>
-    /// The half a references-only check would have got wrong. A trial package is
+    /// The half a references-only check would have gotten wrong. A trial package is
     /// uploaded by a person and carries <b>no</b> reference on purpose — that is
     /// what lets it be collected once the trial is over (D-12). A Runner minting
-    /// the first reference on it would make it undeletable for ever.
+    /// the first reference on it would make it undeletable forever.
     /// </summary>
     [Fact]
     public async Task A_trial_package_cannot_be_claimed_by_a_runner_as_its_own_output()

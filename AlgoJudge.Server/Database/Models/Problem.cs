@@ -82,7 +82,7 @@ namespace AlgoJudge.Server.Database.Models
         /// This is an access control list, and it is the only one in the product.
         /// The permission model settles what a manager may <b>do</b> with a
         /// problem; this settles <b>which</b> problems that applies to. Keeping
-        /// the two apart is what stops the exception becoming a second
+        /// the two apart is what stops the exception from becoming a second
         /// authorization system — nothing else gets a list like this.
         /// </para>
         /// <para>

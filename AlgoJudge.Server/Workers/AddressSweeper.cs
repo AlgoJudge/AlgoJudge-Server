@@ -10,7 +10,7 @@ namespace AlgoJudge.Server.Workers
     /// <c>UserSession.ExpiresAt</c> has existed since the schema was written, is
     /// indexed, and carried a comment saying a reaper closed expired sessions —
     /// nothing ever set the column and nothing ever swept it. So every address
-    /// anybody had ever connected from was kept for ever, and
+    /// anybody had ever connected from was kept forever, and
     /// <c>SessionsAsync</c> answers only for sessions that have not ended, which
     /// left the rest with no reader at all: cost and risk, no use.
     /// </para>
@@ -85,7 +85,7 @@ namespace AlgoJudge.Server.Workers
 
             // **`IpAddress != null || UserAgent != null` and not the expiry
             // alone**, so a session swept once is not read again on every pass
-            // for the rest of its life. The row stays for ever; the work does
+            // for the rest of its life. The row stays forever; the work does
             // not repeat.
             var stale = await context.UserSessions
                 .Where(s => s.ExpiresAt != null

@@ -284,7 +284,7 @@ public static class Build
             problemTypes = problemTypes ?? ["standard-io@1"],
             external,
             // Declared at registration, which is the only door they come in
-            // through — the panel owns them from the next restart onwards.
+            // through — the panel owns them from the next restart on.
             tags = tags ?? [],
         });
 

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AlgoJudge.Server.Tests;
 
 /// <summary>
-/// Registering an identity provider, and the guards that stop a claim minting
+/// Registering an identity provider, and the guards that stop a claim from minting
 /// privilege.
 /// <para>
 /// Two things here are not ordinary CRUD tests and are the reason this file

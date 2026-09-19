@@ -55,7 +55,7 @@ namespace AlgoJudge.Server.Workers
         /// <summary>
         /// And how often when nothing is: no migration, nothing to sweep.
         /// <para>
-        /// <b>Most installations are here for ever.</b> A migration is a rare,
+        /// <b>Most installations are here forever.</b> A migration is a rare,
         /// deliberate act, so a thirty-second tick would be two indexed queries
         /// every thirty seconds, in perpetuity, to learn nothing — nearly three
         /// thousand round trips a day for the answer "no". Five minutes costs a
@@ -215,7 +215,7 @@ namespace AlgoJudge.Server.Workers
         /// <para>
         /// <b>Nothing moves while work is in flight (A81).</b> A Runner holding a
         /// job is about to read a package, and a series that is open is somebody
-        /// sitting an exam. Copying is not dangerous to either — a read follows
+        /// taking an exam. Copying is not dangerous to either — a read follows
         /// its own row for the whole move — but the load is, and a contest is the
         /// worst hour of the year to add any.
         /// </para>
@@ -392,7 +392,7 @@ namespace AlgoJudge.Server.Workers
             {
                 // Nothing can be done about it here and it must not stop the run:
                 // the health surface already names it, and leaving it alone is
-                // better than a migration that stalls for ever on one row.
+                // better than a migration that stalls forever on one row.
                 logger.LogWarning(
                     "Not migrating {File}: the store it names is not configured", file.Id);
                 file.PreviousStorageId = null;
@@ -475,7 +475,7 @@ namespace AlgoJudge.Server.Workers
                     catch (Exception e) when (e is not OperationCanceledException)
                     {
                         // Left for the next sweep. An undeleted stale copy costs
-                        // space; a cleared column would lose it for ever.
+                        // space; a cleared column would lose it forever.
                         logger.LogWarning(e, "Could not remove the stale copy of {File}", file.Id);
                         continue;
                     }

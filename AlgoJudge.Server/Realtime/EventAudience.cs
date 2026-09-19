@@ -144,7 +144,7 @@ namespace AlgoJudge.Server.Realtime
             {
                 // A grant whose permissions will not parse is a grant nobody can
                 // be judged by. It resolves to nothing rather than throwing: one
-                // bad row must not stop everybody else being told.
+                // bad row must not stop everybody else from being told.
                 var keys = Permissions.Effective(grant.RolePermissions, grant.Permissions);
 
                 // **The administrator bypass is only meaningful at the system

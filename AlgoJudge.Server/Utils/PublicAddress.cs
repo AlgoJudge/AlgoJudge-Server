@@ -25,7 +25,7 @@ namespace AlgoJudge.Server.Utils
         /// Whether this Server may open a connection to it.
         /// <para>
         /// Written as a list of what is <b>refused</b> rather than of what is
-        /// allowed, and that is the wrong way round for a security control — but
+        /// allowed, and that is the wrong way around for a security control — but
         /// the allowed set here is "the public internet", which has no
         /// enumeration. The refusals are therefore exhaustive by range rather
         /// than by example, and an address family this does not recognize is

@@ -84,7 +84,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// <b>What the round-granular paths ask.</b> An activity-scoped floor
         /// never locks the activity, so the board, the submission list and the
-        /// questions cannot be answered with "all of it or none of it" any more.
+        /// questions cannot be answered with "all of it or none of it" anymore.
         /// </para>
         /// </summary>
         Task<IReadOnlySet<Guid>> UnreachableRoundsAsync(

@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Api.Contracts
 
     /// <summary>
     /// The key ring as an operator needs to see it: which arrangement is in
-    /// force, what is actually stored, and what needs doing about it.
+    /// force, what is actually stored, and what to do about it.
     /// <para>
     /// <b>Never served publicly.</b> It names how many keys exist, when they
     /// expire and whether they are encrypted — an inventory of what protects

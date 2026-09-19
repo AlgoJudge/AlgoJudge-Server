@@ -115,7 +115,7 @@ default nobody read. The Server says what is missing and exits.
 
 A **store** is one configured place where bytes may live. A deployment may have
 several, including several of the same kind, and every stored file remembers
-which one holds it — for ever, which is why a store id may never be reused for
+which one holds it — forever, which is why a store id may never be reused for
 another location. Three kinds: `postgres`, `filesystem` and `s3`.
 
 ```bash

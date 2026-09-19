@@ -66,7 +66,7 @@ public class WorkerTests(ServerFixture server)
     ///
     /// <para>
     /// <b>It did not survive it.</b> Each pass read a batch of rounds, changed
-    /// them and saved the lot in one go; <c>Series</c> carries a row version, so
+    /// them and saved them all at once; <c>Series</c> carries a row version, so
     /// whichever pass saved second matched nothing and threw
     /// <c>DbUpdateConcurrencyException</c> — losing <b>every</b> round in that
     /// pass, including the ones nobody else had touched. The hosted loop catches
@@ -141,7 +141,7 @@ public class WorkerTests(ServerFixture server)
     /// </para>
     ///
     /// <para>
-    /// Against the old sweep — read a batch, change it, save the lot —
+    /// Against the old sweep — read a batch, change it, save it all —
     /// <c>Series</c>'s row version makes that save match nothing and throw,
     /// losing every round in the pass including untouched ones. Against a sweep
     /// that claims each round with a conditional update, the claim matches
@@ -307,7 +307,7 @@ public class WorkerTests(ServerFixture server)
         await using (var context = server.NewContext())
         {
             Assert.False(await context.Files.AnyAsync(f => f.Id == old));
-            // An abandoned edit must not cost storage for ever, but the window
+            // An abandoned edit must not cost storage forever, but the window
             // has to outlast a slow upload followed by a long think.
             Assert.True(await context.Files.AnyAsync(f => f.Id == young));
         }

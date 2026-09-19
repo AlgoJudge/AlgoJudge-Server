@@ -156,7 +156,7 @@ public class LtiGradeTests
     /// <summary>
     /// AGS identifies its payloads by content type and a platform answers 400 to
     /// <c>application/json</c>. The failure then reads as "the tool sent
-    /// rubbish", which sends whoever debugs it anywhere but the header.
+    /// garbage", which sends whoever debugs it anywhere but the header.
     /// </summary>
     [Fact]
     public async Task The_media_types_are_the_ones_AGS_defines()

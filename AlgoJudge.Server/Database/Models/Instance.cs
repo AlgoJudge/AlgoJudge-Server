@@ -4,7 +4,7 @@ namespace AlgoJudge.Server.Database.Models
 {
     /// <summary>
     /// What this installation calls itself and how it admits people — one row,
-    /// for ever.
+    /// forever.
     /// <para>
     /// A table rather than configuration because an operator edits it from the
     /// manager panel while the Server is running, and because the documents it

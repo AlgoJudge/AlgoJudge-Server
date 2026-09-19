@@ -47,7 +47,7 @@ namespace AlgoJudge.Server.Lti.Services
         Task<IReadOnlyList<ToolKeyDto>> ListAsync(CancellationToken cancellationToken);
 
         /// <summary>
-        /// Mints a new key and stops the old one signing, <b>leaving it
+        /// Mints a new key and stops the old one from signing, <b>leaving it
         /// published</b>. That overlap is the point: a platform caches a key set
         /// on its own terms, so a rotation that took the old key out at the same
         /// moment would refuse everything signed before the platform refetched —

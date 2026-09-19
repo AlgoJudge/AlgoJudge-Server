@@ -170,7 +170,7 @@ namespace AlgoJudge.Server.Services
         /// <b>Shared by create and update</b>, because two copies of a validation
         /// are two chances for one path to accept what the other refuses — and
         /// the thing being refused here is a round that would restrict a whole
-        /// installation for ever.
+        /// installation forever.
         /// </para>
         /// <para>
         /// <b>Both dates or neither restriction.</b> A lockdown is bounded by the
@@ -639,7 +639,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// Zero was accepted and is not a problem worth nothing — it is a
         /// problem whose every number is <c>0 / 0</c>, which a board reads as
-        /// full marks because zero out of zero is the whole of it. A problem
+        /// a full score because zero out of zero is the whole of it. A problem
         /// nobody should score is a problem nobody should attach.
         /// </para>
         /// <para>

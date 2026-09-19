@@ -35,10 +35,10 @@ namespace AlgoJudge.Server.Realtime
         /// <para>
         /// <b>Bounded by <paramref name="deadline"/>, which is the whole point.</b>
         /// A client that opens a socket and stops draining its receive window
-        /// used to park this <c>await</c> for ever — and with the fan-out below
+        /// used to park this <c>await</c> forever — and with the fan-out below
         /// awaiting each recipient in turn, one such client stopped delivery to
         /// everybody. `SeriesScheduler` awaits its tick inline on a token that
-        /// only fires at shutdown, so it stopped rounds opening at all.
+        /// only fires at shutdown, so it stopped rounds from opening at all.
         /// </para>
         /// </summary>
         public async Task<bool> SendAsync(

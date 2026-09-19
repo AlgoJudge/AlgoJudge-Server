@@ -132,7 +132,7 @@ public class FederatedSignInTests(ServerFixture server)
     /// what the provider granted before.
     /// <para>
     /// Get the order wrong and somebody removed from the directory's staff group
-    /// keeps every right they had here, for ever, by the simple method of never
+    /// keeps every right they had here, forever, by the simple method of never
     /// signing in again. Nothing would look broken.
     /// </para>
     /// </summary>

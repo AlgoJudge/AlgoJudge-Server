@@ -49,7 +49,7 @@ namespace AlgoJudge.Server.Services
     /// outside the integration module may name it — that boundary is what keeps
     /// the module deletable in one commit, and a test enforces it. It needs no
     /// help: the desired grades are computed from submissions, which have moved,
-    /// so the target's mark rises and the emptied account's falls to nought
+    /// so the target's grade rises and the emptied account's falls to zero
     /// through the same path that carries any contestant who stops earning.
     /// <c>docs/specs/ACCOUNT_MERGE.md</c> records what that costs.
     /// </para>
@@ -274,7 +274,7 @@ namespace AlgoJudge.Server.Services
             // page: a merge is one human with two accounts, not a deletion. Left
             // behind until 2026-09-14, so a request vanished from the asker's own
             // list and stayed in the operator's queue under a name nobody could
-            // reach any more.
+            // reach anymore.
             var printouts = await context.Printouts
                 .Where(x => x.RequestedByUserId == source.Id).ToListAsync(ct);
             foreach (var printout in printouts)
@@ -483,7 +483,7 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// <b>By recorded id, never by "everything the target holds"</b> — the
         /// target's own work is indistinguishable from what arrived once the ids
-        /// are the same, and taking the lot would empty the wrong account.
+        /// are the same, and taking everything would empty the wrong account.
         /// </para>
         /// </summary>
         private async Task PutBackAsync(MovedRows moved, User source, CancellationToken ct)

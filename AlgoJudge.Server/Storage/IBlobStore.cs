@@ -6,7 +6,7 @@ namespace AlgoJudge.Server.Storage
     /// <b>Both identifiers, always.</b> The layout comes from the checksum and
     /// the leaf name from the id (§5.1), so a store cannot be asked to find a
     /// blob from only one of them. Passing the pair everywhere is what stops a
-    /// caller inventing a path.
+    /// caller from inventing a path.
     /// </para>
     /// <para>
     /// <b>The checksum here is always one the Server computed</b> — never one a
@@ -128,7 +128,7 @@ namespace AlgoJudge.Server.Storage
     {
         /// <summary>
         /// The configured id, not the kind. A deployment may run several stores
-        /// of one kind, and <c>File.StorageId</c> names one of them for ever.
+        /// of one kind, and <c>File.StorageId</c> names one of them forever.
         /// </summary>
         string Id { get; }
 
@@ -200,7 +200,7 @@ namespace AlgoJudge.Server.Storage
     /// <para>
     /// The indirection exists because <c>File.StorageId</c> is a permanent
     /// property of a row while <c>Storage__Default</c> is a property of the
-    /// configuration: a read follows its own row, for ever, and only a write
+    /// configuration: a read follows its own row, forever, and only a write
     /// asks what the default is. Conflating them is how a deployment that
     /// changed its default would stop being able to read its own history.
     /// </para>

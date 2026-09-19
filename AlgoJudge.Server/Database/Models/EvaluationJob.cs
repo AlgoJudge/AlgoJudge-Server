@@ -59,7 +59,7 @@ namespace AlgoJudge.Server.Database.Models
         /// claim, including the ones that followed a lease expiry.
         /// <para>
         /// A job that keeps being reclaimed is a job that keeps killing Runners,
-        /// and retrying it for ever is how one bad package stops an installation.
+        /// and retrying it forever is how one bad package stops an installation.
         /// Past the configured cap it goes to <see cref="EvaluationJobState.Failed"/>
         /// with a reason rather than back into the queue.
         /// </para>
@@ -103,7 +103,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <para>
         /// <b>Bounded for the reason <see cref="Releases"/> is.</b> A row that
         /// something throws on after the commit — every time, for every Runner
-        /// — would otherwise be claimed and refunded for ever, and the delivery
+        /// — would otherwise be claimed and refunded forever, and the delivery
         /// cap that ends a bad job would never be reached.
         /// </para>
         /// </summary>

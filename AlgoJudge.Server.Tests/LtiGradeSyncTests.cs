@@ -140,7 +140,7 @@ public class LtiGradeSyncTests(ServerFixture server)
 
         // **Zero, not "unchanged".** Dropping the submission alone leaves this
         // contestant out of the computation, and a row nobody computes is a row
-        // nobody corrects — the platform would hold the old mark for ever.
+        // nobody corrects — the platform would hold the old grade forever.
         Assert.True(posted >= 1, "the withdrawn grade was never sent");
         Assert.Equal(0, world.Gradebook.Held[world.Subject].Score);
     }
@@ -151,8 +151,8 @@ public class LtiGradeSyncTests(ServerFixture server)
     /// <para>
     /// A gradebook column takes one grade per person and §6.2 says it is their
     /// best attempt. That was chosen by ordering on the raw score, which
-    /// compares numbers marked out of different maxima — a package republished
-    /// with more tests, or an external judge marking out of one. So 70 out of
+    /// compares numbers scored out of different maxima — a package republished
+    /// with more tests, or an external judge scoring out of one. So 70 out of
     /// 100 beat 1 out of 1, and the platform was sent the **worse** of somebody's
     /// two attempts.
     /// </para>
@@ -160,7 +160,7 @@ public class LtiGradeSyncTests(ServerFixture server)
     /// <para>
     /// Every other reader in the product had already been moved to fractions
     /// when the same defect was found on 2026-08-16. This query was missed, and
-    /// no test could see it while every attempt in this file was marked out of a
+    /// no test could see it while every attempt in this file was scored out of a
     /// hundred.
     /// </para>
     /// </summary>
@@ -177,7 +177,7 @@ public class LtiGradeSyncTests(ServerFixture server)
         await world.AttemptAsync(score: 1, outOf: 1);
         await world.SweepAsync();
 
-        // The setup judged the first attempt 50 out of 100 — half marks. The
+        // The setup judged the first attempt 50 out of 100 — half credit. The
         // second is 1 out of 1, whose raw number is fifty times smaller and
         // whose fraction is twice as good, so the grade must go **up**.
         // Ordering on the raw score leaves it exactly where it was.
@@ -189,7 +189,7 @@ public class LtiGradeSyncTests(ServerFixture server)
     /// <b>A synchronized grade is not sent again, and this is the test that was
     /// missing.</b> Until it existed, every sweep moved every synchronized row
     /// back to pending — so every grade in the installation was reposted every
-    /// minute, for ever, against somebody else's Moodle. It looked like working
+    /// minute, forever, against somebody else's Moodle. It looked like working
     /// software.
     ///
     /// <para>
@@ -293,7 +293,7 @@ public class LtiGradeSyncTests(ServerFixture server)
     /// A group's grade reaches every member the platform knows.
     /// <para>
     /// One submission, sent by one member, and two gradebook rows carrying the
-    /// same score — because what competed was the group, and a mark is a fact
+    /// same score — because what competed was the group, and a grade is a fact
     /// about the contestant rather than about whoever happened to press the
     /// button.
     /// </para>
@@ -311,7 +311,7 @@ public class LtiGradeSyncTests(ServerFixture server)
         Assert.True(world.Gradebook.Held.ContainsKey(world.Teammate!),
             "the member who submitted nothing has no grade");
 
-        // The same score, not merely a score each: the group earned one mark.
+        // The same score, not merely a score each: the group earned one grade.
         Assert.Equal(
             world.Gradebook.Held[world.Subject].Score,
             world.Gradebook.Held[world.Teammate!].Score);
@@ -400,7 +400,7 @@ public class LtiGradeSyncTests(ServerFixture server)
         ///
         /// <para>
         /// <b>`outOf` is a parameter now.</b> It was fixed at 100, so every
-        /// attempt in these tests was marked on one scale — which is the one
+        /// attempt in these tests was scored on one scale — which is the one
         /// scale on which comparing raw scores and comparing fractions give the
         /// same answer, and therefore the one scale on which the selection rule
         /// cannot be tested.

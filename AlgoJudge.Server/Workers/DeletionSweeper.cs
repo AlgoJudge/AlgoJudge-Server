@@ -7,7 +7,7 @@ namespace AlgoJudge.Server.Workers
     /// <para>
     /// Only the provider's back channel ever waits: a person who asks to leave
     /// is here and gets an answer now. What waits is a request from a directory
-    /// about somebody who cannot speak for themselves any more, and the wait is
+    /// about somebody who cannot speak for themselves anymore, and the wait is
     /// <b>an administrator's day to stop it</b>.
     /// </para>
     /// <para>

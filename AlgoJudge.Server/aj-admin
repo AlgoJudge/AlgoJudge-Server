@@ -27,7 +27,7 @@ set -euo pipefail
 # `${#s}` counts *characters* under a UTF-8 locale — so a password with one
 # accented letter would announce a length one short and the Server would wait
 # for a byte that never came. This is exactly the class of mistake this script
-# exists to stop somebody making by hand at three in the morning.
+# exists to stop somebody from making by hand at three in the morning.
 export LC_ALL=C
 
 readonly HOST=127.0.0.1
@@ -51,7 +51,7 @@ Usage:
   aj-admin storage migrate             move every file to the store taking new writes
   aj-admin storage cancel              call off a migration that is under way
 
-  aj-admin keyring status              what encrypts the session cookies, and what needs doing
+  aj-admin keyring status              what encrypts the session cookies, and what to do
   aj-admin keyring rotate              write a new key now; nobody is signed out
   aj-admin keyring revoke --yes        revoke every key; EVERYBODY is signed out
 
@@ -89,7 +89,7 @@ twice does not grow a policy's revision history.
 `storage migrate` moves what is already stored; changing Storage__Default only
 decides where the next upload goes. It waits for its window and for the
 evaluation queue to empty, so nothing moves under a running contest. Take a
-backup first: `storage status` afterwards says how far it has got.
+backup first: `storage status` afterwards says how far it has gotten.
 TEXT
     exit 2
 }

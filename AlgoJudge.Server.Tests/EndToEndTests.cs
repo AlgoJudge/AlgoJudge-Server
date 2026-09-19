@@ -224,7 +224,7 @@ public class EndToEndTests(ServerFixture server)
 
         Assert.Equal("completed", finished.GetProperty("state").GetString());
         Assert.Equal("Accepted", finished.GetProperty("verdict").GetString());
-        // The Runner marked 80 of 100; the assignment is worth 50 here.
+        // The Runner awarded 80 of 100; the assignment is worth 50 here.
         Assert.Equal(40, finished.GetProperty("score").GetDouble());
         Assert.Equal(50, finished.GetProperty("maxScore").GetDouble());
     }
@@ -292,7 +292,7 @@ public class EndToEndTests(ServerFixture server)
     ///
     /// <para>
     /// It used to be refused here, against a list on the activity. The Server
-    /// cannot do that any more and should never have wanted to: a language is one
+    /// cannot do that anymore and should never have wanted to: a language is one
     /// member of a document whose shape belongs to the problem type, and a Server
     /// that reached into it would need a release every time a Runner learned a
     /// new toolchain. The refusal lives where the catalog does.

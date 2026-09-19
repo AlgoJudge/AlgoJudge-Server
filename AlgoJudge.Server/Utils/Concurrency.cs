@@ -14,7 +14,7 @@ namespace AlgoJudge.Server.Utils
     /// written out by hand.
     /// </para>
     /// <para>
-    /// <b>The loser gets the answer it would have got had it read a moment
+    /// <b>The loser gets the answer it would have gotten had it read a moment
     /// later.</b> Every one of these paths already guards itself — a deletion
     /// must still be pending, a merge must not already be anonymized — and those
     /// guards were simply evaluated against a row that then moved. So the row is

@@ -106,7 +106,7 @@ namespace AlgoJudge.Server.Controllers
         /// <b>the permission change is applied before the question of admission
         /// is answered.</b> A refused sign-in still withdraws what the provider
         /// no longer grants — otherwise somebody removed from the directory's
-        /// staff group stays staff here for ever, by never signing in again.
+        /// staff group stays staff here forever, by never signing in again.
         /// </para>
         /// </summary>
         [HttpGet("signed-in")]

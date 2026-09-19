@@ -108,7 +108,7 @@ namespace AlgoJudge.Server.Lti.Services
             var copy = await activities.DuplicateAsync(link.ActivityId, slug, startsAt, ct);
 
             link.ActivityId = Guid.Parse(copy.Id);
-            // **Nothing is shared any more.** This placement is the only one
+            // **Nothing is shared anymore.** This placement is the only one
             // pointing at the copy, so the question the refusal was asking has
             // been answered by making it not apply.
             link.SharingAcknowledged = true;

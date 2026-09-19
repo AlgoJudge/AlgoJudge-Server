@@ -3,7 +3,7 @@ using AlgoJudge.Server.Utils;
 namespace AlgoJudge.Server.Database.Models
 {
     /// <summary>
-    /// How far the Server has withdrawn from service. One row, for ever.
+    /// How far the Server has withdrawn from service. One row, forever.
     /// <para>
     /// **In the database rather than in configuration**, so a Server that
     /// restarts in the middle of a backup comes back withdrawn rather than
@@ -31,7 +31,7 @@ namespace AlgoJudge.Server.Database.Models
         /// `0` open, `1` draining, `2` closed. See <see cref="MaintenanceLevel"/>.
         /// <para>
         /// An integer rather than a boolean because the middle state is the
-        /// point: a Runner that is halfway through marking somebody's work needs
+        /// point: a Runner that is halfway through judging somebody's work needs
         /// somewhere to put the answer, and a single flag would either keep the
         /// door open for everybody or slam it on that Runner.
         /// </para>

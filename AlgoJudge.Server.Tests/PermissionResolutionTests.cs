@@ -93,7 +93,7 @@ public class PermissionResolutionTests(ServerFixture server)
     /// <c>PermissionScope.Global</c> — the <c>problem:*</c> ones — while the
     /// template is applied to <i>activity</i> grants by the seeder and the panel.
     /// <para>
-    /// <b>They are not inert any more.</b> Since 2026-09-09 the problem library
+    /// <b>They are not inert anymore.</b> Since 2026-09-09 the problem library
     /// asks for them with <c>RequireAnywhereAsync</c>, so an activity grant
     /// carries them and a manager of one course has their own library. What this
     /// test still pins is narrower and still true: <c>/permissions/mine</c> at
@@ -102,7 +102,7 @@ public class PermissionResolutionTests(ServerFixture server)
     /// </para>
     /// <para>
     /// This test asserts the current behavior rather than the desired one, so
-    /// that fixing it is a decision somebody takes rather than a surprise. Until
+    /// that fixing it is a decision somebody makes rather than a surprise. Until
     /// then, refusing every misplaced global key would refuse the template this
     /// product ships.
     /// </para>

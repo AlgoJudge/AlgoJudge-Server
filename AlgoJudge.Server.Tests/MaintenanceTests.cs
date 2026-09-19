@@ -88,7 +88,7 @@ public class MaintenanceTests(ServerFixture server)
     /// <para>
     /// Only the two drain tests use it, and they have to: the suite shares a
     /// database, and a test that claimed a job and never reported one leaves it
-    /// <c>Running</c> for ever. The drain is the one thing that reads across
+    /// <c>Running</c> forever. The drain is the one thing that reads across
     /// every other test's leavings, so it is the one thing that has to start
     /// from a Server nobody is using.
     /// </para>
@@ -228,7 +228,7 @@ public class MaintenanceTests(ServerFixture server)
     /// <summary>
     /// Asking twice must not restart the clock. <c>RequestedAt</c> is what the
     /// forced close is measured against, so a script calling this in a loop
-    /// would otherwise hold the Server in <c>draining</c> for ever.
+    /// would otherwise hold the Server in <c>draining</c> forever.
     /// </summary>
     [Fact]
     public async Task Asking_twice_does_not_restart_the_clock()

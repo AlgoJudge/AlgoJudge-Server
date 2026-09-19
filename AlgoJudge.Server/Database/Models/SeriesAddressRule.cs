@@ -33,7 +33,7 @@ namespace AlgoJudge.Server.Database.Models
         /// <b><see cref="System.Net.IPNetwork"/>, which is what Npgsql 10 maps
         /// <c>cidr</c> to natively.</b> On Npgsql 8 it reaches the column
         /// through a converter to <c>NpgsqlCidr</c> — the type that version maps
-        /// by default and that a later one deletes. Written this way round so
+        /// by default and that a later one deletes. Written this way around so
         /// the dependency upgrade removes a converter rather than changing the
         /// model, the contract and every reader of it.
         /// </para>

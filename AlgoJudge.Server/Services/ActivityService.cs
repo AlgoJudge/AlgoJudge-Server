@@ -135,7 +135,7 @@ namespace AlgoJudge.Server.Services
 
             // **Nothing unpublished reaches this list.** The flag stops the
             // scheduler, and stopping the scheduler alone would leave a copy of
-            // last year invisible in the timetable and reachable by anybody who
+            // last year invisible in the schedule and reachable by anybody who
             // knew its address - which is worse than either state on its own.
             // Whoever may edit it reaches it through the manager's screens, which
             // is where preparing it happens.

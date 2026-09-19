@@ -904,7 +904,7 @@ namespace AlgoJudge.Server.Controllers
                 // Written, then read back through exactly the same validation the
                 // other door goes through, then written again from what came out.
                 // The round trip is what makes the stored document canonical —
-                // and what stops the form having a validation path of its own.
+                // and what stops the form from having a validation path of its own.
                 var stated = ThemeDocument.Serialize(Root(input.Theme!));
                 var canonical = ThemeDocument.Serialize(ThemeDocument.Parse(stated, faces));
 

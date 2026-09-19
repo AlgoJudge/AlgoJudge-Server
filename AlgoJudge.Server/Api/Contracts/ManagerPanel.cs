@@ -506,7 +506,7 @@ namespace AlgoJudge.Server.Api.Contracts
         /// </para>
         /// <para>
         /// Null once past the retention window, which is the honest answer: it
-        /// is not held any more.
+        /// is not held anymore.
         /// </para>
         /// </summary>
         public string? IpAddress { get; init; }
@@ -590,7 +590,7 @@ namespace AlgoJudge.Server.Api.Contracts
     {
         /// <summary>
         /// Where the copy goes. <b>Absent copies in place</b>, into the round's
-        /// own activity, which is how a second sitting of the same round is made.
+        /// own activity, which is how a second session of the same round is made.
         /// </summary>
         public Guid? TargetActivityId { get; init; }
 

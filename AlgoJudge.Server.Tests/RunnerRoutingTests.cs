@@ -12,7 +12,7 @@ namespace AlgoJudge.Server.Tests;
 /// <b>Three filters, and they are independent.</b> What a Runner can evaluate
 /// (`problemTypes`), whether it forwards submissions outside (`external`), and
 /// which pool an operator put it in (`tags`). The first two say what a machine
-/// is able to do; only the third is a decision somebody takes on a Tuesday.
+/// is able to do; only the third is a decision somebody makes on a Tuesday.
 /// </para>
 /// <para>
 /// <b>The pools are matched by intersection</b> — one shared tag is enough,
@@ -182,7 +182,7 @@ public class RunnerRoutingTests(ServerFixture server)
     }
 
     /// <summary>
-    /// And the other way round: a course pinned to a laboratory, with one round
+    /// And the other way around: a course pinned to a laboratory, with one round
     /// pulled back out of it by naming `default`. There is no third state — an
     /// empty list on a round means inherit, as absent does.
     /// </summary>

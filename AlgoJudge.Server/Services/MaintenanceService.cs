@@ -50,7 +50,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// Moves `Draining` to `Closed`. Called by the drainer alone, which is
-        /// what decides that nothing is in flight any more.
+        /// what decides that nothing is in flight anymore.
         /// </summary>
         Task<MaintenanceState> CloseAsync(CancellationToken ct);
     }
@@ -134,7 +134,7 @@ namespace AlgoJudge.Server.Services
                 // Asking twice is not an error and must not restart the clock:
                 // `RequestedAt` is what the forced close is measured against, so
                 // a script that calls this in a loop would otherwise hold the
-                // Server in `Draining` for ever.
+                // Server in `Draining` forever.
                 if (state.Level == MaintenanceLevel.Open)
                 {
                     state.Level = MaintenanceLevel.Draining;

@@ -44,7 +44,7 @@ namespace AlgoJudge.Server.Controllers
         /// Throws it. <c>on</c> begins draining; <c>off</c> opens immediately.
         /// <para>
         /// There is no way to ask for <c>closed</c> directly, and that is
-        /// deliberate: closing while a Runner is halfway through marking
+        /// deliberate: closing while a Runner is halfway through judging
         /// somebody's work would throw that work away. The drainer decides when
         /// draining is done.
         /// </para>

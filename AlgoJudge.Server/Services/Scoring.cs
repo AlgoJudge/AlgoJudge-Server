@@ -5,7 +5,7 @@ namespace AlgoJudge.Server.Services
     /// <summary>
     /// What a number means on its way out.
     /// <para>
-    /// The Runner marks against the package's own groups — its scale. What the
+    /// The Runner scores against the package's own groups — its scale. What the
     /// problem is worth <b>in one round</b> is <see cref="SeriesProblem.MaxPoints"/>,
     /// and the Server rescales wherever it reports a number. The Runner's own
     /// document is never rescaled: it is the judge's arithmetic over its own
@@ -25,7 +25,7 @@ namespace AlgoJudge.Server.Services
     public static class Scoring
     {
         /// <summary>
-        /// The scale assumed of a result that does not say what it was marked out
+        /// The scale assumed of a result that does not say what it was scored out
         /// of. Matches `RUNNER_SCALE` in the Client's fixtures.
         /// <para>
         /// A fallback for old rows, not a convention to rely on: anything
@@ -36,13 +36,13 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// The scale a number is reported on: the assignment's point value, or —
-        /// where it states none — <b>what the result itself was marked out of</b>.
+        /// where it states none — <b>what the result itself was scored out of</b>.
         /// <para>
         /// This was <c>assignment.MaxPoints ?? 100</c> until 2026-08-22, and that
         /// contradicted the column beside it in the same file:
         /// <see cref="SeriesProblem.MaxPoints"/> says "null keeps the Runner's
         /// own scale", and 100 is not the Runner's own scale, it is a percentage.
-        /// A package marking out of 70 reported a full solve as <b>100 / 100</b>
+        /// A package scoring out of 70 reported a full solve as <b>100 / 100</b>
         /// on every screen — the problem's own scoring, which the owner's rule
         /// says is fixed to the problem, silently replaced by a convention.
         /// </para>
@@ -71,7 +71,7 @@ namespace AlgoJudge.Server.Services
         }
 
         /// <summary>
-        /// What a result is worth, as a fraction of what it was marked out of.
+        /// What a result is worth, as a fraction of what it was scored out of.
         /// <para>
         /// Absent stays absent: a submission nobody has judged has no standing,
         /// and zero is a different claim.
@@ -121,8 +121,8 @@ namespace AlgoJudge.Server.Services
         /// <para>
         /// The best, not the last: somebody who scores eighty percent and then
         /// breaks it keeps the eighty. Compared as fractions, because two
-        /// submissions to one problem may have been marked out of different
-        /// maxima — a package republished with more tests, or a type that marks
+        /// submissions to one problem may have been scored out of different
+        /// maxima — a package republished with more tests, or a type that scores
         /// out of one.
         /// </para>
         /// </summary>
@@ -130,7 +130,7 @@ namespace AlgoJudge.Server.Services
 
         /// <summary>
         /// The best standing <b>and the scale the result that produced it was
-        /// marked on</b>.
+        /// scored on</b>.
         /// <para>
         /// The second half matters where the assignment states no point value:
         /// the number reported is then the package's own, and the package's own
@@ -169,7 +169,7 @@ namespace AlgoJudge.Server.Services
         /// <summary>
         /// The reader's own standing on one problem, decided on the fraction so
         /// that an assignment's point value cannot turn a solve into a partial by
-        /// rounding — and so that a type marking out of one is not permanently
+        /// rounding — and so that a type scoring out of one is not permanently
         /// "partial" for having awarded its whole scale.
         /// </summary>
         public static string Status(IReadOnlyCollection<Submission> submissions, double? best)

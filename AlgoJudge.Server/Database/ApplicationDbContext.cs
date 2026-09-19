@@ -80,7 +80,7 @@ namespace AlgoJudge.Server.Database
             builder.Entity<Instance>(e =>
             {
                 e.ToTable("Instance");
-                // One row, for ever. A check constraint rather than a convention:
+                // One row, forever. A check constraint rather than a convention:
                 // a second row is not a state this product has an answer for, and
                 // a seed or a migration is exactly where one would appear.
                 e.ToTable(t => t.HasCheckConstraint(
@@ -182,7 +182,7 @@ namespace AlgoJudge.Server.Database
                     .OnDelete(DeleteBehavior.Cascade);
                 // The scheduler's scan: everything whose start or end has passed
                 // and has not been announced. Without these it is a sequential
-                // scan every fifteen seconds, for ever.
+                // scan every fifteen seconds, forever.
                 e.HasIndex(s => new { s.StartDate, s.StartAnnouncedAt });
                 e.HasIndex(s => new { s.EndDate, s.EndAnnouncedAt });
                 e.HasIndex(s => new { s.RankingVisibleFrom, s.WindowAnnouncedAt });
@@ -270,7 +270,7 @@ namespace AlgoJudge.Server.Database
                 e.Property(sp => sp.Name).HasMaxLength(200);
                 // Three documents, three audiences: `config` decides the
                 // verdict, `spec` draws the form, `props` is display. See the
-                // entity — the split is what stops them being one field that
+                // entity — the split is what stops them from being one field that
                 // means three things.
                 e.Property(sp => sp.Config).HasColumnType("jsonb");
                 e.Property(sp => sp.Spec).HasColumnType("jsonb");
@@ -445,7 +445,7 @@ namespace AlgoJudge.Server.Database
                 // session is loaded and the database does nothing when it is not —
                 // and a delete that reached the database directly would take the
                 // submission with it. Sessions are not deleted today; the day
-                // somebody writes that sweep, this is what stops it deleting
+                // somebody writes that sweep, this is what stops it from deleting
                 // somebody's work.
                 e.HasOne<UserSession>()
                     .WithMany()
@@ -471,7 +471,7 @@ namespace AlgoJudge.Server.Database
                 e.ToTable("Trials");
                 // The claim query, and the reaper's, on their own table: a
                 // trial queue that is busy must not slow the queue that decides
-                // somebody's mark.
+                // somebody's score.
                 e.HasIndex(t => new { t.State, t.CreatedAt });
                 e.HasIndex(t => t.LeaseExpiresAt);
                 // Reporting a trial is idempotent for the same reason a result

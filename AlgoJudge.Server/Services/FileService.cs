@@ -24,7 +24,7 @@ namespace AlgoJudge.Server.Services
 
         public required long SizeBytes { get; init; }
 
-        /// <summary>Which store took them — the value the row will carry for ever.</summary>
+        /// <summary>Which store took them — the value the row will carry forever.</summary>
         public required string StoreId { get; init; }
     }
 

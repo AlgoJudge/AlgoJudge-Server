@@ -28,7 +28,7 @@ namespace AlgoJudge.Server.Lti.Workers
         /// <summary>
         /// How often the sweep runs. A gradebook does not notice a minute, and
         /// the alternative — waking every few seconds to find nothing — is a
-        /// database query per instance per tick, for ever.
+        /// database query per instance per tick, forever.
         /// </summary>
         private static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
 

@@ -82,7 +82,7 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>
         /// When this round's standings may be seen at all. Absent <c>From</c>
-        /// means the round's own start; absent <c>To</c> means for ever.
+        /// means the round's own start; absent <c>To</c> means forever.
         /// <para>
         /// Per round rather than per activity: an organizer publishes the first
         /// round's board while the second is still being fought. Different from

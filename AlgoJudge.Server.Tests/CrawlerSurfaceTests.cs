@@ -6,8 +6,8 @@ namespace AlgoJudge.Server.Tests;
 /// What a crawler is told, by the two mechanisms that are not the same thing.
 ///
 /// <para>
-/// A <c>Disallow</c> stops a URL being <b>fetched</b>; <c>X-Robots-Tag</c> stops
-/// one being <b>indexed</b>, and only the second works on a page somebody linked
+/// A <c>Disallow</c> stops a URL from being <b>fetched</b>; <c>X-Robots-Tag</c> stops
+/// one from being <b>indexed</b>, and only the second works on a page somebody linked
 /// from elsewhere. They are also read in different places: the robots file only
 /// governs the host that served it, so an installation whose API has a host of
 /// its own is the case the header exists for.

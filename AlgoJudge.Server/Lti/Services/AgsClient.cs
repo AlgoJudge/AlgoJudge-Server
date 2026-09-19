@@ -66,7 +66,7 @@ namespace AlgoJudge.Server.Lti.Services
     /// Three media types and none of them is <c>application/json</c>: AGS
     /// identifies its payloads by content type, and a platform answers 400 to the
     /// generic one. They are spelled out here because that failure reads as "the
-    /// tool sent rubbish" rather than as a header.
+    /// tool sent garbage" rather than as a header.
     /// </para>
     /// </summary>
     public class AgsClient(IHttpClientFactory clients, IPlatformTokens tokens) : IAgsClient
