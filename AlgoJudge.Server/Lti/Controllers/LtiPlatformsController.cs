@@ -30,14 +30,18 @@ namespace AlgoJudge.Server.Lti.Controllers
     {
         [HttpGet]
         [ProducesResponseType<IReadOnlyList<PlatformDto>>(StatusCodes.Status200OK)]
-        public async Task<IReadOnlyList<PlatformDto>> List(CancellationToken ct) =>
-            (await platforms.ListAsync(ct)).Select(Project).ToList();
+        public async Task<IReadOnlyList<PlatformDto>> List(CancellationToken ct)
+        {
+            var rows = await platforms.ListAsync(ct);
+            var rules = await platforms.RulesAsync([.. rows.Select(p => p.ProviderId)], ct);
+            return [.. rows.Select(p => Project(p, rules))];
+        }
 
         [HttpGet("{id:guid}")]
         [ProducesResponseType<PlatformDto>(StatusCodes.Status200OK)]
         [ProducesResponseType<ProblemDto>(StatusCodes.Status404NotFound)]
         public async Task<PlatformDto> Get(Guid id, CancellationToken ct) =>
-            Project(await platforms.GetAsync(id, ct));
+            await ProjectAsync(await platforms.GetAsync(id, ct), ct);
 
         [HttpPost]
         [ProducesResponseType<PlatformDto>(StatusCodes.Status200OK)]
@@ -45,7 +49,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         public async Task<PlatformDto> Register(
             [FromBody] PlatformInputDto input, CancellationToken ct) =>
-            Project(await platforms.RegisterAsync(Input(input), ct));
+            await ProjectAsync(await platforms.RegisterAsync(Input(input), ct), ct);
 
         [HttpPut("{id:guid}")]
         [ProducesResponseType<PlatformDto>(StatusCodes.Status200OK)]
@@ -53,7 +57,7 @@ namespace AlgoJudge.Server.Lti.Controllers
         [ProducesResponseType<ProblemDto>(StatusCodes.Status422UnprocessableEntity)]
         public async Task<PlatformDto> Update(
             Guid id, [FromBody] PlatformInputDto input, CancellationToken ct) =>
-            Project(await platforms.UpdateAsync(id, Input(input), ct));
+            await ProjectAsync(await platforms.UpdateAsync(id, Input(input), ct), ct);
 
         [HttpDelete("{id:guid}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -116,9 +120,14 @@ namespace AlgoJudge.Server.Lti.Controllers
             IdentityNamespace = input.IdentityNamespace,
             UsernameClaim = input.UsernameClaim,
             Enabled = input.Enabled,
+            MappingRules = input.MappingRules,
         };
 
-        private static PlatformDto Project(Platform p) => new()
+        private async Task<PlatformDto> ProjectAsync(Platform p, CancellationToken ct) =>
+            Project(p, await platforms.RulesAsync([p.ProviderId], ct));
+
+        private static PlatformDto Project(
+            Platform p, IReadOnlyDictionary<Guid, IReadOnlyList<MappingRuleDto>> rules) => new()
         {
             Id = Wire.Id(p.Id),
             DisplayName = p.DisplayName,
@@ -133,6 +142,7 @@ namespace AlgoJudge.Server.Lti.Controllers
             UsernameClaim = p.UsernameClaim,
             Enabled = p.Enabled,
             ProviderId = Wire.Id(p.ProviderId),
+            MappingRules = rules.TryGetValue(p.ProviderId, out var found) ? found : [],
             CreatedAt = Wire.At(p.CreatedAt),
         };
     }

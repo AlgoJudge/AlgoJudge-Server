@@ -1,3 +1,5 @@
+using AlgoJudge.Server.Api.Contracts;
+
 namespace AlgoJudge.Server.Lti.Api
 {
     /// <summary>
@@ -37,6 +39,18 @@ namespace AlgoJudge.Server.Lti.Api
         /// </summary>
         public required string ProviderId { get; init; }
 
+        /// <summary>
+        /// What a launch's roles are worth in the activity it names.
+        /// <para>
+        /// A platform's rules, and the only rules that may aim at an activity's
+        /// enrollment sets: they are applied inside an activity, and a sign-in
+        /// is not. Which LTI role means which role here was compiled in until
+        /// 2026-09-19, so an installation whose non-editing teachers should not
+        /// run a course had nowhere to say so.
+        /// </para>
+        /// </summary>
+        public required IReadOnlyList<MappingRuleDto> MappingRules { get; init; }
+
         public required string CreatedAt { get; init; }
     }
 
@@ -53,6 +67,13 @@ namespace AlgoJudge.Server.Lti.Api
         public string? IdentityNamespace { get; init; }
         public string? UsernameClaim { get; init; }
         public bool Enabled { get; init; } = true;
+
+        /// <summary>
+        /// The whole allowlist, replaced wholesale. <b>Absent leaves it as it
+        /// is</b>, which is what every screen that edits something else sends;
+        /// an empty list clears it, and a platform with no rules enrolls nobody.
+        /// </summary>
+        public IReadOnlyList<MappingRuleDto>? MappingRules { get; init; }
     }
 
     /// <summary>

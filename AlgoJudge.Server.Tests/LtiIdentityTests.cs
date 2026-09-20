@@ -359,6 +359,79 @@ public class LtiIdentityTests(ServerFixture server)
     }
 
     /// <summary>
+    /// <b>Which LTI role means which role here is configuration.</b>
+    ///
+    /// <para>
+    /// It was compiled in until 2026-09-19: a <c>Learner</c> was enrolled as the
+    /// activity enrolls participants and the three teaching roles as it enrolls
+    /// managers, and an installation whose non-editing teachers should not run a
+    /// course had nowhere to say so. The rules a platform starts with reproduce
+    /// exactly that, and this is the test that they can be changed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_platforms_rules_can_be_read_and_rewritten()
+    {
+        using var platform = new FakePlatform();
+        var registered = await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        // What it starts with, which is what the Server used to do in code.
+        var defaults = registered.GetProperty("mappingRules").EnumerateArray()
+            .ToDictionary(
+                rule => rule.GetProperty("claimValue").GetString()!,
+                rule => rule.GetProperty("targets").EnumerateArray()
+                    .Select(target => target.GetProperty("kind").GetString()!).ToList());
+
+        Assert.Equal(["activityParticipants"], defaults["Learner"]);
+        Assert.Equal(["activityManagers"], defaults["Instructor"]);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var made = await admin.PostAsJsonAsync("/api/v1/roles", new
+        {
+            name = "jury-" + Guid.NewGuid().ToString("N")[..8],
+            permissions = new[] { "activity:read", "submission:read:all" },
+        });
+        await Sign.Succeeded(made);
+        var juryRole = await made.Content.ReadFromJsonAsync<JsonElement>();
+        var jury = juryRole.GetProperty("id").GetString();
+        var juryName = juryRole.GetProperty("name").GetString()!;
+
+        // An installation deciding that a teaching assistant sits on the jury
+        // rather than running the course — the sentence the old constant could
+        // not say.
+        var id = registered.GetProperty("id").GetString();
+        var rewritten = await admin.PutAsJsonAsync($"/api/v1/lti/platforms/{id}", new
+        {
+            displayName = "Fake " + platform.Issuer,
+            issuer = platform.Issuer,
+            clientId = platform.ClientId,
+            deploymentId = platform.DeploymentId,
+            keySetUrl = platform.Issuer + "/mod/lti/certs.php",
+            authTokenUrl = platform.Issuer + "/mod/lti/token.php",
+            authLoginUrl = platform.Issuer + "/mod/lti/auth.php",
+            isIdentityAuthority = true,
+            identityNamespace = Directory,
+            mappingRules = new[]
+            {
+                new
+                {
+                    claimValue = "Instructor#TeachingAssistant",
+                    targets = new[] { new { kind = "role", roleId = jury } },
+                },
+            },
+        });
+        await Sign.Succeeded(rewritten);
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: ["http://purl.imsglobal.org/vocab/lis/v2/membership/Instructor#TeachingAssistant"]);
+
+        Assert.Equal([juryName], Held((await GrantAsync(host, user.Id))!));
+    }
+
+    /// <summary>
     /// <b>A sub-role is read as the role it is a sub-role of.</b>
     ///
     /// <para>

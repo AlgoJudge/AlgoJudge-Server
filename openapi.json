@@ -16722,6 +16722,7 @@
           "isIdentityAuthority",
           "issuer",
           "keySetUrl",
+          "mappingRules",
           "providerId",
           "usernameClaim"
         ],
@@ -16775,6 +16776,13 @@
           },
           "providerId": {
             "type": "string",
+            "nullable": true
+          },
+          "mappingRules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MappingRuleDto"
+            },
             "nullable": true
           },
           "createdAt": {
@@ -16837,6 +16845,13 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "mappingRules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MappingRuleDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
