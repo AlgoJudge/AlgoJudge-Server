@@ -540,10 +540,16 @@ public class PermissionResolutionTests(ServerFixture server)
             Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
             Assert.Equal("grant.administrator.last", await Code(revoked));
 
+            // **The roles have to be named to be taken away.** The development
+            // administrator holds the key through the shipped `admin` role, and
+            // a write that says nothing about roles leaves them linked — so
+            // dropping the key from the grant's own entries takes nothing, and
+            // this would be an ordinary save rather than the loss under test.
             var trimmed = await admin.PostAsJsonAsync("/api/v1/grants", new
             {
                 userId = adminId,
                 permissions = new[] { "activity:create" },
+                roleIds = Array.Empty<string>(),
             });
             Assert.Equal(HttpStatusCode.Forbidden, trimmed.StatusCode);
             Assert.Equal("grant.administrator.last", await Code(trimmed));

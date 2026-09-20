@@ -222,11 +222,18 @@ namespace AlgoJudge.Server.Database.Migrations
             // role an installation invented keeps `role:manage` and gains the
             // activity key beside it, because it had both reaches and must keep
             // both.
+            //
+            // **Every built-in carrying the key, not the one named `manager`.**
+            // A shipped role can be renamed, and matching the name left a
+            // renamed one holding the installation-wide key — which is the
+            // reach the split exists to take away. Only the shipped manager
+            // role carries `role:manage` among the three, so the flag alone
+            // identifies it.
             migrationBuilder.Sql("""
                 UPDATE "Roles"
                 SET "Permissions" = ("Permissions" - 'role:manage') || '["role:manage:activity"]'::jsonb
                 WHERE "Permissions" @> '["role:manage"]'::jsonb
-                  AND ("ActivityId" IS NOT NULL OR ("IsBuiltIn" AND "Name" = 'manager'));
+                  AND ("ActivityId" IS NOT NULL OR "IsBuiltIn");
 
                 UPDATE "Roles"
                 SET "Permissions" = "Permissions" || '["role:manage:activity"]'::jsonb

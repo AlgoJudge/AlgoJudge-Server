@@ -182,6 +182,47 @@ public class AccountDeletionTests(ServerFixture server)
     }
 
     /// <summary>
+    /// <b>The same hold, when the key comes from a role rather than from the
+    /// grant's own entries.</b>
+    ///
+    /// <para>
+    /// Which is every grant the panel, the seeder and the migration write. The
+    /// reader beside this one looked at the row's own entries alone, so an
+    /// administrator who signs in through a directory read as holding nothing
+    /// and their account was anonymized on a webhook's word. The test above
+    /// passes without this one because it grants the key by hand.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_account_administering_through_a_role_is_never_emptied_automatically()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var (providerId, secret) = await NewProviderWithChannelAsync("cannot-silence-by-role");
+        var person = await FederatedPersonAsync(providerId, "by-role-0001", "administers-by-role");
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = person,
+            permissions = Array.Empty<string>(),
+            roleIds = new[] { await Build.RoleIdAsync(admin, "admin") },
+        }));
+
+        await Sign.Succeeded(await ReportAsync(providerId, secret, "by-role-0001", "request-by-role"));
+        await CloseTheWindowAsync("request-by-role");
+        Assert.Equal(1, await SweepAsync());
+
+        await using var context = server.NewContext();
+
+        var user = await context.Users.FirstAsync(u => u.Id == person);
+        Assert.False(user.Anonymized, "an administrator was anonymized on a webhook's word");
+        Assert.Equal("administers-by-role", user.UserName);
+
+        var request = await context.AccountDeletionRequests.FirstAsync(
+            r => r.RequestId == "request-by-role");
+        Assert.Equal(DeletionState.NeedsAttention, request.State);
+    }
+
+    /// <summary>
     /// Two providers vouching for one person are two accounts here — <b>today</b>.
     /// <para>
     /// This records what the Server does, and it is deliberately <i>not</i>

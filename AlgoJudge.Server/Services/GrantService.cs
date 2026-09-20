@@ -419,13 +419,6 @@ namespace AlgoJudge.Server.Services
             // already linked is what the excess rule exempts either way.
             var roles = await RolesForGrantAsync(input.RoleIds, activityId, ct);
 
-            // **Every rule below reads the union, not the additions.** A grant
-            // carries its roles' permissions as surely as its own, so an excess
-            // check that looked only at what was typed in would let anybody with
-            // `grant:update` hand out an administrator's role by pointing at it.
-            var held = Permissions.Effective(
-                roles.Select(r => (string?)r.Permissions), JsonSerializer.Serialize(wanted));
-
             if (!await context.Users.AnyAsync(u => u.Id == input.UserId, ct))
             {
                 throw new NotFoundException("User");
@@ -467,6 +460,27 @@ namespace AlgoJudge.Server.Services
                 .Select(r => r.Role!.Permissions);
             var alreadyHeld = new HashSet<string>(
                 Permissions.Effective(alreadyLinked, grant.Permissions), StringComparer.Ordinal);
+
+            // **Every rule below reads the union, not the additions.** A grant
+            // carries its roles' permissions as surely as its own, so an excess
+            // check that looked only at what was typed in would let anybody with
+            // `grant:update` hand out an administrator's role by pointing at it.
+            //
+            // **And "absent leaves the links alone" has to reach this union
+            // too.** Read from the request alone, it was empty for every write
+            // that named no roles — so a grant linking `manager` and holding no
+            // entries of its own lost its staff flag and rejoined the ranking as
+            // a competitor, and the installation's only administrator saving
+            // their own grant was refused for losing an administratorship the
+            // write never touched.
+            var inForce = input.RoleIds is null
+                ? grant.Roles
+                    .Where(r => r.DismissedAt is null && r.Role is not null)
+                    .Select(r => r.Role!)
+                    .ToList()
+                : [.. roles];
+            var held = Permissions.Effective(
+                inForce.Select(r => (string?)r.Permissions), JsonSerializer.Serialize(wanted));
 
             var mine = await permissions.EffectiveAsync(activityId, ct);
             if (!mine.Contains(Permissions.SystemAdministrator))
@@ -614,11 +628,15 @@ namespace AlgoJudge.Server.Services
                 added = true;
             }
 
-            if (!created && !added) return EnrollmentOutcome.Unchanged;
-
-            // An enrollment never demotes: it adds, and `invited` is an offer
-            // that an assertion from the platform answers.
+            // **An assertion from the platform answers an invitation**, whether
+            // or not it adds a role. Settled before the early return below: a
+            // person invited by hand and then launching carried every role
+            // already, so nothing was added and they stayed `invited` — in the
+            // activity by the platform's word and out of it by ours.
+            var activated = grant.State == GrantState.Invited;
             grant.State = GrantState.Active;
+
+            if (!created && !added && !activated) return EnrollmentOutcome.Unchanged;
 
             var roleJsons = await RoleJsonsAsync(grant, ct);
             grant.IsSystem = grant.StaffByHand
@@ -1162,7 +1180,11 @@ namespace AlgoJudge.Server.Services
             var role = await context.PermissionRoles.FirstOrDefaultAsync(r => r.Id == id, ct)
                 ?? throw new NotFoundException("Role");
 
-            await permissions.RequireAsync(Permissions.RoleManage, role.ActivityId, ct);
+            // The same test as creating and editing one: `role:manage` for the
+            // installation's, `role:manage:activity` for an activity's. Asking
+            // for the first alone left a manager able to create a role in their
+            // own activity and refused 403 when they deleted it.
+            await RequireRoleWriteAsync(role.ActivityId, ct);
 
             if (role.IsBuiltIn)
             {

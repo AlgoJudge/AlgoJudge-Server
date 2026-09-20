@@ -311,13 +311,22 @@ namespace AlgoJudge.Server.Api
             Props = Opaque(activity.Props),
         };
 
+        /// <param name="enrollmentRoles">
+        /// The activity's enrollment roles, <b>passed in rather than navigated
+        /// to</b>. Read from <c>activity.EnrollmentRoles</c> this answered an
+        /// empty list on every request: nothing includes that navigation, so the
+        /// setting was written, stored, and invisible from the moment it was
+        /// saved. A parameter cannot be forgotten — a caller that does not supply
+        /// it does not compile.
+        /// </param>
         public static ManagedActivityDto ManagedActivity(
             Activity activity,
             IEnumerable<FileReference> documents,
             int seriesCount,
             int problemCount,
             int participantCount,
-            int matchingRunners) => new()
+            int matchingRunners,
+            IEnumerable<ActivityEnrollmentRole> enrollmentRoles) => new()
             {
                 Id = Contracts.Wire.Id(activity.Id),
                 Slug = activity.Slug,
@@ -350,10 +359,10 @@ namespace AlgoJudge.Server.Api
                 ParticipantCount = participantCount,
                 RunnerTags = activity.RunnerTags,
                 MatchingRunners = matchingRunners,
-                ParticipantRoleIds = [.. activity.EnrollmentRoles
+                ParticipantRoleIds = [.. enrollmentRoles
                     .Where(r => r.Slot == EnrollmentSlot.Participants)
                     .Select(r => Contracts.Wire.Id(r.RoleId))],
-                ManagerRoleIds = [.. activity.EnrollmentRoles
+                ManagerRoleIds = [.. enrollmentRoles
                     .Where(r => r.Slot == EnrollmentSlot.Managers)
                     .Select(r => Contracts.Wire.Id(r.RoleId))],
             };

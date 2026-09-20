@@ -29,18 +29,20 @@ namespace AlgoJudge.Server.Services
     /// <summary>
     /// What a grant confers, in one place.
     /// <para>
-    /// <b>This exists because four readers answered without it.</b> The live
+    /// <b>This exists because five readers answered without it.</b> The live
     /// ranking push, the hold on an automatic account deletion, the blocker on an
-    /// account merge and the seeder's "does anybody administer this installation"
-    /// each read a grant's own entries and never its roles. Every enrollment
-    /// written since roles arrived carries its permissions in the roles and
-    /// nothing in the entries, so all four answered "this grant confers nothing"
-    /// about grants that conferred everything.
+    /// account merge, the seeder's "does anybody administer this installation"
+    /// and the group-move projection each read a grant's own entries and never
+    /// its roles. Every enrollment written since roles arrived carries its
+    /// permissions in the roles and nothing in the entries, so all five answered
+    /// "this grant confers nothing" about grants that conferred everything — and
+    /// the deletion hold is the one that mattered most, because a provider's
+    /// webhook would have anonymized an administrator on it.
     /// </para>
     /// <para>
     /// A projection rather than a method on the entity, so the shape a reader
     /// needs is the shape the query returns — and so the <c>Include</c> that was
-    /// forgotten four times cannot be forgotten again.
+    /// forgotten five times cannot be forgotten again.
     /// </para>
     /// </summary>
     public static class GrantReads

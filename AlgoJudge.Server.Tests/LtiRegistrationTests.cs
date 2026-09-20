@@ -135,6 +135,20 @@ public class LtiRegistrationTests(ServerFixture server)
         // Compared by **slug**, because that answer carries a slug and a display
         // name and no id at all — asserting the id is absent would pass whatever
         // the code did, which is a test that reads like one and is not.
+        // **With something in it that should be**, so the absence is evidence.
+        // That list carries enabled providers only and a platform's row is
+        // disabled, so an empty list would satisfy the assertion below whatever
+        // the code did — which is a test that reads like one and is not.
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/identity/providers", new
+        {
+            slug = "a-real-door",
+            displayName = "A real door",
+            issuer = "https://sso.example.invalid",
+            clientId = "algojudge",
+            clientSecret = "secret-for-the-suite",
+            claimPath = "groups",
+        }));
+
         var anonymous = server.CreateClient();
         var instance = await (await anonymous.GetAsync("/api/v1/instance"))
             .Content.ReadFromJsonAsync<JsonElement>();
@@ -143,6 +157,7 @@ public class LtiRegistrationTests(ServerFixture server)
             .Select(p => p.GetProperty("slug").GetString())
             .ToArray();
 
+        Assert.Contains("a-real-door", offered);
         Assert.DoesNotContain("not-a-sign-in", offered);
     }
 

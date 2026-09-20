@@ -133,12 +133,15 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         private async Task<IReadOnlyList<string>> BlockersAsync(string userId, CancellationToken ct)
         {
+            // Through the roles: a grant holds its permissions in links, so
+            // reading the row's own entries alone let an administrator's account
+            // be merged away as though it granted nothing.
             var system = await context.Grants.AsNoTracking()
                 .Where(g => g.UserId == userId && g.ActivityId == null)
-                .Select(g => g.Permissions)
+                .Held()
                 .ToListAsync(ct);
 
-            return system.Any(p => Permissions.Parse(p).Count > 0)
+            return system.Any(g => g.Confers().Count > 0)
                 ? ["holds permissions over the whole installation"]
                 : [];
         }

@@ -279,10 +279,17 @@ namespace AlgoJudge.Server.Services
         private async Task<bool> HoldsSystemPermissionsAsync(
             string userId, IReadOnlySet<Guid> removedLinks, CancellationToken ct)
         {
+            // **Through the roles, not the row's own entries.** A grant carries
+            // its permissions in links, so reading `Permissions` alone answered
+            // "this account holds nothing" about an administrator whose key comes
+            // from the shipped `admin` role — and a provider's webhook would have
+            // anonymized them instead of holding the request for a person. A
+            // webhook that can silence an administrator is an attack vector, not
+            // a feature, which is the whole reason this method exists.
             var grants = await context.Grants
                 .AsNoTracking()
                 .Where(g => g.UserId == userId && g.ActivityId == null)
-                .Select(g => new { g.Permissions, g.SourceProviderId })
+                .Held()
                 .ToListAsync(ct);
 
             var gone = await context.UserIdentities
@@ -293,7 +300,7 @@ namespace AlgoJudge.Server.Services
 
             return grants.Any(g =>
                 (g.SourceProviderId is null || !gone.Contains(g.SourceProviderId.Value))
-                && Permissions.Parse(g.Permissions).Count > 0);
+                && g.Confers().Count > 0);
         }
 
         public async Task AnonymizeAsync(User user, CancellationToken ct)

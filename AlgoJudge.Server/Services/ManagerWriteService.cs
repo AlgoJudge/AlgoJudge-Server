@@ -671,7 +671,14 @@ namespace AlgoJudge.Server.Services
                 if (!wanted.Contains(id)) wanted.Add(id);
             }
 
+            // **With the role, because the rule below reads its permissions.**
+            // Without the include `r.Role` is null on every row, `already` is
+            // empty, and the excess rule stops exempting what the slot already
+            // carries — so re-saving an activity whose enrollment role holds a
+            // key this manager lacks is refused, which is the family of
+            // refusals the delta rule exists to end.
             var current = await context.ActivityEnrollmentRoles
+                .Include(r => r.Role)
                 .Where(r => r.ActivityId == activity.Id && r.Slot == slot)
                 .ToListAsync(ct);
 

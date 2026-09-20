@@ -369,10 +369,14 @@ namespace AlgoJudge.Server.Services
             var withoutFreeze = Disclose(submission, assignment, round, now, unfrozen: true, scale);
             var windowOpen = WindowOpen(round, now);
 
+            // **Through the roles.** Read from the row's own entries alone,
+            // every participant enrolled since roles arrived holds nothing here
+            // — they carry `ranking:read` through a linked role — so the live
+            // push reached nobody it was written for.
             var grants = await context.Grants.AsNoTracking()
                 .Where(g => g.State == GrantState.Active
                     && (g.ActivityId == null || g.ActivityId == activity.Id))
-                .Select(g => new { g.UserId, g.Permissions })
+                .Held()
                 .ToListAsync(ct);
 
             // A user may hold both a system grant and one in this activity, and
@@ -380,17 +384,8 @@ namespace AlgoJudge.Server.Services
             var held = new Dictionary<string, HashSet<string>>();
             foreach (var grant in grants)
             {
-                List<string> keys;
-                try
-                {
-                    keys = System.Text.Json.JsonSerializer.Deserialize<List<string>>(grant.Permissions) ?? [];
-                }
-                catch (System.Text.Json.JsonException)
-                {
-                    continue;
-                }
                 if (!held.TryGetValue(grant.UserId, out var set)) held[grant.UserId] = set = [];
-                set.UnionWith(keys);
+                set.UnionWith(grant.Confers());
             }
 
             var recipients = new List<(string, ContestantResultDto)>();

@@ -252,6 +252,188 @@ public class RoleScopeTests(ServerFixture server)
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
+
+    /// <summary>
+    /// <b>An activity's enrollment roles survive being read back.</b>
+    ///
+    /// <para>
+    /// They were projected from <c>activity.EnrollmentRoles</c>, a navigation
+    /// nothing includes, so every read answered an empty list while the rows sat
+    /// in the table: a manager chose the roles a course enrolls into, saved, and
+    /// watched the pickers come back blank. The write was never the problem, and
+    /// the test that covered this asserted the list was <i>empty</i> — so it
+    /// passed for exactly the reason the feature was broken.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_activitys_enrollment_roles_are_read_back()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var slug = await ActivityAsync(admin);
+        var activityId = await ActivityIdAsync(slug);
+        var ours = await CreateRoleAsync(admin, "enrolls-" + Suffix(), activityId, ["activity:read"]);
+
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/activities/{slug}", new
+        {
+            slug,
+            name = "Role scope",
+            type = "contest@1",
+            rankingType = "icpc",
+            timeZone = "Europe/Warsaw",
+            participantRoleIds = new[] { ours },
+        }));
+
+        // **A fresh read, not the answer to the write.** The write answers from
+        // the entity it has just tracked, so it reported the role correctly
+        // while every later read reported none.
+        var reread = await Build.GetAsync(admin, $"/api/v1/manager/activities/{slug}");
+        Assert.Equal(
+            [ours],
+            reread.GetProperty("participantRoleIds").EnumerateArray()
+                .Select(value => value.GetString()!).ToArray());
+        Assert.Empty(reread.GetProperty("managerRoleIds").EnumerateArray());
+    }
+
+    /// <summary>
+    /// <b>Whoever may write an activity's roles may delete one.</b>
+    ///
+    /// <para>
+    /// Deleting asked for <c>role:manage</c>, which became global and an
+    /// administrator's when the key was split — so a manager could create a role
+    /// in their own activity, see the panel offer the delete button, and be
+    /// refused. Create, edit and delete are one power and answer to one key.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_manager_may_delete_a_role_in_their_own_activity()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var slug = await ActivityAsync(admin);
+        var activityId = await ActivityIdAsync(slug);
+        var (manager, managerId) = await AccountAsync("runs-it");
+
+        var managerRole = await Build.RoleIdAsync(admin, "manager");
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = managerId,
+            activityId,
+            permissions = Array.Empty<string>(),
+            roleIds = new[] { managerRole },
+        }));
+
+        var created = await manager.PostAsJsonAsync("/api/v1/roles", new
+        {
+            name = "theirs-" + Suffix(),
+            activityId,
+            permissions = new[] { "activity:read" },
+        });
+        await Sign.Succeeded(created);
+        var role = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+
+        var removed = await manager.DeleteAsync($"/api/v1/roles/{role}");
+        Assert.True(removed.IsSuccessStatusCode,
+            $"{(int)removed.StatusCode} {await removed.Content.ReadAsStringAsync()}");
+    }
+
+    /// <summary>
+    /// <b>A write that says nothing about roles reads them all the same.</b>
+    ///
+    /// <para>
+    /// "Absent leaves the roles alone" reached the stored links but not the union
+    /// every rule beside them is computed from, which was read from the request
+    /// alone. So saving a grant without naming its roles — which is what moving
+    /// somebody into a group, or clearing a flag, does — recomputed the staff
+    /// flag from an empty set: a jury member linking <c>manager</c> silently
+    /// became a competitor and rejoined the ranking.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_grant_saved_without_naming_roles_keeps_its_staff_flag()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var slug = await ActivityAsync(admin);
+        var activityId = await ActivityIdAsync(slug);
+        var (_, personId) = await AccountAsync("jury");
+
+        var managerRole = await Build.RoleIdAsync(admin, "manager");
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = personId,
+            activityId,
+            permissions = Array.Empty<string>(),
+            roleIds = new[] { managerRole },
+        }));
+
+        await using (var context = server.NewContext())
+        {
+            Assert.True((await context.Grants.AsNoTracking()
+                .FirstAsync(g => g.UserId == personId && g.ActivityId == Guid.Parse(activityId))).IsSystem);
+        }
+
+        // The same grant again, saying nothing about its roles — the shape every
+        // other edit to a membership sends.
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = personId,
+            activityId,
+            permissions = Array.Empty<string>(),
+        }));
+
+        await using (var context = server.NewContext())
+        {
+            var grant = await context.Grants.AsNoTracking().Include(g => g.Roles)
+                .FirstAsync(g => g.UserId == personId && g.ActivityId == Guid.Parse(activityId));
+            Assert.Single(grant.Roles);
+            Assert.True(grant.IsSystem,
+                "the staff flag was recomputed from an empty union and lost");
+        }
+    }
+
+    /// <summary>
+    /// <b>An administrator whose key comes from a role is still an
+    /// administrator to the readers that protect them.</b>
+    ///
+    /// <para>
+    /// A grant carries its permissions in links, so a reader of the row's own
+    /// entries answers "holds nothing" about the account that holds everything.
+    /// The merge blocker was one of three: the holder of <c>user:merge</c> could
+    /// carry an administrator's account away, taking its federated identity and
+    /// blocking the original.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_administrator_by_role_still_blocks_a_merge()
+    {
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var (_, personId) = await AccountAsync("by-role");
+        var (_, targetId) = await AccountAsync("target");
+        var adminRole = await Build.RoleIdAsync(admin, "admin");
+
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = personId,
+            permissions = Array.Empty<string>(),
+            roleIds = new[] { adminRole },
+        }));
+
+        // The row itself holds nothing, which is the whole shape of the defect.
+        await using (var context = server.NewContext())
+        {
+            var grant = await context.Grants.AsNoTracking()
+                .FirstAsync(g => g.UserId == personId && g.ActivityId == null);
+            Assert.Equal("[]", grant.Permissions);
+        }
+
+        var preview = await admin.PostAsJsonAsync(
+            $"/api/v1/users/{personId}/merge-preview", new { targetUserId = targetId });
+        await Sign.Succeeded(preview);
+
+        var blockers = (await preview.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("blockers").EnumerateArray().Select(b => b.GetString()).ToList();
+        Assert.NotEmpty(blockers);
+        Assert.Contains(blockers, b => b!.Contains("installation", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string Suffix() => Guid.NewGuid().ToString("N")[..8];
 
     private static async Task<string> Code(HttpResponseMessage response) =>

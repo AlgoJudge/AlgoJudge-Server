@@ -384,10 +384,16 @@ namespace AlgoJudge.Server.Services
             var participantCount = await context.Grants.CountAsync(
                 g => g.ActivityId == activity.Id && !g.IsSystem && g.State == GrantState.Active, ct);
 
+            var enrollmentRoles = await context.ActivityEnrollmentRoles
+                .AsNoTracking()
+                .Where(r => r.ActivityId == activity.Id)
+                .ToListAsync(ct);
+
             return Projections.ManagedActivity(
                 activity, await DocumentsAsync(activity.Id, ct), seriesCount, problemCount, participantCount,
                 RunnerTags.CountMatching(
-                    await RunnerTags.ApprovedPoolsAsync(context, ct), activity.RunnerTags));
+                    await RunnerTags.ApprovedPoolsAsync(context, ct), activity.RunnerTags),
+                enrollmentRoles);
         }
 
         public async Task<bool> IsPublishedAsync(Guid id, CancellationToken ct) =>
