@@ -4,8 +4,9 @@ For whoever cuts the release. Nothing here is addressed to somebody installing
 the product — that is [AlgoJudge-Ops](https://github.com/AlgoJudge/AlgoJudge-Ops)
 and the documentation site.
 
-Every dated figure below was measured on the date it names, on `release/0.1.0`
-at `fa9bc29`. Anything undated is a rule rather than a reading.
+Every dated figure below was measured on the date it names — the 2026-09-07
+readings on `release/0.1.0` at `fa9bc29`, the 2026-09-20 ones on `release/0.2.0`
+off `b4b1455`. Anything undated is a rule rather than a reading.
 
 ## Where the version lives
 
@@ -25,19 +26,26 @@ then** — nothing that lands on `main` reaches the registry on its own. It
 refuses a tag that does not point at a commit on `main`, and a name that is not
 `v<major>.<minor>.<patch>[-prerelease]`.
 
-For `v0.1.0` it publishes one image, `ghcr.io/algojudge/algojudge-server`, under
+For `v0.2.0` it publishes one image, `ghcr.io/algojudge/algojudge-server`, under
 four tags:
 
 | | |
 |---|---|
-| `0.1.0` | the release |
-| `0.1` | the moving minor |
+| `0.2.0` | the release |
+| `0.2` | the moving minor |
 | `0` | the moving major, and what an installation asks for by default |
 | `latest` | |
 
-**A prerelease publishes its own tag alone.** `v0.1.0-rc.1` gets `0.1.0-rc.1`
+**A prerelease publishes its own tag alone.** `v0.2.0-rc.1` gets `0.2.0-rc.1`
 and nothing moving, because the point of a release candidate is that somebody
 asked for it by name.
+
+**The moving major is how an installation crosses a minor without being asked.**
+`AlgoJudge-Ops` defaults every product image to `0` (`compose.yaml`), so the
+next `update.sh` on any installation takes this image the moment the tag lands.
+`0.2` is not compatible with `0.1` by decision, so **the release note is the
+only warning an operator gets**, and what the Server changes on the wire has to
+be in it.
 
 The workflow builds, checks the image carries the application and `aj-admin`,
 and pushes. It does **not** re-run the test suite: a tag points at a commit, and
@@ -48,19 +56,25 @@ thing it writes is the package.
 ## The migrations are squashed into one, named for the release
 
 **Before each release, every migration added since the previous release becomes
-one migration named `version_<major>_<minor>_<patch>`.** For 0.1.0 that is
-`version_0_1_0`, and because nothing has ever been released every migration is
-unreleased and every one of them goes into it.
+one migration named `version_<major>_<minor>_<patch>`.** A context that gained
+no migration in the range gains none for that release: `LtiDbContext` holds
+`version_0_1_0` alone after 0.2.0, because nothing touched it.
 
 **Only unreleased migrations are ever squashed, and that is what makes the rule
 safe.** A database at 0.1.0 carries `…_version_0_1_0` in its history and reaches
-0.1.1 by applying `…_version_0_1_1` on top of it; no released history row is
+0.2.0 by applying `…_version_0_2_0` on top of it; no released history row is
 ever removed, so no released database is ever stranded. The only database that
 cannot cross a squash is one migrated from unreleased code — a developer's own
 stack, whose history names files that no longer exist. Those are disposable:
-`docker compose … down -v`. For 0.1.0 there is not even that to weigh, because
-nothing has been released at all: `ghcr.io/algojudge` is empty and no repository
-carries a `v*` tag (checked 2026-09-07).
+`docker compose … down -v`.
+
+**There are two ways to produce that one migration, and choosing wrongly loses
+data silently.** A *collapse* regenerates from the model differ, and is right
+only where the whole range is shape. An *assembly* concatenates the range's own
+statements, and is required the moment any of them rewrites a row or renames
+something. 0.1.0 was the first; 0.2.0 was the second. *How it is done* below
+covers both, and **which one applies is decided by reading the range, not by the
+version number**.
 
 ### Where they live
 
@@ -72,10 +86,11 @@ context gets the first.
 | `ApplicationDbContext` | `AlgoJudge.Server/Database/Migrations` | `ApplicationDbContextModelSnapshot.cs` | `__EFMigrationsHistory` |
 | `LtiDbContext` | `AlgoJudge.Server/Lti/Migrations` | `LtiDbContextModelSnapshot.cs` | `__EFMigrationsHistory_Lti` |
 
-**One and one since 2026-09-07**, both named `version_0_1_0` — the two classes
-sit in different namespaces, so the name does not collide. Eight went into the
-first and one into the second, which made the LTI half a rename rather than a
-merge; it is done the same way either way.
+**Two and one since 2026-09-20.** `ApplicationDbContext` carries
+`version_0_1_0` and `version_0_2_0`, `LtiDbContext` carries `version_0_1_0`
+alone. The two classes sit in different namespaces, so a shared name does not
+collide. Six migrations went into `version_0_2_0` and none into the LTI chain,
+which is why that release added nothing there.
 
 ### What a regeneration silently drops
 
@@ -118,7 +133,11 @@ filtered index and `RunnerTags`' `defaultValueSql` is declared in the model —
 `HasCheckConstraint` and one `HasDefaultValueSql`, so the differ reproduces all
 of them.
 
-### How it is done
+### How a collapse is done — the whole range is shape
+
+**Read *Which of the two this release needs* below before starting this.** What
+follows is the 0.1.0 procedure, and it is right only where nothing in the range
+rewrites a row or renames anything.
 
 Nothing here is a dry run. Do it on a branch, with the tree clean.
 
@@ -217,63 +236,131 @@ Eight rows and one before, on 2026-09-07; one and one after.
 if anything about the API moved. The squash alone does not move it — checked on
 2026-09-07, and the served document was identical to the committed one.
 
-### From 0.1.1 on it is a delta, and the steps above are not enough
+### Which of the two this release needs
 
-**0.1.0 is the easy case, and the only one that looks like this.** Nothing had
-been released, so every migration was unreleased and the squash collapsed into a
-single `CREATE TABLE` per context. Once a release exists, `version_0_1_1` has to
-carry a database **standing at 0.1.0** to the current model. That is a delta of
-`ALTER`s, and three things change.
-
-**Do not delete the released migrations.** Delete only the ones added since the
-last release, and **roll the snapshot back to the state that release left**:
+Read the range before touching it:
 
 ```sh
-git checkout v0.1.0 --     AlgoJudge.Server/Database/Migrations/ApplicationDbContextModelSnapshot.cs     AlgoJudge.Server/Lti/Migrations/LtiDbContextModelSnapshot.cs
+git diff --name-only v<previous> -- AlgoJudge.Server/Database/Migrations
+grep -c 'migrationBuilder.Sql' <each unreleased migration>
+grep -n 'RenameTable\|RenameColumn\|RenameIndex' <each unreleased migration>
 ```
 
-The snapshot is the differ's *before*. Left at the current model it produces an
-empty migration; rolled back, it produces exactly the delta.
+**A collapse is safe only when both counts are zero** and no released database
+exists to carry. One `migrationBuilder.Sql` that touches a row, or one rename,
+and it is an assembly. 0.2.0 had 23 of the first across three migrations and two
+of the second, so it was an assembly.
 
-**Every backfill decision in the squashed range has to be made again.** The
-tables now hold rows, so `AddColumn` needs a value for them and the generator
-writes the CLR default — which is how `ShowHero` got `false` from the generator
-and `true` from a person. Read the migrations being deleted before deleting
-them, and carry each such choice across deliberately.
+**Why a collapse would have been wrong there, in three ways a schema comparison
+cannot see.** A model differ emits DDL from a comparison of two models. It
+therefore writes:
 
-**The schema comparison stops being the whole proof.** `pg_dump --schema-only`
-says nothing about a migration that rewrites rows. There were none at 0.1.0 —
-the only two `migrationBuilder.Sql` calls in this repository are the
-`FileContents` DDL — but the first one that appears needs a check of its own:
-apply the old chain to a database with rows in it, apply the squashed one to
-another, and compare the data the step was supposed to produce. Step 6 also has
-to start from the released schema rather than an empty database — one database
-migrated with the released chain plus the unreleased migrations, another with
-the released chain plus the squashed one.
+- **no data step at all.** The `UPDATE`s that carry an installation's existing
+  permission keys from `template:` to `role:`, the two that add what the release
+  grants the shipped `manager` role, and the one that links every grant that
+  never diverged from the role it was made from — all gone. The schema is
+  correct and the rows mean nothing.
+- **a drop and a create for `RenameTable`.** `PermissionTemplates` → `Roles`
+  regenerates as `DROP TABLE` plus `CREATE TABLE`. Every role in the
+  installation goes, and the resulting schema is identical.
+<!-- american-english: keep-start — the 0.1 column names, quoted as they were -->
+- **a drop and an add for `RenameColumn`.** `AnonymiseAfter` and
+  `SourceAnonymisedAt` regenerate as two columns dropped and two added. They
+  arrive empty, and the resulting schema is identical.
+<!-- american-english: keep-end -->
+
+### How an assembly is done — the range rewrites rows or renames
+
+**Nothing is regenerated.** The one migration is the range's own statements, in
+the range's own order: `Up` is the unreleased `Up` bodies concatenated
+chronologically, `Down` is the `Down` bodies concatenated in reverse. Every data
+step and every rename survives because none of them is rewritten.
+
+**1.** Assemble the bodies into `<timestamp>_version_<x>_<y>_<z>.cs`, with a
+timestamp later than the last migration in the range. Mark each stretch with the
+migration it came from — the comments inside the bodies come with them and stop
+making sense unattributed.
+
+**2. The Designer file is the last migration's**, with its `[Migration("…")]`
+and its class name changed to the new one. It carries the model as of the end of
+the range, which is what the new migration leaves behind.
+**`ApplicationDbContextModelSnapshot.cs` is not touched at all** — it already
+describes the current model, and this migration does not change the model.
+
+**3. Check for a local that would collide.** Two bodies concatenated into one
+method share a scope. EF writes almost none, but `var` in a body is a name that
+now has to be unique across the whole range.
+
+**4.** Delete the range's `.cs` and `.Designer.cs`, then
+`dotnet build AlgoJudge.sln -c Release -warnaserror`.
+
+**5. The proof, and it is not the schema comparison.** Generate what a database
+standing at the previous release actually receives, before and after, and diff
+them:
+
+```sh
+dotnet ef migrations script version_<previous> \
+    --project AlgoJudge.Server --context ApplicationDbContext -o before.sql
+# assemble, then the same command again into after.sql
+diff -u before.sql after.sql
+```
+
+**Everything must be identical except the migration history.** Six migrations
+become one, so five `INSERT INTO "__EFMigrationsHistory"` blocks and their
+`COMMIT; START TRANSACTION;` pairs disappear and the last row's `MigrationId`
+changes. Not one DDL statement and not one data statement may move. On
+2026-09-20 that left **95 statements on each side, byte-identical** once the
+history rows were stripped.
+
+This is the check to run first and to trust. A regeneration that silently
+dropped every `UPDATE` passes the schema comparison and fails this one on the
+first line.
+
+**6.** Then steps 6 and 7 of the collapse procedure as written — the schema from
+an empty database, and the history rows. An assembly changes neither, so the
+schema diff is **`pg_dump`'s session token and nothing else**: two lines out of
+2972 on 2026-09-20, with no column reordering, because a delta applies the same
+`ALTER`s in the same order rather than writing one `CREATE TABLE`.
+
+**What a collapse has to worry about and an assembly does not.** Backfill values
+for `AddColumn` on a table that now holds rows, and the hand-written fragments
+of *What a regeneration silently drops* — both are carried across verbatim
+because nothing was regenerated.
 
 ## Before the tag
 
-- [ ] `Directory.Build.props` says the version being released. **`0.1.0` there
-      on 2026-09-07.**
-- [ ] `README.md` names that version where it shows a `docker pull` — line 245,
-      `ghcr.io/algojudge/algojudge-server:0.1.0` on 2026-09-07.
-- [ ] **The migrations are squashed into one per context**, named for the
-      release, by the section above. **Done for 0.1.0 on 2026-09-07**: one
-      history row per context, and the schema comparison differed only in
-      `pg_dump`'s session token, column order, and the three defaults it is
-      meant to drop.
+- [ ] `Directory.Build.props` says the version being released. **`0.2.0` there
+      on 2026-09-20.**
+- [ ] `README.md` names that version where it shows a `docker pull`, and again
+      in the sentence listing the four tags below it. **`git grep -n` the
+      previous version rather than trusting a line number** — the one quoted
+      here was three lines out by the next release.
+- [ ] **The migrations are squashed into one per context for this release**,
+      named for it, by the section above — *Which of the two this release needs*
+      first. **Done for 0.2.0 on 2026-09-20**, as an assembly: six migrations
+      into `version_0_2_0`, nothing added to the LTI chain, two history rows and
+      one. The delta script was byte-identical either side at 95 statements, and
+      the schema comparison differed only in `pg_dump`'s session token.
 - [ ] **The commit is on `main`**, and **its** CI run is green — not a later
-      one. `release/0.1.0` is not `main`, and the workflow refuses a tag that is
-      not an ancestor of it: on 2026-09-07 this branch was one commit ahead of
-      `origin/main` (`fa9bc29`) and none behind, so it has to land there first.
-      `main` was green at `425d2c7`.
+      one. `release/0.2.0` is not `main`, and the workflow refuses a tag that is
+      not an ancestor of it, so the branch has to land there first. `main` was
+      green at `b4b1455` on 2026-09-20 — run `35525016463`, read by id, because
+      `gh run list --commit` returned nothing for it.
 - [ ] `dotnet restore AlgoJudge.sln`, then
       `dotnet build AlgoJudge.sln -c Release --no-restore -warnaserror`. The
       release build treats **every warning as an error**; the count to aim at is
-      zero, and it was zero on 2026-09-07 as it has been since 2026-08-29.
+      zero, and it was zero on 2026-09-20 as it has been since 2026-08-29.
 - [ ] `dotnet test AlgoJudge.sln -c Release --no-build`. Docker has to be
-      running — the suite starts a real PostgreSQL 18 per run. 823 passed and
-      2 skipped on 2026-09-07, in 2 m 49 s.
+      running — the suite starts a real PostgreSQL 18 per run. 989 passed, none
+      skipped, on 2026-09-20, in 3 m 9 s.
+
+      **`RoleMigrationTests` is the one suite a squash breaks**, and it is the
+      only thing in the repository that checks a *data* migration: it migrates
+      to a named earlier migration, seeds an installation's rows, migrates
+      forward and asserts what the `UPDATE`s did. A squash deletes the name it
+      targets, so all three fail with *the migration … was not found*. Point
+      `Previous` at the previous release's migration, which is the state they
+      were always meant to start from and the only id a squash leaves standing.
 - [ ] The development stack comes up and answers: the `compose` job in
       `.github/workflows/ci.yml` is the list, and the one to run by hand if
       anything about configuration changed.
@@ -283,8 +370,10 @@ the released chain plus the squashed one.
       environment does not serve it at all. `curl` its
       `/api/v1/swagger/v1/swagger.json`, never a test host, and commit any
       difference; `README.md` carries the three commands, `--build` included.
-      CI compares the two textually. Identical on 2026-09-07,
-      `sha256 79f61ee5…`.
+      CI compares the two textually. Identical on 2026-09-20,
+      `sha256 793eb42a…`, 171 paths and 215 schemas, `info.version` still `1.0`.
+      **That checksum is what `AlgoJudge-Docs` pins**, so recompute it here
+      rather than copying the previous release's.
 - [ ] **Nothing is vulnerable, and what is behind is behind on purpose.**
 
       ```sh
@@ -292,18 +381,28 @@ the released chain plus the squashed one.
       dotnet list AlgoJudge.sln package --outdated
       ```
 
-      2026-09-07: **no vulnerable package in either project**, transitive
-      included. Two are one patch behind — `AWSSDK.S3` 4.0.102.4 → 4.0.102.5 and
-      `Testcontainers.PostgreSql` 4.14.0 → 4.15.0. Neither was taken here;
-      whether to take them is the owner's call, and neither is a reason to hold
-      a release.
+      2026-09-20: **no vulnerable package in either project**, transitive
+      included. Ten are behind by a patch or a minor — `AWSSDK.S3`, six
+      `Microsoft.*` at 10.0.11 → 10.0.12, `Microsoft.IdentityModel.*` 8.22.0 →
+      8.23.0, `Microsoft.NET.Test.Sdk` and `Testcontainers.PostgreSql`. None was
+      taken here; whether to take them is the owner's call, and none is a reason
+      to hold a release.
+
+      **A dependency bump merged mid-release costs the migration proof.**
+      Dependabot's group also raises `dotnet-ef`, and the tool version is
+      written into the new migration's `ProductVersion` annotation and its
+      history row. Merging it after the preparation commit means assembling and
+      re-verifying the migration again, so take it before the branch or after
+      the tag.
 
 - [ ] **Every image this repository pins has been looked at**, and what is
       behind is behind for a reason somebody wrote down. There are five, in
       three files, and **two of them are pinned twice** — a bump that changes
       one copy and not the other is the failure this list exists to catch.
       `README.md`'s version table states four of the five in prose as well, and
-      it went stale exactly that way on 2026-09-07.
+      it went stale exactly that way on 2026-09-07. Both object stores were
+      raised to their newest stable on 2026-09-20 and both `rustfs` copies
+      agree.
 
       | | |
       |---|---|
@@ -330,11 +429,11 @@ the released chain plus the squashed one.
       `actions/setup-dotnet@v6` — and are worth the same glance.
 - [ ] **The .NET version is the one this targets.** `net10.0` in both projects,
       `aspnet:10.0` and `sdk:10.0` in the Dockerfile, `10.0.x` on CI, and
-      `10.0.400` locally on 2026-09-07. .NET 10 is the LTS; .NET 8 leaves
+      `10.0.401` locally on 2026-09-20. .NET 10 is the LTS; .NET 8 leaves
       support on 2026-11-10.
 - [ ] **`.env.example`, checked in both directions.** Everything the development
       compose substitutes is listed, and nothing is listed that it does not
-      substitute. Three on 2026-09-07 — `AJ_ADMIN_TOKEN`,
+      substitute. Three on 2026-09-20 — `AJ_ADMIN_TOKEN`,
       `AJ_STORAGE_ACCESS_KEY`, `AJ_STORAGE_SECRET_KEY` — and the two sets match
       exactly. **Nothing checks this for you here**, so read the substitutions
       in the compose file against the keys in the file. **The Server's own
@@ -350,7 +449,7 @@ the released chain plus the squashed one.
       git ls-files | grep -i env
       ```
 
-      Both named `.env.example` alone on 2026-09-07. If a real one turns up,
+      Both named `.env.example` alone on 2026-09-20. If a real one turns up,
       report that it exists and do not open it.
 - [ ] **The documentation describes the software as it is.** `README.md`,
       `AlgoJudge.Server/README.md`, `AUTHORS.md` and `AUTHORS.txt` — which
@@ -360,13 +459,59 @@ the released chain plus the squashed one.
       workflows. `preconfig.example/pages/*.md` are an installation's own
       content, not documentation.
 
-      Two were wrong on 2026-09-07 and both were corrected with the squash.
-      `CLAUDE.md` said the schema was one migration per context when seven had
-      followed the 2026-08-28 squash. `ci.yml` said the application service had
-      no healthcheck: the image has carried one since 2026-08-09 (`d05babc`),
-      and `docker compose up --wait` reports the service `Healthy`. The polling
-      under that comment stays — it asks from the host, through the published
-      port.
+      **The one that goes stale every time is `CLAUDE.md`'s account of the
+      migration chain**, which names the migrations by version and so is wrong
+      the moment a release adds one. It was wrong on 2026-09-07 and corrected
+      with that squash; corrected again on 2026-09-20, where it also gained why
+      a squash is an assembly rather than a regeneration.
+
+## Cutting the tag
+
+The tag is what publishes; nothing that lands on `main` reaches the registry on
+its own. Three things are true before it is cut, and each is read rather than
+assumed:
+
+```sh
+git merge-base --is-ancestor <sha> origin/main              # it is on main
+gh run list -R AlgoJudge/AlgoJudge-Server --commit <sha>    # its own run, green
+git tag --list                                              # the name is free
+```
+
+**Its own run.** A later green run on `main` is evidence about a later commit,
+and a release branch has no run at all — CI triggers on `main` and on pull
+requests into it. That middle command has also returned **nothing at all** for a
+commit whose run was running and then green; when it does, read the run by id
+rather than concluding there was none.
+
+The tag is annotated, and the message names the product:
+
+```sh
+git tag -a v<version> -m "AlgoJudge Server <version>" <sha>
+git push origin v<version>
+```
+
+That push starts `.github/workflows/release.yml`, which takes about a minute.
+Watch it — `gh run watch <id>` — rather than assuming it.
+
+**Two things have no undo.** The run is never canceled: `cancel-in-progress` is
+`false` here because a run interrupted between two `docker push` calls leaves a
+version half in the registry. And **deleting a tag unpublishes nothing** — the
+images of `v0.0.1-rc.1`, a tag deleted from the Runner's remote in August 2026,
+are still in GHCR. The name is checked before the push or not at all.
+
+Then the GitHub Release, which no workflow creates — `release.yml` holds
+`contents: read`:
+
+```sh
+gh release create v<version> -R AlgoJudge/AlgoJudge-Server --title "<version>" --notes-file <file>
+```
+
+The title is the bare version, no `v`. `--prerelease` when the version carries
+one; a prerelease publishes its own tag alone and moves the major, the minor and
+`latest` onto nothing.
+
+**A release body is not a file in this repository.** GitHub renders a single
+newline as a line break, so each paragraph is written as one long line.
 
 ## After the tag
 
