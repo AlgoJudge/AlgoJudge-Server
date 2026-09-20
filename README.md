@@ -61,8 +61,8 @@ no code change — point it at an endpoint with `ALGOJUDGE_S3_ENDPOINT`.
 |---|---|---|
 | .NET | **10.0** — SDK `10.0.400` here, `10.0.x` on CI | `net10.0`; the images are `aspnet:10.0` and `sdk:10.0` |
 | PostgreSQL | **18** | every test suite and the Compose stack. The major is pinned on purpose: 18 moved where the data directory lives |
-| RustFS | **1.0.0-rc.5** | the S3 suite's default endpoint, and the Compose stack. There is still no stable `1.0.0` |
-| SeaweedFS | **4.45** | the S3 suite with `ALGOJUDGE_S3=seaweedfs`, **run by hand** — it skips by default, on CI included |
+| RustFS | **1.0.0** | the S3 suite's default endpoint, and the Compose stack |
+| SeaweedFS | **4.47** | the S3 suite with `ALGOJUDGE_S3=seaweedfs`, **run by hand** — it skips by default, on CI included |
 
 ## Build
 

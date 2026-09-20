@@ -553,23 +553,26 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
       whole string. The bytes reach `/data`; `grep` does not see them. Ten runs,
       one failure in five on 4.43 and three in five on 4.45, that test and
       nothing else, p = 0.52.
-    - **So the disk check is gone and the pin moved to 4.45** (2026-09-07). A
-      method that answers "absent" about bytes that are present cannot decide
-      encryption at rest, and it fails in the dangerous direction: `false` is
-      what the assertion read as "encrypted", so a store that encrypted nothing
-      would have passed. What replaces it asserts what the S3 contract can
-      state — the store takes the configuration and reports `AES256` for the
-      object — and **runs on the default endpoint**, where the old pair only
-      ever skipped.
-    - **SeaweedFS agrees to encrypt and then stops working.** Measured the same
-      day, identically on 4.43 and 4.45: `PutBucketEncryption` is accepted,
-      `GetBucketEncryption` returns the rule, and every write to that bucket
-      afterwards fails with an internal error, though a write before the call
-      succeeds. The note that it "answers `PutBucketEncryption` with an internal
-      error" described the wrong call. `EncryptionCapableFactAttribute` skips
-      there and says so.
-  - `rustfs` went `1.0.0-rc.1` → `rc.4`, and `rc.5` on 2026-09-07; there is
-    still **no stable 1.0.0**.
+    - **So the disk check is gone and the pin moved to 4.45** (2026-09-07), and
+      to **4.47** on 2026-09-20, where fifteen of sixteen pass and the sixteenth
+      skips. A method that answers "absent" about bytes that are present cannot
+      decide encryption at rest, and it fails in the dangerous direction:
+      `false` is what the assertion read as "encrypted", so a store that
+      encrypted nothing would have passed. What replaces it asserts what the S3
+      contract can state — the store takes the configuration and reports
+      `AES256` for the object — and **runs on the default endpoint**, where the
+      old pair only ever skipped.
+    - **SeaweedFS agrees to encrypt and then stops working.** Measured
+      2026-09-07 on 4.43 and 4.45, and again on **4.47** on 2026-09-20,
+      identically: `PutBucketEncryption` is accepted, `GetBucketEncryption`
+      returns the rule, and every write to that bucket afterwards fails with an
+      internal error, though a write before the call succeeds. The note that it
+      "answers `PutBucketEncryption` with an internal error" described the wrong
+      call. `EncryptionCapableFactAttribute` skips there and says so.
+  - **`rustfs` is at `1.0.0`**, its first stable release (2026-09-16), taken on
+    2026-09-20: the full S3 suite is **sixteen of sixteen** on it, the
+    encryption item included. The pin sat on the release-candidate line until
+    then only because there was no stable release to take.
     `postgres:18` is unchanged: there is no 19, and the major pin is deliberate.
   - **Warnings 15 → 14.** The nine the bump introduced were fixed because the
     bump introduced them; the fourteen that predate it are still measured and

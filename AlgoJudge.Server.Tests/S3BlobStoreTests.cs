@@ -180,7 +180,7 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     /// </summary>
     private ContainerBuilder Rustfs()
     {
-        return new ContainerBuilder("rustfs/rustfs:1.0.0-rc.5")
+        return new ContainerBuilder("rustfs/rustfs:1.0.0")
             // **Readiness is the implementation's business, not the caller's.**
             // Waiting for the port was waiting for the wrong thing: both stores
             // open it in about 100 ms and answer seconds later.
@@ -206,23 +206,17 @@ public sealed class S3BlobStoreTests : BlobStoreContract, IAsyncLifetime
     /// </summary>
     private ContainerBuilder Seaweed()
     {
-        // **4.45.** The version behind this pin was settled twice over, and the
-        // second time settled the first.
+        // **4.47**, the newest stable. The pin follows the newest release this
+        // suite agrees on, and the suite is what decides: measured 2026-09-20,
+        // fifteen of the sixteen pass here and the sixteenth skips for the
+        // reason `EncryptionCapableFactAttribute` gives.
         //
-        // "An internal error" from a newer image was a **readiness race** of
-        // ours, not a broken image: the versions log identically at startup and
-        // differ only in how long they take to a first answer, against a port
-        // that opens in about 100 ms. `ServingAsync` closed it.
-        //
-        // What kept the pin two versions back after that was
-        // `Bytes_nobody_encrypted_are_findable_in_the_data_directory`,
-        // intermittent on every version tried and read as a difference between
-        // images until the same version both failed and passed. Measured
-        // 2026-09-07 across ten runs: **one failure in five on 4.43 and three in
-        // five on 4.45, every one of them that test and nothing else** — a
-        // difference of p = 0.52, which is to say none. The test itself was the
-        // fault and is gone; see the encryption test below.
-        return new ContainerBuilder("chrislusf/seaweedfs:4.45")
+        // **A version difference seen here is worth doubting twice.** Two of
+        // them turned out to be ours rather than the image's — a readiness race
+        // that `ServingAsync` closed, and an intermittent test since deleted —
+        // and each read as a broken image until it was measured properly.
+        // `CLAUDE.md` carries those measurements.
+        return new ContainerBuilder("chrislusf/seaweedfs:4.47")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r
                 .ForPort(8333).ForPath("/").ForStatusCodeMatching(_ => true)))
             .WithResourceMapping(

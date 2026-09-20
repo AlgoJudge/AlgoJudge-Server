@@ -310,8 +310,8 @@ the released chain plus the squashed one.
       | `mcr.microsoft.com/dotnet/aspnet:10.0` | `AlgoJudge.Server/Dockerfile` |
       | `mcr.microsoft.com/dotnet/sdk:10.0` | `AlgoJudge.Server/Dockerfile` |
       | `postgres:18` | `example-server-development-docker-compose.yaml` |
-      | `rustfs/rustfs:1.0.0-rc.5` | that file **and** `S3BlobStoreTests.cs` |
-      | `chrislusf/seaweedfs:4.45` | `S3BlobStoreTests.cs` |
+      | `rustfs/rustfs:1.0.0` | that file **and** `S3BlobStoreTests.cs` |
+      | `chrislusf/seaweedfs:4.47` | `S3BlobStoreTests.cs` |
 
       ```sh
       grep -rn 'image:' example-server-development-docker-compose.yaml
@@ -325,11 +325,6 @@ the released chain plus the squashed one.
       the data directory, so raising it is a migration question rather than a
       version bump. The two .NET images follow the target framework and move
       with it, not on their own.
-
-      2026-09-07: `rustfs` `1.0.0-rc.4` → `rc.5`, the full suite identical on
-      either, and `chrislusf/seaweedfs` `4.43` → `4.45`. The Seaweed pin had
-      stood two versions back on a comparison confounded by a test of ours; see
-      `CLAUDE.md`. The other three were checked and left.
 
       The actions the workflows use are pinned by major — `actions/checkout@v7`,
       `actions/setup-dotnet@v6` — and are worth the same glance.
