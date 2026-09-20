@@ -239,11 +239,11 @@ Released images are pushed to GitHub's container registry when a `v*` tag is
 pushed:
 
 ```bash
-docker pull ghcr.io/algojudge/algojudge-server:0.1.0
+docker pull ghcr.io/algojudge/algojudge-server:0.2.0
 ```
 
-`0.1.0`, `0.1`, `0` and `latest` all point at the same image. **A prerelease
-(`v0.1.0-rc.1`) publishes only its own tag** — nothing moving follows it, so
+`0.2.0`, `0.2`, `0` and `latest` all point at the same image. **A prerelease
+(`v0.2.0-rc.1`) publishes only its own tag** — nothing moving follows it, so
 `latest` is never a release candidate. `linux/amd64` only, which is what the
 Runner requires anyway.
 

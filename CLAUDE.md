@@ -406,12 +406,24 @@ dotnet ef migrations add <Name> --project AlgoJudge.Server --context Application
     applied anywhere; the rename contributes nothing at all, because only the
     property name changed.
 
-- **The schema is one migration per context, named for the release that
-  created it.** `version_0_1_0` in both, squashed on 2026-09-07 for 0.1.0. That
+- **The schema is one migration per release per context, named for that
+  release.** `ApplicationDbContext` holds `version_0_1_0` and `version_0_2_0`;
+  `LtiDbContext` holds `version_0_1_0` alone, because nothing touched it in the
+  0.2.0 range and a release that adds no migration to a context adds none. That
   is the standing rule: before each release the migrations added since the
   previous one become one, called `version_<major>_<minor>_<patch>`. Only
   unreleased migrations are ever squashed, so no released history row is removed
   and no released database is stranded. `docs/RELEASE.md` carries the procedure.
+  - **A squash is an assembly, not a regeneration, the moment the range
+    rewrites a row.** A model differ emits DDL from a model comparison: it
+    produces no `UPDATE`, and it renders a `RenameTable` or a `RenameColumn` as
+    a drop and a create. The 0.2.0 range holds 23 `migrationBuilder.Sql` calls
+    and two renames, so `version_0_2_0` is the six migrations' own statements in
+    their own order rather than anything `dotnet ef migrations add` wrote. The
+    check that says so is `dotnet ef migrations script version_0_1_0` before and
+    after: 95 statements each side and byte-identical once the history rows are
+    stripped. **A schema comparison cannot see this** — a regeneration that
+    dropped every `UPDATE` would produce the same schema.
   - **One block is hand-written, and a regeneration loses it.** `FileContents`,
     at the end of `version_0_1_0`: it is not an EF entity — the postgres blob
     store reads and writes it with raw SQL — so `dotnet ef migrations add` does

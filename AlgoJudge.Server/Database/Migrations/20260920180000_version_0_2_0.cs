@@ -1,24 +1,380 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+using System;
 
 #nullable disable
 
 namespace AlgoJudge.Server.Database.Migrations
 {
     /// <inheritdoc />
-    public partial class aGrantLinksSeveralRoles : Migration
+    /// <summary>
+    /// Everything added since 0.1.0, as one migration: printouts and the claim
+    /// on them, permission templates becoming roles, a manager naming a person,
+    /// the American spelling of two <c>AccountMerges</c> columns, and a grant
+    /// linking several roles.
+    /// <para>
+    /// <b>The statements are the six migrations' own, in their own order.</b>
+    /// Half of them rewrite rows rather than shape &#8212; they carry an
+    /// installation's permission keys across the <c>template:</c> to <c>role:</c>
+    /// rename, add what the release grants the shipped <c>manager</c> role, and
+    /// link the grants that never diverged from the role they were made from.
+    /// A model differ produces none of that, and renders both renames as a drop
+    /// and a create, so this migration is assembled rather than regenerated.
+    /// </para>
+    /// </summary>
+    public partial class version_0_2_0 : Migration
     {
-        /// <summary>
-        /// A grant links several roles, and everything names a role by id.
-        /// <para>
-        /// The shape first, then the rows, then what the old shape held. The
-        /// order is load-bearing: the data steps read columns this drops at the
-        /// end, and the unique index and the two check constraints are added
-        /// after the rows agree with them rather than before.
-        /// </para>
-        /// </summary>
+        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // ---- 20260912185626_printouts ----
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_FileReferences_OwnerKindMatches",
+                table: "FileReferences");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_FileReferences_SingleOwner",
+                table: "FileReferences");
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "PrintoutId",
+                table: "FileReferences",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "HasPrintouts",
+                table: "Activities",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.CreateTable(
+                name: "Printouts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ActivityId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SubmissionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    RequestedByUserId = table.Column<string>(type: "text", nullable: false),
+                    GroupId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    FileName = table.Column<string>(type: "character varying(260)", maxLength: 260, nullable: false),
+                    Sha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    SizeBytes = table.Column<long>(type: "bigint", nullable: false),
+                    State = table.Column<int>(type: "integer", nullable: false),
+                    RequestedAt = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    ResolvedAt = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    ResolvedByUserId = table.Column<string>(type: "text", nullable: true),
+                    SourceDisposedAt = table.Column<DateTime>(type: "timestamptz", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Printouts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Printouts_Activities_ActivityId",
+                        column: x => x.ActivityId,
+                        principalTable: "Activities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Printouts_ActivityGroups_GroupId",
+                        column: x => x.GroupId,
+                        principalTable: "ActivityGroups",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Printouts_AspNetUsers_RequestedByUserId",
+                        column: x => x.RequestedByUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Printouts_AspNetUsers_ResolvedByUserId",
+                        column: x => x.ResolvedByUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Printouts_Submissions_SubmissionId",
+                        column: x => x.SubmissionId,
+                        principalTable: "Submissions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FileReferences_PrintoutId",
+                table: "FileReferences",
+                column: "PrintoutId");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_FileReferences_OwnerKindMatches",
+                table: "FileReferences",
+                sql: "(\"OwnerKind\" = 0 AND \"ProblemVersionId\" IS NOT NULL) OR (\"OwnerKind\" = 1 AND \"ActivityId\" IS NOT NULL) OR (\"OwnerKind\" = 2 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 3 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 4 AND \"RunnerId\" IS NOT NULL) OR (\"OwnerKind\" = 5 AND \"SubmissionId\" IS NOT NULL) OR (\"OwnerKind\" = 6 AND \"EvaluationJobId\" IS NOT NULL) OR (\"OwnerKind\" = 7 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 8 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 9 AND \"PrintoutId\" IS NOT NULL)");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_FileReferences_SingleOwner",
+                table: "FileReferences",
+                sql: "num_nonnulls(\"ProblemVersionId\", \"ActivityId\", \"SubmissionId\", \"EvaluationJobId\", \"RunnerId\", \"InstanceId\", \"PrintoutId\") = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_ActivityId_RequestedAt",
+                table: "Printouts",
+                columns: new[] { "ActivityId", "RequestedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_GroupId",
+                table: "Printouts",
+                column: "GroupId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_RequestedByUserId",
+                table: "Printouts",
+                column: "RequestedByUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_ResolvedByUserId",
+                table: "Printouts",
+                column: "ResolvedByUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_State_RequestedAt",
+                table: "Printouts",
+                columns: new[] { "State", "RequestedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_SubmissionId",
+                table: "Printouts",
+                column: "SubmissionId");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_FileReferences_Printouts_PrintoutId",
+                table: "FileReferences",
+                column: "PrintoutId",
+                principalTable: "Printouts",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+
+            // ---- 20260912215309_printoutClaim ----
+            migrationBuilder.AddColumn<DateTime>(
+                name: "ClaimedAt",
+                table: "Printouts",
+                type: "timestamptz",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "ClaimedByUserId",
+                table: "Printouts",
+                type: "text",
+                nullable: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Printouts_ClaimedByUserId",
+                table: "Printouts",
+                column: "ClaimedByUserId");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Printouts_AspNetUsers_ClaimedByUserId",
+                table: "Printouts",
+                column: "ClaimedByUserId",
+                principalTable: "AspNetUsers",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Restrict);
+
+
+            // ---- 20260913142136_rolesInsteadOfTemplates ----
+            migrationBuilder.RenameTable(
+                name: "PermissionTemplates",
+                newName: "Roles");
+
+            // Postgres renames a table without renaming what hangs off it, and
+            // the model snapshot expects the new names.
+            migrationBuilder.Sql(
+                "ALTER TABLE \"Roles\" RENAME CONSTRAINT \"PK_PermissionTemplates\" TO \"PK_Roles\";");
+
+            migrationBuilder.DropIndex(
+                name: "IX_PermissionTemplates_Name",
+                table: "Roles");
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "ActivityId",
+                table: "Roles",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.RenameColumn(
+                name: "TemplateName",
+                table: "IdentityProviderMappingRules",
+                newName: "RoleName");
+
+            migrationBuilder.RenameColumn(
+                name: "DefaultTemplateName",
+                table: "IdentityProviders",
+                newName: "DefaultRoleName");
+
+            migrationBuilder.RenameColumn(
+                name: "CreatedFromTemplate",
+                table: "Grants",
+                newName: "CopiedFromRoleName");
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "RoleId",
+                table: "Grants",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "ManagerRoleId",
+                table: "Activities",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "ParticipantRoleId",
+                table: "Activities",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Grants_RoleId",
+                table: "Grants",
+                column: "RoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Activities_ManagerRoleId",
+                table: "Activities",
+                column: "ManagerRoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Activities_ParticipantRoleId",
+                table: "Activities",
+                column: "ParticipantRoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Roles_ActivityId_Name",
+                table: "Roles",
+                columns: new[] { "ActivityId", "Name" },
+                unique: true,
+                filter: "\"ActivityId\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Roles_Name_Global",
+                table: "Roles",
+                column: "Name",
+                unique: true,
+                filter: "\"ActivityId\" IS NULL");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Roles_Activities_ActivityId",
+                table: "Roles",
+                column: "ActivityId",
+                principalTable: "Activities",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Activities_Roles_ManagerRoleId",
+                table: "Activities",
+                column: "ManagerRoleId",
+                principalTable: "Roles",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.SetNull);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Activities_Roles_ParticipantRoleId",
+                table: "Activities",
+                column: "ParticipantRoleId",
+                principalTable: "Roles",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.SetNull);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Grants_Roles_RoleId",
+                table: "Grants",
+                column: "RoleId",
+                principalTable: "Roles",
+                principalColumn: "Id");
+
+            // `template:read` and `template:manage` became `role:read` and
+            // `role:manage`. The opening quote anchors the prefix, and those two
+            // are the only keys that ever carried it.
+            migrationBuilder.Sql(
+                "UPDATE \"Roles\" SET \"Permissions\" = "
+                + "replace(\"Permissions\"::text, '\"template:', '\"role:')::jsonb "
+                + "WHERE \"Permissions\"::text LIKE '%\"template:%';");
+            migrationBuilder.Sql(
+                "UPDATE \"Grants\" SET \"Permissions\" = "
+                + "replace(\"Permissions\"::text, '\"template:', '\"role:')::jsonb "
+                + "WHERE \"Permissions\"::text LIKE '%\"template:%';");
+
+            // The shipped `manager` role gains the two keys the release adds to
+            // it. **This is the correction the whole change exists to make
+            // possible** — before it, a permission added by a new version reached
+            // nobody already enrolled, and an installation had to re-issue every
+            // grant by hand. Written once here rather than by the seeder, which
+            // must never rewrite a role an installation has since edited.
+            migrationBuilder.Sql(
+                "UPDATE \"Roles\" SET \"Permissions\" = \"Permissions\" || '[\"role:read\"]'::jsonb "
+                + "WHERE \"ActivityId\" IS NULL AND \"IsBuiltIn\" AND \"Name\" = 'manager' "
+                + "AND NOT jsonb_exists(\"Permissions\", 'role:read');");
+            migrationBuilder.Sql(
+                "UPDATE \"Roles\" SET \"Permissions\" = \"Permissions\" || '[\"role:manage\"]'::jsonb "
+                + "WHERE \"ActivityId\" IS NULL AND \"IsBuiltIn\" AND \"Name\" = 'manager' "
+                + "AND NOT jsonb_exists(\"Permissions\", 'role:manage');");
+
+            // **Link the grants that never diverged, and only those.** A grant
+            // whose set is exactly the role it was made from was never edited, so
+            // pointing it at that role changes nothing today and everything the
+            // next time the role is corrected. One that differs by a single key
+            // is somebody's decision about one person and is left a copy —
+            // together with every provider contribution, which stays a copy by
+            // design because a claim may match several rules at once.
+            //
+            // Compared as sets: `DISTINCT` so a duplicated entry on one side is
+            // not a difference, sorted so order is not one either, and
+            // `IS NOT DISTINCT FROM` so two empty sets match.
+            migrationBuilder.Sql(
+                "UPDATE \"Grants\" g SET \"RoleId\" = r.\"Id\", \"Permissions\" = '[]'::jsonb, "
+                + "\"CopiedFromRoleName\" = NULL "
+                + "FROM \"Roles\" r "
+                + "WHERE r.\"ActivityId\" IS NULL AND g.\"SourceProviderId\" IS NULL "
+                + "AND g.\"CopiedFromRoleName\" = r.\"Name\" "
+                + "AND (SELECT array_agg(DISTINCT x ORDER BY x) "
+                + "FROM jsonb_array_elements_text(g.\"Permissions\") x) IS NOT DISTINCT FROM "
+                + "(SELECT array_agg(DISTINCT y ORDER BY y) "
+                + "FROM jsonb_array_elements_text(r.\"Permissions\") y);");
+
+
+            // ---- 20260914173744_aManagerMayNameAPerson ----
+            // The installation's own `manager` role, and only that one: an
+            // activity's role of the same name is somebody's local decision.
+            migrationBuilder.Sql(
+                """
+                UPDATE "Roles" SET "Permissions" = "Permissions" || '["user:read:all"]'::jsonb
+                WHERE "ActivityId" IS NULL AND "IsBuiltIn" AND "Name" = 'manager'
+                  AND NOT jsonb_exists("Permissions", 'user:read:all');
+                """);
+
+
+            // ---- 20260918195016_americanSpelling ----
+            migrationBuilder.RenameColumn(
+                name: "SourceAnonymisedAt",
+                table: "AccountMerges",
+                newName: "SourceAnonymizedAt");
+
+            migrationBuilder.RenameColumn(
+                name: "AnonymiseAfter",
+                table: "AccountMerges",
+                newName: "AnonymizeAfter");
+
+            migrationBuilder.RenameIndex(
+                name: "IX_AccountMerges_SourceAnonymisedAt_AnonymiseAfter",
+                table: "AccountMerges",
+                newName: "IX_AccountMerges_SourceAnonymizedAt_AnonymizeAfter");
+
+
+            // ---- 20260919220105_aGrantLinksSeveralRoles ----
             migrationBuilder.AddColumn<string>(
                 name: "BuiltInKey",
                 table: "Roles",
@@ -450,6 +806,7 @@ namespace AlgoJudge.Server.Database.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // ---- 20260919220105_aGrantLinksSeveralRoles ----
             migrationBuilder.AddColumn<string>(
                 name: "DefaultRoleName",
                 table: "IdentityProviders",
@@ -646,6 +1003,204 @@ namespace AlgoJudge.Server.Database.Migrations
                 column: "RoleId",
                 principalTable: "Roles",
                 principalColumn: "Id");
+
+
+            // ---- 20260918195016_americanSpelling ----
+            migrationBuilder.RenameColumn(
+                name: "SourceAnonymizedAt",
+                table: "AccountMerges",
+                newName: "SourceAnonymisedAt");
+
+            migrationBuilder.RenameColumn(
+                name: "AnonymizeAfter",
+                table: "AccountMerges",
+                newName: "AnonymiseAfter");
+
+            migrationBuilder.RenameIndex(
+                name: "IX_AccountMerges_SourceAnonymizedAt_AnonymizeAfter",
+                table: "AccountMerges",
+                newName: "IX_AccountMerges_SourceAnonymisedAt_AnonymiseAfter");
+
+
+            // ---- 20260914173744_aManagerMayNameAPerson ----
+            // Exactly what `Up` added, so a rollback leaves the role as the
+            // previous version shipped it.
+            //
+            // **It gets one case wrong, knowingly**: an installation that had
+            // already put this key on the shipped manager role by hand loses it
+            // here. The column records no provenance, so the alternative is
+            // leaving a right behind on every rollback, and that is the worse
+            // half of the trade for a key that reads every account.
+            migrationBuilder.Sql(
+                """
+                UPDATE "Roles" SET "Permissions" = "Permissions" - 'user:read:all'
+                WHERE "ActivityId" IS NULL AND "IsBuiltIn" AND "Name" = 'manager';
+                """);
+
+
+            // ---- 20260913142136_rolesInsteadOfTemplates ----
+            // Put back what a link was standing in for, before the link can go.
+            // Anything else would be a silent demotion of everybody the upgrade
+            // had tidied up.
+            migrationBuilder.Sql(
+                "UPDATE \"Grants\" g SET \"Permissions\" = COALESCE(("
+                + "SELECT jsonb_agg(DISTINCT u.x) FROM ("
+                + "SELECT jsonb_array_elements_text(r.\"Permissions\") AS x "
+                + "UNION SELECT jsonb_array_elements_text(g.\"Permissions\")) u), '[]'::jsonb), "
+                + "\"CopiedFromRoleName\" = r.\"Name\" "
+                + "FROM \"Roles\" r WHERE g.\"RoleId\" = r.\"Id\";");
+
+            // An activity's own role has nowhere to live in the old shape. Its
+            // grants have just been given its permissions outright, so nothing is
+            // lost but the ability to correct them in one place.
+            migrationBuilder.Sql("DELETE FROM \"Roles\" WHERE \"ActivityId\" IS NOT NULL;");
+
+            migrationBuilder.Sql(
+                "UPDATE \"Roles\" SET \"Permissions\" = "
+                + "replace(\"Permissions\"::text, '\"role:', '\"template:')::jsonb "
+                + "WHERE \"Permissions\"::text LIKE '%\"role:%';");
+            migrationBuilder.Sql(
+                "UPDATE \"Grants\" SET \"Permissions\" = "
+                + "replace(\"Permissions\"::text, '\"role:', '\"template:')::jsonb "
+                + "WHERE \"Permissions\"::text LIKE '%\"role:%';");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Activities_Roles_ManagerRoleId",
+                table: "Activities");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Activities_Roles_ParticipantRoleId",
+                table: "Activities");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Grants_Roles_RoleId",
+                table: "Grants");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Roles_Activities_ActivityId",
+                table: "Roles");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Grants_RoleId",
+                table: "Grants");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Activities_ManagerRoleId",
+                table: "Activities");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Activities_ParticipantRoleId",
+                table: "Activities");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Roles_ActivityId_Name",
+                table: "Roles");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Roles_Name_Global",
+                table: "Roles");
+
+            migrationBuilder.DropColumn(
+                name: "RoleId",
+                table: "Grants");
+
+            migrationBuilder.DropColumn(
+                name: "ManagerRoleId",
+                table: "Activities");
+
+            migrationBuilder.DropColumn(
+                name: "ParticipantRoleId",
+                table: "Activities");
+
+            migrationBuilder.DropColumn(
+                name: "ActivityId",
+                table: "Roles");
+
+            migrationBuilder.RenameColumn(
+                name: "RoleName",
+                table: "IdentityProviderMappingRules",
+                newName: "TemplateName");
+
+            migrationBuilder.RenameColumn(
+                name: "DefaultRoleName",
+                table: "IdentityProviders",
+                newName: "DefaultTemplateName");
+
+            migrationBuilder.RenameColumn(
+                name: "CopiedFromRoleName",
+                table: "Grants",
+                newName: "CreatedFromTemplate");
+
+            migrationBuilder.RenameTable(
+                name: "Roles",
+                newName: "PermissionTemplates");
+
+            migrationBuilder.Sql(
+                "ALTER TABLE \"PermissionTemplates\" "
+                + "RENAME CONSTRAINT \"PK_Roles\" TO \"PK_PermissionTemplates\";");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PermissionTemplates_Name",
+                table: "PermissionTemplates",
+                column: "Name",
+                unique: true);
+
+
+            // ---- 20260912215309_printoutClaim ----
+            migrationBuilder.DropForeignKey(
+                name: "FK_Printouts_AspNetUsers_ClaimedByUserId",
+                table: "Printouts");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Printouts_ClaimedByUserId",
+                table: "Printouts");
+
+            migrationBuilder.DropColumn(
+                name: "ClaimedAt",
+                table: "Printouts");
+
+            migrationBuilder.DropColumn(
+                name: "ClaimedByUserId",
+                table: "Printouts");
+
+
+            // ---- 20260912185626_printouts ----
+            migrationBuilder.DropForeignKey(
+                name: "FK_FileReferences_Printouts_PrintoutId",
+                table: "FileReferences");
+
+            migrationBuilder.DropTable(
+                name: "Printouts");
+
+            migrationBuilder.DropIndex(
+                name: "IX_FileReferences_PrintoutId",
+                table: "FileReferences");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_FileReferences_OwnerKindMatches",
+                table: "FileReferences");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_FileReferences_SingleOwner",
+                table: "FileReferences");
+
+            migrationBuilder.DropColumn(
+                name: "PrintoutId",
+                table: "FileReferences");
+
+            migrationBuilder.DropColumn(
+                name: "HasPrintouts",
+                table: "Activities");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_FileReferences_OwnerKindMatches",
+                table: "FileReferences",
+                sql: "(\"OwnerKind\" = 0 AND \"ProblemVersionId\" IS NOT NULL) OR (\"OwnerKind\" = 1 AND \"ActivityId\" IS NOT NULL) OR (\"OwnerKind\" = 2 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 3 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 4 AND \"RunnerId\" IS NOT NULL) OR (\"OwnerKind\" = 5 AND \"SubmissionId\" IS NOT NULL) OR (\"OwnerKind\" = 6 AND \"EvaluationJobId\" IS NOT NULL) OR (\"OwnerKind\" = 7 AND \"InstanceId\" IS NOT NULL) OR (\"OwnerKind\" = 8 AND \"InstanceId\" IS NOT NULL)");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_FileReferences_SingleOwner",
+                table: "FileReferences",
+                sql: "num_nonnulls(\"ProblemVersionId\", \"ActivityId\", \"SubmissionId\", \"EvaluationJobId\", \"RunnerId\", \"InstanceId\") = 1");
         }
     }
 }

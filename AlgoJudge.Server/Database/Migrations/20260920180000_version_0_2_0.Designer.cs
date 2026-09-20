@@ -14,8 +14,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AlgoJudge.Server.Database.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260919220105_aGrantLinksSeveralRoles")]
-    partial class aGrantLinksSeveralRoles
+    [Migration("20260920180000_version_0_2_0")]
+    partial class version_0_2_0
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

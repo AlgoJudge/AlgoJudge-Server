@@ -20,15 +20,21 @@ namespace AlgoJudge.Server.Tests;
 /// </para>
 ///
 /// <para>
-/// <b>Its own database, migrated up to the version before.</b> Every other test
-/// runs against a schema that is already current, which is the one state this
-/// cannot start from.
+/// <b>Its own database, migrated up to the previous release and no further.</b>
+/// Every other test runs against a schema that is already current, which is the
+/// one state this cannot start from.
 /// </para>
 /// </summary>
 [Collection("storage")]
 public class RoleMigrationTests : IAsyncLifetime
 {
-    private const string Previous = "20260912215309_printoutClaim";
+    /// <summary>
+    /// The released state these start from. <b>A migration id is only nameable
+    /// while it exists</b>, and a release squashes its range into one — so this
+    /// names the previous release's own migration, which survives, rather than
+    /// whichever unreleased one happened to come last.
+    /// </summary>
+    private const string Previous = "20260907183332_version_0_1_0";
 
     private PostgreSqlContainer container = null!;
 
