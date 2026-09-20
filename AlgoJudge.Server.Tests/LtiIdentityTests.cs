@@ -432,6 +432,82 @@ public class LtiIdentityTests(ServerFixture server)
     }
 
     /// <summary>
+    /// <b>Every rule a launch's roles match applies, as a union.</b>
+    ///
+    /// <para>
+    /// A sub-role is matched as two values — itself and the role it is a
+    /// sub-role of — so a narrow rule for <c>Instructor#TeachingAssistant</c>
+    /// <i>adds to</i> a rule for <c>Instructor</c> rather than replacing it.
+    /// There is no precedence here and deliberately none: a union is
+    /// commutative, so there is no ordering to decide and no rule about which
+    /// of two rules a reader has to learn.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Which means an operator who wants the narrow case to be different has
+    /// to say so by taking the broad rule away.</b> Writing the two and
+    /// expecting the second to win gets both.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_sub_role_matches_its_own_rule_and_its_parents()
+    {
+        using var platform = new FakePlatform();
+        var registered = await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var made = await admin.PostAsJsonAsync("/api/v1/roles", new
+        {
+            name = "assists-" + Guid.NewGuid().ToString("N")[..8],
+            permissions = new[] { "activity:read", "question:answer" },
+        });
+        await Sign.Succeeded(made);
+        var assistant = await made.Content.ReadFromJsonAsync<JsonElement>();
+
+        var id = registered.GetProperty("id").GetString();
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/lti/platforms/{id}", new
+        {
+            displayName = "Fake " + platform.Issuer,
+            issuer = platform.Issuer,
+            clientId = platform.ClientId,
+            deploymentId = platform.DeploymentId,
+            keySetUrl = platform.Issuer + "/mod/lti/certs.php",
+            authTokenUrl = platform.Issuer + "/mod/lti/token.php",
+            authLoginUrl = platform.Issuer + "/mod/lti/auth.php",
+            isIdentityAuthority = true,
+            identityNamespace = Directory,
+            mappingRules = new object[]
+            {
+                new
+                {
+                    claimValue = "Instructor",
+                    targets = new[] { new { kind = "activityManagers" } },
+                },
+                new
+                {
+                    claimValue = "Instructor#TeachingAssistant",
+                    targets = new[]
+                    {
+                        new { kind = "role", roleId = assistant.GetProperty("id").GetString() },
+                    },
+                },
+            },
+        }));
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: ["http://purl.imsglobal.org/vocab/lis/v2/membership/Instructor#TeachingAssistant"]);
+
+        // Both: the activity's manager set from the broad rule, and the named
+        // role from the narrow one.
+        Assert.Equal(
+            new[] { assistant.GetProperty("name").GetString()!, "manager" }.OrderBy(n => n, StringComparer.Ordinal),
+            Held((await GrantAsync(host, user.Id))!));
+    }
+
+    /// <summary>
     /// <b>A sub-role is read as the role it is a sub-role of.</b>
     ///
     /// <para>
