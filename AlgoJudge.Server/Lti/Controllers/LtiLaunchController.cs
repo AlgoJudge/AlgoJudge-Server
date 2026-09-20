@@ -148,19 +148,21 @@ namespace AlgoJudge.Server.Lti.Controllers
                             "/lti/sign-in?returnTo=" + Uri.EscapeDataString(Landing(link))));
 
                     case Resolution.Resolved resolved:
-                        // **Decided by the same role the grant is decided by.**
-                        // Whoever runs the course at the platform is the person
-                        // preparing the copy, and they launch into it; everybody
-                        // else is told it is not open yet.
+                        // **Decided by what this launch's roles grant**, which is
+                        // what everybody else's access to an unpublished activity
+                        // is decided by: `activity:update`. Whoever is preparing
+                        // the activity launches into it; everybody else is told
+                        // it is not open yet.
                         //
-                        // Deliberately the platform's roles rather than this
-                        // installation's permissions: the permission belongs to
-                        // an account, and nobody is signed in yet at this point
-                        // in the request - the session is established two lines
-                        // below. Trusting the role claim here trusts it for
-                        // exactly what the enrollment already trusts it for.
+                        // Derived rather than asked a second way. A separate
+                        // "who runs this course" answer beside the mapping meant
+                        // two rules could disagree, and the one here read an
+                        // institution role as authority over a course.
+                        var planned = await enrollment.PlanAsync(
+                            link.ActivityId, launch.Platform.ProviderId, launch.Roles, ct);
+
                         if (!await activities.IsPublishedAsync(link.ActivityId, ct)
-                            && !LtiRoles.RunsTheCourse(launch.Roles))
+                            && !planned.Permissions.Contains(Permissions.ActivityUpdate))
                         {
                             return Failed(LtiLaunchException.NotPublished);
                         }

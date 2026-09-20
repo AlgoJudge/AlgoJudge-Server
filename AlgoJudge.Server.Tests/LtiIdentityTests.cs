@@ -169,12 +169,14 @@ public class LtiIdentityTests(ServerFixture server)
 
         var grant = await GrantAsync(host, user.Id);
         Assert.NotNull(grant);
-        Assert.Equal("participant", grant!.Role!.Name);
-        Assert.False(grant.IsSystem);
-        // Attributable: a course grant from a launch names the platform's
-        // provider row rather than looking like somebody typed it in.
+        Assert.Equal(["participant"], Held(grant!));
+        Assert.False(grant!.IsSystem);
+        // Attributable: the role a launch added names the platform's provider
+        // row rather than looking like somebody typed it in. On the link, not
+        // on the grant — an activity has one grant whoever wrote it.
         Assert.Equal(registered.GetProperty("providerId").GetString(),
-            grant.SourceProviderId!.Value.ToString("D"));
+            grant.Roles.Single().SourceProviderId!.Value.ToString("D"));
+        Assert.Null(grant.SourceProviderId);
         // And never authoritative — a launch does not demote anybody.
         Assert.False(grant.OverrideSystem);
     }
@@ -193,7 +195,7 @@ public class LtiIdentityTests(ServerFixture server)
 
         var grant = await GrantAsync(host, user.Id);
         Assert.NotNull(grant);
-        Assert.Equal("manager", grant!.Role!.Name);
+        Assert.Equal(["manager"], Held(grant!));
         Assert.True(grant.IsSystem);
     }
 
@@ -229,7 +231,7 @@ public class LtiIdentityTests(ServerFixture server)
 
         var grant = await GrantAsync(host, user.Id);
         Assert.NotNull(grant);
-        Assert.Equal("manager", grant!.Role!.Name);
+        Assert.Equal(["manager"], Held(grant!));
         Assert.True(grant.IsSystem);
     }
 
@@ -251,7 +253,288 @@ public class LtiIdentityTests(ServerFixture server)
             roles: [LtiRoles.Administrator, LtiRoles.Learner]);
 
         var grant = await GrantAsync(host, user.Id);
-        Assert.Equal("participant", grant!.Role!.Name);
+        Assert.Equal(["participant"], Held(grant!));
+    }
+
+
+    /// <summary>
+    /// <b>A launch adds roles and never takes one away.</b>
+    ///
+    /// <para>
+    /// A teacher demoted to a student at the platform used to be demoted here at
+    /// their next launch, on the platform's word. Moodle 5.2.2 made that
+    /// visible: a non-editing teacher is <c>Instructor</c> in a launch and
+    /// <c>Learner</c> on the roster, so the same person flipped between manager
+    /// and participant with whichever path ran last. A launch says who is in the
+    /// course; what they may do here is this installation's to decide.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_second_launch_adds_a_role_and_removes_none()
+    {
+        using var platform = new FakePlatform();
+        await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: [LtiRoles.Instructor]);
+        Assert.Equal(["manager"], Held((await GrantAsync(host, user.Id))!));
+
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: [LtiRoles.Learner]);
+
+        var grant = await GrantAsync(host, user.Id);
+        Assert.Equal(["manager", "participant"], Held(grant!));
+    }
+
+    /// <summary>
+    /// <b>A role somebody took away by hand stays away.</b>
+    ///
+    /// <para>
+    /// The other half of "a launch never removes": without it, a manager
+    /// correcting a membership would have the correction undone at that
+    /// person's next launch, with nothing on any screen to explain it. A change
+    /// that silently reverts is a change nobody can trust.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_role_a_manager_removed_is_not_added_back_by_a_launch()
+    {
+        using var platform = new FakePlatform();
+        await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: [LtiRoles.Instructor]);
+
+        var grant = await GrantAsync(host, user.Id);
+        Assert.Equal(["manager"], Held(grant!));
+
+        // The panel takes the role away. **The grant is editable**: a launch
+        // used to make one that answered 409 to every correction, because the
+        // write path looked for a row with no source and inserted a second.
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        await Sign.Succeeded(await admin.PostAsJsonAsync("/api/v1/grants", new
+        {
+            userId = user.Id,
+            activityId = grant!.ActivityId!.Value.ToString(),
+            permissions = Array.Empty<string>(),
+            roleIds = Array.Empty<string>(),
+        }));
+
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: [LtiRoles.Instructor]);
+
+        var after = await GrantAsync(host, user.Id);
+        Assert.Empty(Held(after!));
+        Assert.Single(after!.Roles, r => r.DismissedAt is not null);
+    }
+
+    /// <summary>
+    /// <b>A grant a launch created is a membership like any other.</b> It can be
+    /// edited and it can be revoked; the platform's word put the person in the
+    /// course, and a manager's word is what settles what they do in it.
+    /// </summary>
+    [Fact]
+    public async Task A_grant_a_launch_created_can_be_revoked()
+    {
+        using var platform = new FakePlatform();
+        await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug);
+
+        var grant = await GrantAsync(host, user.Id);
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+
+        var revoked = await admin.DeleteAsync($"/api/v1/grants/{grant!.Id:D}");
+        await Sign.Succeeded(revoked);
+        Assert.Null(await GrantAsync(host, user.Id));
+    }
+
+    /// <summary>
+    /// <b>Which LTI role means which role here is configuration.</b>
+    ///
+    /// <para>
+    /// It was compiled in until 2026-09-19: a <c>Learner</c> was enrolled as the
+    /// activity enrolls participants and the three teaching roles as it enrolls
+    /// managers, and an installation whose non-editing teachers should not run a
+    /// course had nowhere to say so. The rules a platform starts with reproduce
+    /// exactly that, and this is the test that they can be changed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_platforms_rules_can_be_read_and_rewritten()
+    {
+        using var platform = new FakePlatform();
+        var registered = await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        // What it starts with, which is what the Server used to do in code.
+        var defaults = registered.GetProperty("mappingRules").EnumerateArray()
+            .ToDictionary(
+                rule => rule.GetProperty("claimValue").GetString()!,
+                rule => rule.GetProperty("targets").EnumerateArray()
+                    .Select(target => target.GetProperty("kind").GetString()!).ToList());
+
+        Assert.Equal(["activityParticipants"], defaults["Learner"]);
+        Assert.Equal(["activityManagers"], defaults["Instructor"]);
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var made = await admin.PostAsJsonAsync("/api/v1/roles", new
+        {
+            name = "jury-" + Guid.NewGuid().ToString("N")[..8],
+            permissions = new[] { "activity:read", "submission:read:all" },
+        });
+        await Sign.Succeeded(made);
+        var juryRole = await made.Content.ReadFromJsonAsync<JsonElement>();
+        var jury = juryRole.GetProperty("id").GetString();
+        var juryName = juryRole.GetProperty("name").GetString()!;
+
+        // An installation deciding that a teaching assistant sits on the jury
+        // rather than running the course — the sentence the old constant could
+        // not say.
+        var id = registered.GetProperty("id").GetString();
+        var rewritten = await admin.PutAsJsonAsync($"/api/v1/lti/platforms/{id}", new
+        {
+            displayName = "Fake " + platform.Issuer,
+            issuer = platform.Issuer,
+            clientId = platform.ClientId,
+            deploymentId = platform.DeploymentId,
+            keySetUrl = platform.Issuer + "/mod/lti/certs.php",
+            authTokenUrl = platform.Issuer + "/mod/lti/token.php",
+            authLoginUrl = platform.Issuer + "/mod/lti/auth.php",
+            isIdentityAuthority = true,
+            identityNamespace = Directory,
+            mappingRules = new[]
+            {
+                new
+                {
+                    claimValue = "Instructor#TeachingAssistant",
+                    targets = new[] { new { kind = "role", roleId = jury } },
+                },
+            },
+        });
+        await Sign.Succeeded(rewritten);
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: ["http://purl.imsglobal.org/vocab/lis/v2/membership/Instructor#TeachingAssistant"]);
+
+        Assert.Equal([juryName], Held((await GrantAsync(host, user.Id))!));
+    }
+
+    /// <summary>
+    /// <b>Every rule a launch's roles match applies, as a union.</b>
+    ///
+    /// <para>
+    /// A sub-role is matched as two values — itself and the role it is a
+    /// sub-role of — so a narrow rule for <c>Instructor#TeachingAssistant</c>
+    /// <i>adds to</i> a rule for <c>Instructor</c> rather than replacing it.
+    /// There is no precedence here and deliberately none: a union is
+    /// commutative, so there is no ordering to decide and no rule about which
+    /// of two rules a reader has to learn.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Which means an operator who wants the narrow case to be different has
+    /// to say so by taking the broad rule away.</b> Writing the two and
+    /// expecting the second to win gets both.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_sub_role_matches_its_own_rule_and_its_parents()
+    {
+        using var platform = new FakePlatform();
+        var registered = await RegisterAsync(platform, authority: true);
+        var (user, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        var admin = await Sign.InAsync(server, Seeder.DevAdminLogin, Seeder.DevAdminPassword);
+        var made = await admin.PostAsJsonAsync("/api/v1/roles", new
+        {
+            name = "assists-" + Guid.NewGuid().ToString("N")[..8],
+            permissions = new[] { "activity:read", "question:answer" },
+        });
+        await Sign.Succeeded(made);
+        var assistant = await made.Content.ReadFromJsonAsync<JsonElement>();
+
+        var id = registered.GetProperty("id").GetString();
+        await Sign.Succeeded(await admin.PutAsJsonAsync($"/api/v1/lti/platforms/{id}", new
+        {
+            displayName = "Fake " + platform.Issuer,
+            issuer = platform.Issuer,
+            clientId = platform.ClientId,
+            deploymentId = platform.DeploymentId,
+            keySetUrl = platform.Issuer + "/mod/lti/certs.php",
+            authTokenUrl = platform.Issuer + "/mod/lti/token.php",
+            authLoginUrl = platform.Issuer + "/mod/lti/auth.php",
+            isIdentityAuthority = true,
+            identityNamespace = Directory,
+            mappingRules = new object[]
+            {
+                new
+                {
+                    claimValue = "Instructor",
+                    targets = new[] { new { kind = "activityManagers" } },
+                },
+                new
+                {
+                    claimValue = "Instructor#TeachingAssistant",
+                    targets = new[]
+                    {
+                        new { kind = "role", roleId = assistant.GetProperty("id").GetString() },
+                    },
+                },
+            },
+        }));
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: user.UserName!, activity: slug,
+            roles: ["http://purl.imsglobal.org/vocab/lis/v2/membership/Instructor#TeachingAssistant"]);
+
+        // Both: the activity's manager set from the broad rule, and the named
+        // role from the narrow one.
+        Assert.Equal(
+            new[] { assistant.GetProperty("name").GetString()!, "manager" }.OrderBy(n => n, StringComparer.Ordinal),
+            Held((await GrantAsync(host, user.Id))!));
+    }
+
+    /// <summary>
+    /// <b>A sub-role is read as the role it is a sub-role of.</b>
+    ///
+    /// <para>
+    /// <c>…/membership/Instructor#TeachingAssistant</c> was read as
+    /// <c>TeachingAssistant</c> — the part after the <c>#</c> — which matched
+    /// nothing, so a teaching assistant was enrolled as a participant. An
+    /// institution role is not a course role at all: a lecturer enrolled as a
+    /// student in a colleague's course ran it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_teaching_assistant_is_read_as_an_instructor()
+    {
+        using var platform = new FakePlatform();
+        await RegisterAsync(platform, authority: true);
+        var (assistant, _) = await DirectoryUserAsync();
+        var (visitor, _) = await DirectoryUserAsync();
+        var slug = await ActivityAsync();
+
+        using var host = HostFor(platform);
+        await LaunchAsync(host, platform, username: assistant.UserName!, activity: slug,
+            roles: ["http://purl.imsglobal.org/vocab/lis/v2/membership/Instructor#TeachingAssistant"]);
+        Assert.Equal(["manager"], Held((await GrantAsync(host, assistant.Id))!));
+
+        await LaunchAsync(host, platform, username: visitor.UserName!, activity: slug,
+            roles: [LtiRoles.InstitutionInstructor, LtiRoles.Learner]);
+        Assert.Equal(["participant"], Held((await GrantAsync(host, visitor.Id))!));
     }
 
     // ── The placement ────────────────────────────────────────────────────────
@@ -457,15 +740,31 @@ public class LtiIdentityTests(ServerFixture server)
                     roles: roles),
             }));
 
-        return response.Headers.Location!.ToString();
+        // A launch answers with a redirect on every path it has, including the
+        // ones it refuses. No location means something threw, and the status
+        // alone says nothing about what.
+        if (response.Headers.Location is null)
+        {
+            Assert.Fail($"The launch did not redirect: {(int)response.StatusCode} "
+                + await response.Content.ReadAsStringAsync());
+        }
+
+        return response.Headers.Location.ToString();
     }
+
+    /// <summary>The names of the roles a grant holds, in order, for an assertion.</summary>
+    private static IReadOnlyList<string> Held(Grant grant) =>
+        [.. grant.Roles
+            .Where(r => r.DismissedAt is null)
+            .Select(r => r.Role!.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)];
 
     private static async Task<Grant?> GrantAsync(WebApplicationFactory<Program> host, string userId)
     {
         using var scope = host.Services.CreateScope();
         var core = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await core.Grants.AsNoTracking()
-            .Include(g => g.Role)
+            .Include(g => g.Roles).ThenInclude(r => r.Role)
             .FirstOrDefaultAsync(g => g.UserId == userId && g.ActivityId != null);
     }
 

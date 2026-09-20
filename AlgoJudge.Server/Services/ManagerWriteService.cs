@@ -176,10 +176,10 @@ namespace AlgoJudge.Server.Services
             {
                 activity.RunnerTags = RunnerTags.Validated(runnerTags, "The activity's Runner tags");
             }
-            activity.ParticipantRoleId =
-                await EnrollmentRoleAsync(input.ParticipantRoleId, activity, activity.ParticipantRoleId, ct);
-            activity.ManagerRoleId =
-                await EnrollmentRoleAsync(input.ManagerRoleId, activity, activity.ManagerRoleId, ct);
+            await WriteEnrollmentRolesAsync(
+                activity, EnrollmentSlot.Participants, input.ParticipantRoleIds, ct);
+            await WriteEnrollmentRolesAsync(
+                activity, EnrollmentSlot.Managers, input.ManagerRoleIds, ct);
 
             if (input.JoinPolicy is { } policy)
             {
@@ -651,39 +651,87 @@ namespace AlgoJudge.Server.Services
         /// course decide what another's enrollments carry.
         /// </para>
         /// </summary>
-        private async Task<Guid?> EnrollmentRoleAsync(
-            string? asked, Activity activity, Guid? current, CancellationToken ct)
+        private async Task WriteEnrollmentRolesAsync(
+            Activity activity, EnrollmentSlot slot, IReadOnlyList<string>? asked, CancellationToken ct)
         {
-            if (asked is null) return current;
-            if (asked.Length == 0) return null;
+            // **Absent leaves the slot alone; an empty list clears it.** The
+            // panel sends every field it holds on every save, so treating a
+            // re-sent value as a fresh choice made an unchanged save fail the
+            // excess rule — a manager could not edit a date because somebody
+            // else had chosen the role their course enrolls into.
+            if (asked is null) return;
 
-            if (!Guid.TryParse(asked, out var id))
+            var wanted = new List<Guid>();
+            foreach (var value in asked)
             {
-                throw new ValidationException("That is not a role id", "activity.role.unknown");
+                if (!Guid.TryParse(value, out var id))
+                {
+                    throw new ValidationException("That is not a role id", "activity.role.unknown");
+                }
+                if (!wanted.Contains(id)) wanted.Add(id);
             }
 
-            var role = await context.PermissionRoles.AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == id, ct)
-                ?? throw new ValidationException("No such role", "activity.role.unknown");
+            // **With the role, because the rule below reads its permissions.**
+            // Without the include `r.Role` is null on every row, `already` is
+            // empty, and the excess rule stops exempting what the slot already
+            // carries — so re-saving an activity whose enrollment role holds a
+            // key this manager lacks is refused, which is the family of
+            // refusals the delta rule exists to end.
+            var current = await context.ActivityEnrollmentRoles
+                .Include(r => r.Role)
+                .Where(r => r.ActivityId == activity.Id && r.Slot == slot)
+                .ToListAsync(ct);
 
-            if (role.ActivityId is { } owner && owner != activity.Id)
+            var added = wanted.Where(id => current.All(r => r.RoleId != id)).ToList();
+            if (added.Count > 0)
             {
-                throw new ValidationException(
-                    $"\"{role.Name}\" belongs to another activity", "activity.role.scope");
+                var roles = await context.PermissionRoles.AsNoTracking()
+                    .Where(r => added.Contains(r.Id))
+                    .ToListAsync(ct);
+
+                if (roles.Count != added.Count)
+                {
+                    throw new ValidationException("No such role", "activity.role.unknown");
+                }
+
+                var already = Permissions.Effective(
+                    current.Select(r => r.Role?.Permissions), null);
+
+                foreach (var role in roles)
+                {
+                    if (role.ActivityId is { } owner && owner != activity.Id)
+                    {
+                        throw new ValidationException(
+                            $"\"{role.Name}\" belongs to another activity", "activity.role.scope");
+                    }
+
+                    // **Naming a role here hands out everything in it.** Every
+                    // later enrollment carries it without anybody choosing
+                    // again, so this is a grant written once and spent many
+                    // times — and the rule that nobody hands out what they do
+                    // not hold applies to it as it does to writing the role.
+                    // Without this a manager could point their course's
+                    // participant roles at the shipped `admin` one and let the
+                    // next person through the door take the installation.
+                    await grants.RequireGrantableRoleAsync(
+                        activity.Id, Permissions.Parse(role.Permissions), already, ct);
+                }
             }
 
-            // **Naming a role here hands out everything in it.** Every later
-            // enrollment carries it without anybody choosing again, so this is a
-            // grant written once and spent many times — and the rule that
-            // nobody hands out what they do not hold has to apply to it as it
-            // does to writing the role in the first place. Without this a
-            // manager could point their course's participant role at the shipped
-            // `administrator` one and let the next person through the door take
-            // the installation.
-            await grants.RequireGrantableRoleAsync(
-                activity.Id, Permissions.Parse(role.Permissions), ct);
+            foreach (var gone in current.Where(r => !wanted.Contains(r.RoleId)))
+            {
+                context.ActivityEnrollmentRoles.Remove(gone);
+            }
 
-            return role.Id;
+            foreach (var id in added)
+            {
+                context.ActivityEnrollmentRoles.Add(new ActivityEnrollmentRole
+                {
+                    ActivityId = activity.Id,
+                    Slot = slot,
+                    RoleId = id,
+                });
+            }
         }
 
         private static JoinPolicy ParseJoinPolicy(string? value) => value switch

@@ -133,12 +133,15 @@ namespace AlgoJudge.Server.Services
         /// </summary>
         private async Task<IReadOnlyList<string>> BlockersAsync(string userId, CancellationToken ct)
         {
+            // Through the roles: a grant holds its permissions in links, so
+            // reading the row's own entries alone let an administrator's account
+            // be merged away as though it granted nothing.
             var system = await context.Grants.AsNoTracking()
                 .Where(g => g.UserId == userId && g.ActivityId == null)
-                .Select(g => g.Permissions)
+                .Held()
                 .ToListAsync(ct);
 
-            return system.Any(p => Permissions.Parse(p).Count > 0)
+            return system.Any(g => g.Confers().Count > 0)
                 ? ["holds permissions over the whole installation"]
                 : [];
         }
@@ -335,7 +338,9 @@ namespace AlgoJudge.Server.Services
                         ActivityId = grant.ActivityId,
                         GroupId = grant.GroupId,
                         SourceProviderId = grant.SourceProviderId,
-                        RoleId = grant.RoleId,
+                        RoleIds = [.. grant.Roles
+                            .Where(r => r.DismissedAt == null)
+                            .Select(r => r.RoleId)],
                         IsSystem = grant.IsSystem,
                         OverrideSystem = grant.OverrideSystem,
                         State = (int)grant.State,
@@ -555,18 +560,30 @@ namespace AlgoJudge.Server.Services
             // thing an undo builds rather than moves.
             foreach (var dropped in moved.DroppedGrants)
             {
-                context.Grants.Add(new Grant
+                var restored = new Grant
                 {
                     UserId = source.Id,
                     ActivityId = dropped.ActivityId,
                     GroupId = dropped.GroupId,
                     SourceProviderId = dropped.SourceProviderId,
-                    RoleId = dropped.RoleId,
                     IsSystem = dropped.IsSystem,
                     OverrideSystem = dropped.OverrideSystem,
                     State = (GrantState)dropped.State,
                     Permissions = dropped.Permissions,
-                });
+                };
+
+                var links = dropped.RoleIds ?? (dropped.RoleId is { } one ? [one] : []);
+                foreach (var roleId in links)
+                {
+                    restored.Roles.Add(new GrantRole
+                    {
+                        GrantId = restored.Id,
+                        RoleId = roleId,
+                        AddedAt = clock.GetUtcNow().UtcDateTime,
+                    });
+                }
+
+                context.Grants.Add(restored);
             }
         }
 
@@ -666,9 +683,17 @@ namespace AlgoJudge.Server.Services
         public Guid? SourceProviderId { get; init; }
 
         /// <summary>
-        /// The role the dropped grant pointed at. Without it an undo hands back
-        /// a grant holding only its own additions, which is a quiet demotion.
+        /// The roles the dropped grant linked. Without them an undo hands back a
+        /// grant holding only its own additions, which is a quiet demotion.
+        /// <para>
+        /// Stored as a list since 2026-09-19, when a grant began linking
+        /// several. A row written before that carries one id in
+        /// <c>roleId</c>; both shapes are read back.
+        /// </para>
         /// </summary>
+        public IReadOnlyList<Guid>? RoleIds { get; init; }
+
+        /// <summary>The single role a row written before 2026-09-19 carried.</summary>
         public Guid? RoleId { get; init; }
 
         public bool IsSystem { get; init; }

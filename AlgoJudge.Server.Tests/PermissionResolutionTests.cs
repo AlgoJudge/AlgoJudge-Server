@@ -213,6 +213,10 @@ public class PermissionResolutionTests(ServerFixture server)
         {
             userId = adminId,
             activityId,
+            // The roles go with it: an override is "this, and nothing else",
+            // and the grant being rewritten is the one that made them the
+            // activity's manager.
+            roleIds = Array.Empty<string>(),
             permissions = new[] { "activity:read", "submission:create", "result:read:own" },
             overrideSystem = true,
         }));
@@ -536,10 +540,16 @@ public class PermissionResolutionTests(ServerFixture server)
             Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
             Assert.Equal("grant.administrator.last", await Code(revoked));
 
+            // **The roles have to be named to be taken away.** The development
+            // administrator holds the key through the shipped `admin` role, and
+            // a write that says nothing about roles leaves them linked — so
+            // dropping the key from the grant's own entries takes nothing, and
+            // this would be an ordinary save rather than the loss under test.
             var trimmed = await admin.PostAsJsonAsync("/api/v1/grants", new
             {
                 userId = adminId,
                 permissions = new[] { "activity:create" },
+                roleIds = Array.Empty<string>(),
             });
             Assert.Equal(HttpStatusCode.Forbidden, trimmed.StatusCode);
             Assert.Equal("grant.administrator.last", await Code(trimmed));
@@ -557,12 +567,13 @@ public class PermissionResolutionTests(ServerFixture server)
 
             await using var context = server.NewContext();
             var still = await context.Grants
-                .Include(g => g.Role)
+                .Include(g => g.Roles).ThenInclude(r => r.Role)
                 .FirstAsync(g => g.UserId == adminId && g.ActivityId == null);
             Assert.Equal(GrantState.Active, still.State);
             Assert.Contains(
                 "system:administrator",
-                Permissions.Effective(still.Role?.Permissions, still.Permissions));
+                Permissions.Effective(
+                    still.Roles.Select(r => r.Role?.Permissions), still.Permissions));
         }
         finally
         {

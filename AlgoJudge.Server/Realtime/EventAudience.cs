@@ -1,6 +1,7 @@
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
+using AlgoJudge.Server.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace AlgoJudge.Server.Realtime
@@ -87,12 +88,7 @@ namespace AlgoJudge.Server.Realtime
                 .Where(g => g.ActivityId == activityId
                     && g.OverrideSystem
                     && g.State == GrantState.Active)
-                .Select(g => new
-                {
-                    g.UserId,
-                    g.Permissions,
-                    RolePermissions = g.Role != null ? g.Role.Permissions : null,
-                })
+                .Held()
                 .ToListAsync(ct);
 
             var stoodDown = new HashSet<string>(StringComparer.Ordinal);
@@ -100,7 +96,7 @@ namespace AlgoJudge.Server.Realtime
             {
                 // An override nobody can read grants nothing, which is what
                 // `PermissionService` concludes about the same row.
-                var keys = Permissions.Effective(grant.RolePermissions, grant.Permissions);
+                var keys = grant.Confers();
                 if (!keys.Contains(permission)) stoodDown.Add(grant.UserId);
             }
             return stoodDown;
@@ -129,13 +125,7 @@ namespace AlgoJudge.Server.Realtime
                 // The role travels with the grant here as well: an audience
                 // computed from the additions alone would tell a linked manager
                 // nothing, and tell nobody why.
-                .Select(g => new
-                {
-                    g.UserId,
-                    g.ActivityId,
-                    g.Permissions,
-                    RolePermissions = g.Role != null ? g.Role.Permissions : null,
-                })
+                .Held()
                 .ToListAsync(ct);
 
             var holders = new HashSet<string>(StringComparer.Ordinal);
@@ -145,7 +135,7 @@ namespace AlgoJudge.Server.Realtime
                 // A grant whose permissions will not parse is a grant nobody can
                 // be judged by. It resolves to nothing rather than throwing: one
                 // bad row must not stop everybody else from being told.
-                var keys = Permissions.Effective(grant.RolePermissions, grant.Permissions);
+                var keys = grant.Confers();
 
                 // **The administrator bypass is only meaningful at the system
                 // scope**, exactly as `PermissionService.IsAdministratorAsync`

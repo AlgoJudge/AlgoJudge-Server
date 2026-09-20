@@ -384,10 +384,16 @@ namespace AlgoJudge.Server.Services
             var participantCount = await context.Grants.CountAsync(
                 g => g.ActivityId == activity.Id && !g.IsSystem && g.State == GrantState.Active, ct);
 
+            var enrollmentRoles = await context.ActivityEnrollmentRoles
+                .AsNoTracking()
+                .Where(r => r.ActivityId == activity.Id)
+                .ToListAsync(ct);
+
             return Projections.ManagedActivity(
                 activity, await DocumentsAsync(activity.Id, ct), seriesCount, problemCount, participantCount,
                 RunnerTags.CountMatching(
-                    await RunnerTags.ApprovedPoolsAsync(context, ct), activity.RunnerTags));
+                    await RunnerTags.ApprovedPoolsAsync(context, ct), activity.RunnerTags),
+                enrollmentRoles);
         }
 
         public async Task<bool> IsPublishedAsync(Guid id, CancellationToken ct) =>
@@ -619,12 +625,25 @@ namespace AlgoJudge.Server.Services
 
             if (moved.Count > 0) await context.SaveChangesAsync(ct);
 
-            copy.ParticipantRoleId = Followed(source.ParticipantRoleId, moved);
-            copy.ManagerRoleId = Followed(source.ManagerRoleId, moved);
-            if (copy.ParticipantRoleId is not null || copy.ManagerRoleId is not null)
+            // The copy enrolls into its own copies of the roles, not into the
+            // source's: an activity's role belongs to that activity, and a link
+            // across would be a right nobody in the copy could edit.
+            var enrollment = await context.ActivityEnrollmentRoles
+                .AsNoTracking()
+                .Where(r => r.ActivityId == source.Id)
+                .ToListAsync(ct);
+
+            foreach (var chosen in enrollment)
             {
-                await context.SaveChangesAsync(ct);
+                context.ActivityEnrollmentRoles.Add(new ActivityEnrollmentRole
+                {
+                    ActivityId = copy.Id,
+                    Slot = chosen.Slot,
+                    RoleId = Followed(chosen.RoleId, moved),
+                });
             }
+
+            if (enrollment.Count > 0) await context.SaveChangesAsync(ct);
 
             return await ManagedAsync(copy, ct);
         }
@@ -633,8 +652,8 @@ namespace AlgoJudge.Server.Services
         /// The copy's version of a role the source named: the duplicate where the
         /// role belonged to the source, and the same row where it is global.
         /// </summary>
-        private static Guid? Followed(Guid? chosen, Dictionary<Guid, Guid> moved) =>
-            chosen is { } id ? (moved.TryGetValue(id, out var copied) ? copied : id) : null;
+        private static Guid Followed(Guid chosen, Dictionary<Guid, Guid> moved) =>
+            moved.TryGetValue(chosen, out var copied) ? copied : chosen;
 
         /// <summary>
         /// How far everything dated moves, as a function that leaves nulls alone.
@@ -788,16 +807,17 @@ namespace AlgoJudge.Server.Services
             // The shipped `manager` role, not this activity's own choice: the
             // activity is being created, so it has none yet and could not have
             // one — a role of its own is written afterwards, if at all.
-            var managerRole = await DefaultRoles.GlobalAsync(context, DefaultRoles.Manager, ct);
+            var managerRole = await DefaultRoles.BuiltInAsync(context, DefaultRoles.Manager, ct);
             var manages = new Grant
             {
                 UserId = user.Id,
                 ActivityId = activity.Id,
                 IsSystem = true,
+                StaffByHand = true,
                 State = GrantState.Active,
                 GrantedByUserId = user.Id,
             };
-            DefaultRoles.Carry(manages, managerRole, Permissions.ManagerTemplate, DefaultRoles.Manager);
+            DefaultRoles.Carry(context, manages, managerRole is null ? [] : [managerRole], clock.GetUtcNow().UtcDateTime);
             context.Grants.Add(manages);
 
             await context.SaveChangesAsync(ct);
@@ -880,14 +900,14 @@ namespace AlgoJudge.Server.Services
             // **This activity's participant role**, which is the point of the
             // setting: a manager decides once what joining their course means,
             // and every later self-enrollment carries it without anybody choosing.
-            var role = await DefaultRoles.ForEnrollmentAsync(context, activity.Id, runsIt: false, ct);
+            var roles = await DefaultRoles.ForEnrollmentAsync(context, activity.Id, runsIt: false, ct);
             var joined = new Grant
             {
                 UserId = user.Id,
                 ActivityId = activity.Id,
                 State = GrantState.Active,
             };
-            DefaultRoles.Carry(joined, role, Permissions.ParticipantTemplate, DefaultRoles.Participant);
+            DefaultRoles.Carry(context, joined, roles, clock.GetUtcNow().UtcDateTime);
 
             // Derived rather than assumed false. An ordinary participant role
             // carries nothing a participant does not hold, which is what puts
@@ -895,7 +915,7 @@ namespace AlgoJudge.Server.Services
             // does, and somebody counted as a competitor while holding staff keys
             // is the one thing this flag exists to prevent.
             joined.IsSystem = Permissions.IsStaff(
-                Permissions.Effective(role?.Permissions, joined.Permissions));
+                Permissions.Effective(roles.Select(r => (string?)r.Permissions), joined.Permissions));
             context.Grants.Add(joined);
             await context.SaveChangesAsync(ct);
             await grants.AnnounceEnrollmentAsync(joined, ct);

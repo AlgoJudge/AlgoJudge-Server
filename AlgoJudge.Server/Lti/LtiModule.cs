@@ -43,6 +43,7 @@ namespace AlgoJudge.Server.Lti
             services.AddScoped<Services.IResourceLinkService, Services.ResourceLinkService>();
             services.AddScoped<Services.IIdentityResolver, Services.IdentityResolver>();
             services.AddScoped<Services.ILtiEnrollmentService, Services.EnrollmentService>();
+            services.AddScoped<Services.IPlatformRoleRules, Services.PlatformRoleRules>();
             services.AddScoped<Services.IGradeSyncService, Services.GradeSyncService>();
             services.AddScoped<Services.IAgsClient, Services.AgsClient>();
             services.AddScoped<Services.IGradeVerifier, Services.GradeVerifier>();
@@ -124,9 +125,57 @@ namespace AlgoJudge.Server.Lti
                     "The LTI module's schema",
                     app.Services.GetRequiredService<ILoggerFactory>()
                         .CreateLogger("AlgoJudge.Schema"));
+
+                AdoptPlatformProvidersAsync(scope.ServiceProvider).GetAwaiter().GetResult();
             }
 
             return app;
+        }
+
+        /// <summary>
+        /// Brings a platform registered before 2026-09-19 up to what one
+        /// registered now gets: a provider row marked as attribution rather than
+        /// a door, and the rules that say which LTI role means what here.
+        /// <para>
+        /// <b>Here rather than in a migration, and that is the module boundary
+        /// talking.</b> The rows live in the application's tables, which the
+        /// core must not learn the word "Lti" to describe; writing them from the
+        /// module keeps one code path for the defaults, which is the one a new
+        /// platform already goes through.
+        /// </para>
+        /// <para>
+        /// Idempotent, and silent where there is nothing to do: it is a
+        /// no-op on every start after the first.
+        /// </para>
+        /// </summary>
+        private static async Task AdoptPlatformProvidersAsync(IServiceProvider services)
+        {
+            var db = services.GetRequiredService<LtiDbContext>();
+            var core = services.GetRequiredService<Database.ApplicationDbContext>();
+            var rules = services.GetRequiredService<Services.IPlatformRoleRules>();
+
+            var platforms = await db.Platforms
+                .AsNoTracking()
+                .Select(p => p.ProviderId)
+                .ToListAsync();
+
+            if (platforms.Count == 0) return;
+
+            var rows = await core.IdentityProviders
+                .Where(p => platforms.Contains(p.Id)
+                    && p.Kind == Database.Models.ProviderKind.SignIn)
+                .ToListAsync();
+
+            foreach (var row in rows)
+            {
+                row.Kind = Database.Models.ProviderKind.Attribution;
+            }
+            if (rows.Count > 0) await core.SaveChangesAsync();
+
+            foreach (var providerId in platforms)
+            {
+                await rules.EnsureDefaultsAsync(providerId, default);
+            }
         }
     }
 }

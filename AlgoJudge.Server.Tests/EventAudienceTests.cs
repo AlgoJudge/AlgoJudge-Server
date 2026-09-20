@@ -143,14 +143,15 @@ public class EventAudienceTests(ServerFixture server)
             context.PermissionRoles.Add(role);
             await context.SaveChangesAsync();
 
-            context.Grants.Add(new Grant
+            var grant = new Grant
             {
                 UserId = userId,
                 ActivityId = activityId,
-                RoleId = role.Id,
                 Permissions = "[]",
                 State = GrantState.Active,
-            });
+            };
+            grant.Roles.Add(new GrantRole { GrantId = grant.Id, RoleId = role.Id });
+            context.Grants.Add(grant);
             await context.SaveChangesAsync();
         }
 

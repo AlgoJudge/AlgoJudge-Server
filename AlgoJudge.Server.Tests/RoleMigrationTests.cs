@@ -1,4 +1,5 @@
 using AlgoJudge.Server.Database;
+using AlgoJudge.Server.Database.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -42,6 +43,34 @@ public class RoleMigrationTests : IAsyncLifetime
     }
 
     public Task DisposeAsync() => container.DisposeAsync().AsTask();
+
+    /// <summary>
+    /// An installation as 0.1.0 left it: a manager template, and one grant made
+    /// from it that nobody has edited since.
+    /// </summary>
+    private const string PreRolesManager = """
+        INSERT INTO "PermissionTemplates" ("Id", "Name", "Description", "Permissions", "IsBuiltIn", "CreatedAt")
+        VALUES ('00000000-0000-0000-0000-0000000000a3', 'manager', null,
+                '["activity:read","activity:update","grant:update"]', true, now());
+
+        INSERT INTO "AspNetUsers" ("Id", "UserName", "NormalizedUserName", "Email", "NormalizedEmail",
+            "EmailConfirmed", "PasswordHash", "SecurityStamp", "ConcurrencyStamp", "PhoneNumberConfirmed",
+            "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount", "IsTemporary", "Anonymized", "CreatedAt")
+        VALUES ('runs-a-course', 'runs-a-course', 'RUNS-A-COURSE', null, null, false, null, null, null,
+                false, false, true, 0, false, false, now());
+
+        INSERT INTO "Activities" ("Id", "Slug", "Name", "Type", "RankingType", "TimeZone", "Props",
+            "JoinPolicy", "Unlisted", "HideEndedSeriesProblems", "ShowGroupMembers", "HasQuestions",
+            "ScoreVisibility", "MaxAttachments", "MaxUploadBytes")
+        VALUES ('00000000-0000-0000-0000-0000000000d1', 'course', 'Course', 'contest@1', 'icpc',
+                'Europe/Warsaw', '{}', 0, false, false, false, false, 0, 1, 1048576);
+
+        INSERT INTO "Grants" ("Id", "UserId", "ActivityId", "SourceProviderId", "OverrideSystem",
+            "Permissions", "IsSystem", "CreatedFromTemplate", "State", "CreatedAt")
+        VALUES ('00000000-0000-0000-0000-0000000000c5', 'runs-a-course',
+                '00000000-0000-0000-0000-0000000000d1', null, false,
+                '["activity:read","activity:update","grant:update"]', true, 'manager', 1, now());
+        """;
 
     private ApplicationDbContext Application() =>
         new(new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -113,28 +142,86 @@ public class RoleMigrationTests : IAsyncLifetime
         Assert.Contains("role:read", role.Permissions);
         Assert.DoesNotContain("template:", role.Permissions);
 
-        var grants = await after.Grants.AsNoTracking().ToDictionaryAsync(g => g.UserId);
+        var grants = await after.Grants.AsNoTracking()
+            .Include(g => g.Roles)
+            .ToDictionaryAsync(g => g.UserId);
+
+        static IReadOnlyList<Guid> Linked(Grant grant) =>
+            [.. grant.Roles.Where(r => r.DismissedAt is null).Select(r => r.RoleId)];
 
         // Never edited: a link now, and the copy is gone from the row.
-        Assert.Equal(role.Id, grants["untouched"].RoleId);
+        Assert.Equal([role.Id], Linked(grants["untouched"]));
         Assert.Equal("[]", grants["untouched"].Permissions);
-        Assert.Null(grants["untouched"].CopiedFromRoleName);
 
         // **The same set in a different order is the same set.** Comparing the
         // stored text, or a sorted list against an unsorted one, would leave this
         // grant a copy forever and nobody would know why.
-        Assert.Equal(role.Id, grants["reordered"].RoleId);
+        Assert.Equal([role.Id], Linked(grants["reordered"]));
 
         // Edited by hand: left exactly as it was, keys renamed and nothing else.
-        Assert.Null(grants["edited"].RoleId);
+        Assert.Empty(Linked(grants["edited"]));
         Assert.Contains("submission:read:all", grants["edited"].Permissions);
         Assert.Contains("role:read", grants["edited"].Permissions);
-        Assert.Equal("participant", grants["edited"].CopiedFromRoleName);
 
-        // A provider's contribution stays a copy by design: it is the union of
-        // every rule a claim matched, which one link cannot express.
-        Assert.Null(grants["managed"].RoleId);
+        // A provider's contribution stays a copy until that person next signs
+        // in: nothing records which claim values produced a stored set, so it
+        // cannot be rewritten into links from the outside. The sign-in then
+        // replaces it with links to the roles its rules name.
+        Assert.Empty(Linked(grants["managed"]));
         Assert.Contains("role:read", grants["managed"].Permissions);
+    }
+
+    /// <summary>
+    /// The repair the migration of 2026-09-13 could not do for itself.
+    ///
+    /// <para>
+    /// It added <c>role:read</c> and <c>role:manage</c> to the shipped manager
+    /// role and <i>then</i> compared every grant with it, so an untouched
+    /// manager copy differed from the role by exactly the two keys that had just
+    /// been added — and stayed a copy. Every manager an installation already had
+    /// was left out of the change the release was about, and out of every
+    /// correction to that role since.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_manager_grant_from_before_roles_is_linked()
+    {
+        await using (var db = Application())
+        {
+            await db.GetService<IMigrator>().MigrateAsync(Previous);
+        }
+
+        await using var connection = new NpgsqlConnection(container.GetConnectionString());
+        await connection.OpenAsync();
+
+        await ExecuteAsync(connection, PreRolesManager);
+
+        await using (var db = Application())
+        {
+            await db.Database.MigrateAsync();
+        }
+
+        await using var after = Application();
+
+        var manager = await after.PermissionRoles.AsNoTracking()
+            .SingleAsync(r => r.Name == "manager");
+        var grant = await after.Grants.AsNoTracking()
+            .Include(g => g.Roles)
+            .SingleAsync(g => g.UserId == "runs-a-course");
+
+        Assert.Equal([manager.Id], grant.Roles.Select(r => r.RoleId));
+        Assert.Equal("[]", grant.Permissions);
+
+        // The manager role gained `role:manage:activity` where it used to carry
+        // `role:manage`: writing the installation's roles is an administrator's
+        // now, and this grant follows the role rather than a copy of it.
+        Assert.Contains("role:manage:activity", manager.Permissions);
+        Assert.DoesNotContain("\"role:manage\"", manager.Permissions);
+
+        // The flag it carried is what its permissions imply, so it is not
+        // recorded as somebody's decision — and a role edit can lower it again.
+        Assert.True(grant.IsSystem);
+        Assert.False(grant.StaffByHand);
     }
 
     /// <summary>
@@ -166,8 +253,14 @@ public class RoleMigrationTests : IAsyncLifetime
         await using var after = Application();
         var manager = await after.PermissionRoles.AsNoTracking().SingleAsync(r => r.Name == "manager");
         Assert.Contains("role:read", manager.Permissions);
-        Assert.Contains("role:manage", manager.Permissions);
         Assert.Contains("grant:update", manager.Permissions);
+
+        // **The writing key it gained is the activity-scoped one.** Held at
+        // system scope through a directory group, `role:manage` let anybody in
+        // that group rewrite the installation's roles; writing those is an
+        // administrator's now, and a manager writes their own activity's.
+        Assert.Contains("role:manage:activity", manager.Permissions);
+        Assert.DoesNotContain("\"role:manage\"", manager.Permissions);
     }
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)

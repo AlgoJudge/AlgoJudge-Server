@@ -3,10 +3,10 @@ using AlgoJudge.Server.Utils;
 namespace AlgoJudge.Server.Database.Models
 {
     /// <summary>
-    /// A named permission set a <see cref="Grant"/> points at.
+    /// A named permission set a <see cref="Grant"/> links.
     /// <para>
-    /// <b>A grant holds the link, not a copy</b>, so editing a role changes what
-    /// everyone linked to it may do, at once. That is the point: correcting what
+    /// <b>A grant holds links, not copies</b>, and may hold several, so editing
+    /// a role changes what everyone linked to it may do, at once. That is the point: correcting what
     /// a manager may do used to be a bulk update across grants that nothing
     /// reminded anybody to run, and a permission added by an upgrade reached
     /// nobody already enrolled.
@@ -71,6 +71,23 @@ namespace AlgoJudge.Server.Database.Models
 
         /// <summary>One of the three shipped. Marked so deleting one can be refused.</summary>
         public bool IsBuiltIn { get; set; }
+
+        /// <summary>
+        /// Which shipped role this is — <c>participant</c>, <c>manager</c> or
+        /// <c>admin</c> — or null for a role an installation invented.
+        /// <para>
+        /// <b>Every path that needs a shipped role looks it up by this</b>, not
+        /// by <see cref="Name"/>. A name is a label somebody may translate or
+        /// correct; it was also, until 2026-09-19, the thing enrollment matched
+        /// on, so renaming the participant role left a launch landing with no
+        /// grant written and nothing said about it.
+        /// </para>
+        /// <para>
+        /// Only an installation role may carry one: the shipped three are the
+        /// installation's.
+        /// </para>
+        /// </summary>
+        public string? BuiltInKey { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

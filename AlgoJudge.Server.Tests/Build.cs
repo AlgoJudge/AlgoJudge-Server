@@ -407,6 +407,26 @@ public static class Build
 
         throw new XunitException($"No role named \"{name}\" among {roles.GetArrayLength()}");
     }
+
+    /// <summary>
+    /// One mapping rule on the wire: a claim value, and the installation roles
+    /// it grants. Roles are named by id, so a test says which role it means and
+    /// a rename cannot change the answer.
+    /// </summary>
+    internal static async Task<object> RuleAsync(
+        HttpClient client, string claimValue, params string[] roleNames)
+    {
+        var targets = new List<object>();
+        foreach (var name in roleNames)
+        {
+            targets.Add(new { kind = "role", roleId = await RoleIdAsync(client, name) });
+        }
+        return new { claimValue, targets };
+    }
+
+    /// <summary>The same for a rule aimed at one of an activity's enrollment sets.</summary>
+    internal static object SlotRule(string claimValue, string kind) =>
+        new { claimValue, targets = new[] { new { kind } } };
 }
 
 /// <summary>

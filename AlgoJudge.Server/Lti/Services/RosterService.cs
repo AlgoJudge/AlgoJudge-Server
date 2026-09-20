@@ -122,7 +122,8 @@ namespace AlgoJudge.Server.Lti.Services
         /// match on. <c>unknownAccount</c> — no account here carries it.
         /// <c>outsideNamespace</c> — an account does, but it did not come through
         /// the directory this platform may assert for. <c>inactive</c> — the
-        /// platform says they are no longer in the course.
+        /// platform says they are no longer in the course. <c>steppedDown</c> —
+        /// their grant carries the override, which a roster read may not undo.
         /// </summary>
         public required string Reason { get; init; }
     }
@@ -164,6 +165,46 @@ namespace AlgoJudge.Server.Lti.Services
         TimeProvider clock
     ) : IRosterService
     {
+        /// <summary>
+        /// The roster, with a platform's refusal turned into an answer somebody
+        /// can act on.
+        /// <para>
+        /// <b>A refusal from the platform is not this Server failing.</b> Both
+        /// exceptions below are the platform saying no — a token it would not
+        /// mint, a response that is not a roster — and neither was mapped, so an
+        /// operator asking for a course's roster got a 500 with Moodle's HTML
+        /// error page inside it. That is also the shape of the commonest
+        /// misconfiguration there is: a tool URL the platform cannot reach.
+        /// </para>
+        /// <para>
+        /// Translated here rather than in the handler, because the handler is
+        /// the core's and the core does not know what a platform is.
+        /// </para>
+        /// </summary>
+        private async Task<Roster> ReadRosterAsync(
+            Platform platform, string url, string? resourceLinkId, CancellationToken ct)
+        {
+            try
+            {
+                return await nrps.ReadAsync(platform, url, resourceLinkId, ct);
+            }
+            catch (LtiLaunchException failure)
+            {
+                throw new UpstreamException(
+                    $"{platform.DisplayName} refused the tool an access token for its roster. "
+                        + "Check the tool's registration there, and that it can reach this Server. "
+                        + failure.Message,
+                    "lti.platform.refused");
+            }
+            catch (NrpsException failure)
+            {
+                throw new UpstreamException(
+                    $"{platform.DisplayName} answered the roster request with something this tool "
+                        + "could not read. " + failure.Message,
+                    "lti.roster.refused");
+            }
+        }
+
         public async Task<RosterViewDto> ReadAsync(Guid resourceLinkId, CancellationToken ct)
         {
             var link = await db.ResourceLinks.AsNoTracking()
@@ -186,7 +227,7 @@ namespace AlgoJudge.Server.Lti.Services
                 .FirstOrDefaultAsync(p => p.Id == link.PlatformId, ct)
                 ?? throw new NotFoundException("Platform");
 
-            var roster = await nrps.ReadAsync(platform, url, link.PlatformResourceLinkId, ct);
+            var roster = await ReadRosterAsync(platform, url, link.PlatformResourceLinkId, ct);
 
             // Who is already linked, so the screen can say which of these people
             // this installation would recognize.
@@ -271,7 +312,7 @@ namespace AlgoJudge.Server.Lti.Services
                     "lti.roster.notAuthority");
             }
 
-            var roster = await nrps.ReadAsync(platform, url, link.PlatformResourceLinkId, ct);
+            var roster = await ReadRosterAsync(platform, url, link.PlatformResourceLinkId, ct);
 
             var skipped = new List<RosterSkipDto>();
             var linked = 0;
@@ -337,8 +378,23 @@ namespace AlgoJudge.Server.Lti.Services
 
                 if (userId is null) continue;
 
-                await enrollment.EnrollAsync(link, platform.ProviderId, userId, member.Roles, ct);
-                granted++;
+                // Counted only where something actually moved. Counting every
+                // member told an operator that a second sync had granted forty
+                // people what the first one already had.
+                var outcome = await enrollment.EnrollAsync(
+                    link, platform.ProviderId, userId, member.Roles, ct);
+
+                switch (outcome)
+                {
+                    case AlgoJudge.Server.Services.EnrollmentOutcome.Created:
+                    case AlgoJudge.Server.Services.EnrollmentOutcome.Added:
+                        granted++;
+                        break;
+
+                    case AlgoJudge.Server.Services.EnrollmentOutcome.SkippedOverride:
+                        skipped.Add(Skip(member, "steppedDown"));
+                        break;
+                }
             }
 
             return new RosterEnrollmentDto

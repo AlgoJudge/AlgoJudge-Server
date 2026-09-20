@@ -1,3 +1,4 @@
+using AlgoJudge.Server.Api.Contracts;
 using AlgoJudge.Server.Authorization;
 using AlgoJudge.Server.Database;
 using AlgoJudge.Server.Database.Models;
@@ -36,6 +37,17 @@ namespace AlgoJudge.Server.Lti.Services
         Task<Platform> RegisterInvitedAsync(PlatformInput input, CancellationToken ct);
         Task<Platform> UpdateAsync(Guid id, PlatformInput input, CancellationToken ct);
         Task DeleteAsync(Guid id, CancellationToken ct);
+
+        /// <summary>
+        /// The rules of these platforms' provider rows, by provider id.
+        /// <para>
+        /// Asked for a whole list at once rather than per platform: the rules
+        /// live in the core context and the platforms in this module's, so a
+        /// projection that fetched its own would be one query per row.
+        /// </para>
+        /// </summary>
+        Task<IReadOnlyDictionary<Guid, IReadOnlyList<MappingRuleDto>>> RulesAsync(
+            IReadOnlyList<Guid> providerIds, CancellationToken ct);
     }
 
     /// <summary>What an operator types in to register a platform by hand.</summary>
@@ -52,6 +64,13 @@ namespace AlgoJudge.Server.Lti.Services
         public string? IdentityNamespace { get; init; }
         public string? UsernameClaim { get; init; }
         public bool Enabled { get; init; } = true;
+
+        /// <summary>
+        /// The allowlist, replaced wholesale. Absent leaves it alone — which is
+        /// what a screen editing the URLs sends, and what a dynamic registration
+        /// sends, so neither wipes the defaults a platform starts with.
+        /// </summary>
+        public IReadOnlyList<MappingRuleDto>? MappingRules { get; init; }
     }
 
     /// <summary>
@@ -87,7 +106,9 @@ namespace AlgoJudge.Server.Lti.Services
     public class PlatformService(
         LtiDbContext db,
         ApplicationDbContext core,
-        IPermissionService permissions
+        IPermissionService permissions,
+        IPlatformRoleRules roleRules,
+        IProviderMappingService mapping
     ) : IPlatformService
     {
         public async Task<IReadOnlyList<Platform>> ListAsync(CancellationToken ct)
@@ -138,6 +159,11 @@ namespace AlgoJudge.Server.Lti.Services
                 ClientSecret = "",
                 // See the class summary. This is the guard, not a default.
                 Enabled = false,
+                // Not a door: this row exists so a grant's roles can say what
+                // asserted them. The providers screen leaves it alone, which is
+                // what stops somebody tidying it away and breaking every launch
+                // from that course.
+                Kind = ProviderKind.Attribution,
             };
             core.IdentityProviders.Add(provider);
             await core.SaveChangesAsync(ct);
@@ -162,6 +188,12 @@ namespace AlgoJudge.Server.Lti.Services
 
             db.Platforms.Add(platform);
             await db.SaveChangesAsync(ct);
+
+            // The rules a platform starts with: what the Server used to do in
+            // code, written down where an operator can read and change it.
+            await roleRules.EnsureDefaultsAsync(provider.Id, ct);
+            await WriteRulesAsync(provider.Id, input.MappingRules, ct);
+
             return platform;
         }
 
@@ -207,7 +239,48 @@ namespace AlgoJudge.Server.Lti.Services
                 await core.SaveChangesAsync(ct);
             }
 
+            await WriteRulesAsync(platform.ProviderId, input.MappingRules, ct);
+
             return platform;
+        }
+
+        public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<MappingRuleDto>>> RulesAsync(
+            IReadOnlyList<Guid> providerIds, CancellationToken ct)
+        {
+            if (providerIds.Count == 0) return new Dictionary<Guid, IReadOnlyList<MappingRuleDto>>();
+
+            var providers = await core.IdentityProviders
+                .AsNoTracking()
+                .Include(p => p.MappingRules).ThenInclude(r => r.Role)
+                .Where(p => providerIds.Contains(p.Id))
+                .ToListAsync(ct);
+
+            return providers.ToDictionary(p => p.Id, mapping.Projected);
+        }
+
+        /// <summary>
+        /// Writes a platform's allowlist, where the caller named one.
+        /// <para>
+        /// Through the shared writer, so a platform's rules are guarded exactly
+        /// as a sign-in provider's are — no <c>system:administrator</c>, nothing
+        /// the caller does not hold, no duplicate claim value. What differs is
+        /// the one flag: a platform may aim a rule at the activity's enrollment
+        /// sets, because its rules are applied inside an activity.
+        /// </para>
+        /// </summary>
+        private async Task WriteRulesAsync(
+            Guid providerId, IReadOnlyList<MappingRuleDto>? wanted, CancellationToken ct)
+        {
+            if (wanted is null) return;
+
+            var provider = await core.IdentityProviders
+                .Include(p => p.MappingRules)
+                .FirstOrDefaultAsync(p => p.Id == providerId, ct);
+
+            if (provider is null) return;
+
+            await mapping.ReplaceRulesAsync(provider, wanted, allowSlots: true, ct);
+            await core.SaveChangesAsync(ct);
         }
 
         public async Task DeleteAsync(Guid id, CancellationToken ct)

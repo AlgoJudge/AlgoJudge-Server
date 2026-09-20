@@ -238,12 +238,14 @@ namespace AlgoJudge.Server.Services
             // twenty people at once is still enrolling, and they should receive a
             // correction to that role like everybody else. A caller who did name
             // a set has made one by hand, and a hand-made set stays a copy.
-            Role? role = null;
+            IReadOnlyList<Role> roles = [];
             if (activityId is { } forRole && input.Permissions is null)
             {
-                role = await DefaultRoles.ForEnrollmentAsync(context, forRole, runsIt: false, ct);
+                roles = await DefaultRoles.ForEnrollmentAsync(context, forRole, runsIt: false, ct);
             }
-            var carried = role is null ? wanted : [.. Permissions.Parse(role.Permissions)];
+            var carried = roles.Count == 0
+                ? wanted
+                : Permissions.Effective(roles.Select(r => (string?)r.Permissions), null);
 
             if (activityId is not null)
             {
@@ -310,11 +312,14 @@ namespace AlgoJudge.Server.Services
                         ActivityId = scoped,
                         IsSystem = Permissions.IsStaff(carried),
                         GrantedByUserId = issuer.Id,
+                        // A hand-made set stays the grant's own; the activity's
+                        // roles are linked, so a correction to one reaches these
+                        // accounts like everybody else's.
+                        Permissions = roles.Count == 0
+                            ? JsonSerializer.Serialize(wanted)
+                            : "[]",
                     };
-                    DefaultRoles.Carry(
-                        grant, role, wanted, role is null && input.Permissions is null
-                            ? DefaultRoles.Participant
-                            : null);
+                    DefaultRoles.Carry(context, grant, roles, clock.GetUtcNow().UtcDateTime);
                     context.Grants.Add(grant);
                 }
 

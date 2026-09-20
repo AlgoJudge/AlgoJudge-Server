@@ -44,7 +44,7 @@ public class RoleTests(ServerFixture server)
             userId = graderId,
             activityId,
             permissions = Array.Empty<string>(),
-            roleId = role,
+            roleIds = new[] { role },
         }));
 
         Assert.DoesNotContain("submission:rejudge", await MineAsync(grader, activityId));
@@ -61,7 +61,7 @@ public class RoleTests(ServerFixture server)
 
         var after = await GrantRowAsync(graderId, activityId);
         Assert.Equal(before.Permissions, after.Permissions);
-        Assert.Equal(before.RoleId, after.RoleId);
+        Assert.Equal(LinkedAsync(before), LinkedAsync(after));
     }
 
     /// <summary>
@@ -83,7 +83,7 @@ public class RoleTests(ServerFixture server)
             userId = helperId,
             activityId,
             permissions = new[] { "question:answer" },
-            roleId = role,
+            roleIds = new[] { role },
         }));
 
         var mine = await MineAsync(helper, activityId);
@@ -121,7 +121,7 @@ public class RoleTests(ServerFixture server)
             userId = id,
             activityId = theirs,
             permissions = Array.Empty<string>(),
-            roleId = role,
+            roleIds = new[] { role },
         });
         Assert.Equal(HttpStatusCode.UnprocessableEntity, elsewhere.StatusCode);
         Assert.Equal("grant.role.scope", await Code(elsewhere));
@@ -130,7 +130,7 @@ public class RoleTests(ServerFixture server)
         {
             userId = id,
             permissions = Array.Empty<string>(),
-            roleId = role,
+            roleIds = new[] { role },
         });
         Assert.Equal(HttpStatusCode.UnprocessableEntity, globally.StatusCode);
         Assert.Equal("grant.role.scope", await Code(globally));
@@ -154,7 +154,7 @@ public class RoleTests(ServerFixture server)
         {
             userId = managerId,
             activityId,
-            permissions = new[] { "activity:read", "grant:update", "role:read", "role:manage" },
+            permissions = new[] { "activity:read", "grant:update", "role:read", "role:manage:activity" },
         }));
 
         var refused = await manager.PostAsJsonAsync("/api/v1/roles", new
@@ -191,7 +191,7 @@ public class RoleTests(ServerFixture server)
         {
             userId = managerId,
             activityId,
-            permissions = new[] { "activity:read", "grant:update", "role:read", "role:manage" },
+            permissions = new[] { "activity:read", "grant:update", "role:read", "role:manage:activity" },
         }));
 
         var participant = await Build.RoleIdAsync(manager, "participant");
@@ -232,7 +232,7 @@ public class RoleTests(ServerFixture server)
             userId = id,
             activityId,
             permissions = Array.Empty<string>(),
-            roleId = role,
+            roleIds = new[] { role },
         }));
 
         Assert.False((await GrantRowAsync(id, activityId)).IsSystem);
@@ -267,7 +267,7 @@ public class RoleTests(ServerFixture server)
                 userId = id,
                 activityId,
                 permissions = Array.Empty<string>(),
-                roleId = role,
+                roleIds = new[] { role },
             }));
         }
 
@@ -291,7 +291,7 @@ public class RoleTests(ServerFixture server)
             userId = id,
             activityId,
             permissions = Array.Empty<string>(),
-            roleId = role,
+            roleIds = new[] { role },
         }));
 
         var refused = await admin.DeleteAsync($"/api/v1/roles/{role}");
@@ -336,7 +336,7 @@ public class RoleTests(ServerFixture server)
 
         // Whoever made it manages it, through the shipped role.
         var creator = await GrantRowAsync(adminId, activityId);
-        Assert.Equal(await Build.RoleIdAsync(admin, "manager"), creator.RoleId.ToString());
+        Assert.Equal([await Build.RoleIdAsync(admin, "manager")], LinkedAsync(creator));
 
         await Sign.Succeeded(await admin.PostAsJsonAsync(
             $"/api/v1/activities/{activityId}/published", new { published = true }));
@@ -346,8 +346,8 @@ public class RoleTests(ServerFixture server)
         await Sign.Succeeded(await first.PostAsJsonAsync(
             $"/api/v1/activities/{slug}/enrollment", new { }));
         Assert.Equal(
-            await Build.RoleIdAsync(admin, "participant"),
-            (await GrantRowAsync(firstId, activityId)).RoleId.ToString());
+            [await Build.RoleIdAsync(admin, "participant")],
+            LinkedAsync(await GrantRowAsync(firstId, activityId)));
 
         // The activity's own choice, once it has made one.
         var chosen = await CreateRoleAsync(admin, "our-people-" + Suffix(), activityId,
@@ -359,7 +359,7 @@ public class RoleTests(ServerFixture server)
         var (second, secondId) = await AccountAsync("joins-chosen");
         await Sign.Succeeded(await second.PostAsJsonAsync(
             $"/api/v1/activities/{slug}/enrollment", new { }));
-        Assert.Equal(chosen, (await GrantRowAsync(secondId, activityId)).RoleId.ToString());
+        Assert.Equal([chosen], LinkedAsync(await GrantRowAsync(secondId, activityId)));
     }
 
 
@@ -389,7 +389,7 @@ public class RoleTests(ServerFixture server)
             userId = otherId,
             activityId,
             permissions = Array.Empty<string>(),
-            roleId = await Build.RoleIdAsync(manager, "manager"),
+            roleIds = new[] { await Build.RoleIdAsync(manager, "manager") },
         });
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
@@ -446,8 +446,16 @@ public class RoleTests(ServerFixture server)
     {
         await using var context = server.NewContext();
         return await context.Grants.AsNoTracking()
+            .Include(g => g.Roles).ThenInclude(r => r.Role)
             .FirstAsync(g => g.UserId == userId && g.ActivityId == Guid.Parse(activityId));
     }
+
+    /// <summary>The ids of the roles a grant holds, for an assertion.</summary>
+    private static IReadOnlyList<string> LinkedAsync(Grant grant) =>
+        [.. grant.Roles
+            .Where(r => r.DismissedAt is null)
+            .Select(r => r.RoleId.ToString())
+            .Order(StringComparer.Ordinal)];
 
     private static async Task<object> ActivityInputAsync(
         HttpClient admin, string slug, string participantRoleId)
@@ -460,7 +468,7 @@ public class RoleTests(ServerFixture server)
             type = activity.GetProperty("type").GetString(),
             rankingType = activity.GetProperty("rankingType").GetString(),
             timeZone = activity.GetProperty("timeZone").GetString(),
-            participantRoleId,
+            participantRoleIds = new[] { participantRoleId },
         };
     }
 

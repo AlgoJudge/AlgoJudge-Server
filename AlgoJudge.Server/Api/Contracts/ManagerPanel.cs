@@ -16,6 +16,14 @@ namespace AlgoJudge.Server.Api.Contracts
         public required bool IsBuiltIn { get; init; }
 
         /// <summary>
+        /// Which shipped role this is — <c>participant</c>, <c>manager</c> or
+        /// <c>admin</c> — or null for one an installation invented. Every
+        /// enrollment path resolves a shipped role by this, so a screen can say
+        /// which role a rename was applied to.
+        /// </summary>
+        public string? BuiltInKey { get; init; }
+
+        /// <summary>
         /// Null for a role the installation shares; otherwise the activity that
         /// owns it, where only that activity's grants may link to it.
         /// </summary>
@@ -23,14 +31,28 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? ActivityName { get; init; }
 
         /// <summary>
-        /// How many grants point at this role — how many people an edit reaches.
+        /// How many grants link this role — how many people an edit reaches.
         /// <para>
         /// Sent because a role fails <b>open</b>: the whole risk of editing one
         /// is not knowing how far the edit goes, and a number is the cheapest
         /// answer to that.
         /// </para>
+        /// <para>
+        /// It counts the contributions a provider wrote as well. It did not
+        /// until 2026-09-19, when those were copies rather than links, so a role
+        /// eight hundred people held through a directory group reported that an
+        /// edit reached nobody.
+        /// </para>
         /// </summary>
         public required int Grants { get; init; }
+
+        /// <summary>
+        /// The providers whose rules name this role, by slug. Empty for a role
+        /// nothing maps onto. An edit reaches these people at their next sign-in
+        /// rather than at once, which is a different sentence for the screen to
+        /// say.
+        /// </summary>
+        public required IReadOnlyList<string> MappedBy { get; init; }
     }
 
     public record RoleInputDto
@@ -92,6 +114,28 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? GroupId { get; init; }
     }
 
+    /// <summary>One role a grant links, and where it came from.</summary>
+    public record GrantRoleDto
+    {
+        public required string RoleId { get; init; }
+        public required string Name { get; init; }
+        public required IReadOnlyList<string> Permissions { get; init; }
+
+        /// <summary>Null for a role belonging to the installation.</summary>
+        public string? ActivityId { get; init; }
+
+        /// <summary>
+        /// Who put it here: null for a person, otherwise the provider or the
+        /// platform that asserted it. A manager deciding whether to remove a
+        /// role needs to know which of those it is.
+        /// </summary>
+        public string? SourceProviderId { get; init; }
+        public string? SourceProviderName { get; init; }
+
+        /// <summary>When somebody took it away, on a dismissed role only.</summary>
+        public string? DismissedAt { get; init; }
+    }
+
     public record GrantDto
     {
         public required string Id { get; init; }
@@ -106,37 +150,44 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? ActivityName { get; init; }
 
         /// <summary>
-        /// This grant's <b>own</b> entries — what it adds on top of its role, or
-        /// the whole set where it has none.
+        /// This grant's <b>own</b> entries — what it adds on top of its roles, or
+        /// the whole set where it links none.
         /// <para>
-        /// What the person actually holds is this unioned with
-        /// <see cref="RolePermissions"/>. Two fields rather than one union,
-        /// because a screen has to edit the first and may not edit the second,
-        /// and a single list could not say which was which.
+        /// What the person actually holds is this unioned with every role in
+        /// <see cref="Roles"/>. Separate fields rather than one union, because a
+        /// screen has to edit these and may not edit a role, and a single list
+        /// could not say which was which.
         /// </para>
         /// </summary>
         public required IReadOnlyList<string> Permissions { get; init; }
 
-        /// <summary>The role this grant points at, if it points at one.</summary>
-        public string? RoleId { get; init; }
-        public string? RoleName { get; init; }
+        /// <summary>
+        /// The roles this grant links, with what each one carries, so a row
+        /// reads without a second lookup. Empty where the grant holds its own
+        /// set alone.
+        /// </summary>
+        public required IReadOnlyList<GrantRoleDto> Roles { get; init; }
 
         /// <summary>
-        /// What that role contributes, sent so a row reads without a second
-        /// lookup. Empty where there is no role.
+        /// Roles somebody took away from this grant. They confer nothing; they
+        /// are sent so a screen can say why a launch does not put them back, and
+        /// so re-adding one is a visible act rather than a guess.
         /// </summary>
-        public required IReadOnlyList<string> RolePermissions { get; init; }
+        public required IReadOnlyList<GrantRoleDto> DismissedRoles { get; init; }
 
         /// <summary>
         /// A membership that runs the activity rather than takes part in it.
-        /// <b>Forced true for a staff grant</b>, and the Server decides.
+        /// <b>Derived</b>: true when the permissions make it staff, or when
+        /// somebody said so. The Server decides.
         /// </summary>
         public required bool IsSystem { get; init; }
+
         /// <summary>
-        /// Where a copied set started. Informational — <b>not</b> a reference,
-        /// and null on anything that points at a role.
+        /// Whether <see cref="IsSystem"/> is somebody's decision rather than
+        /// something the permissions imply. The flag the screen offers, and the
+        /// only half of <c>isSystem</c> a person may set.
         /// </summary>
-        public string? CopiedFromRoleName { get; init; }
+        public required bool StaffByHand { get; init; }
         /// <summary>`invited` | `active`.</summary>
         public required string State { get; init; }
         /// <summary>The group this person competes as, or null for themselves.</summary>
@@ -160,9 +211,14 @@ namespace AlgoJudge.Server.Api.Contracts
 
         /// <summary>
         /// Whether this contribution is rewritten from its provider's mapping at
-        /// every sign-in — and therefore **not editable here**. True exactly when
-        /// `source` is `provider`; sent as its own field so a screen disables a
-        /// control on a fact rather than on a string comparison.
+        /// every sign-in — and therefore **not editable here**.
+        /// <para>
+        /// True for a system-scope grant a provider wrote, and for nothing else.
+        /// An activity grant is a person's membership whoever created it, so a
+        /// launch no longer makes one unmanageable: a manager may edit and
+        /// revoke it, and what a platform asserted is marked on the roles rather
+        /// than on the row.
+        /// </para>
         /// </summary>
         public required bool Managed { get; init; }
 
@@ -181,21 +237,37 @@ namespace AlgoJudge.Server.Api.Contracts
         public string? ActivityId { get; init; }
 
         /// <summary>
-        /// The grant's own entries. With <see cref="RoleId"/> set these are
-        /// additions to the role; without it they are the whole set.
+        /// The grant's own entries. With roles linked these are additions to
+        /// them; without any they are the whole set.
         /// </summary>
         public required IReadOnlyList<string> Permissions { get; init; }
 
         /// <summary>
-        /// The role to point at, or null to leave the grant holding its own set
-        /// alone. A global role, or one belonging to this grant's activity.
+        /// The roles this grant is to link, as a whole set: a role missing from
+        /// the list is taken away, and taking one away is what stops a launch
+        /// putting it back.
+        /// <para>
+        /// <b>Absent leaves the roles as they are; an empty list takes them
+        /// all away.</b> The two are different instructions, and a write that
+        /// says nothing about roles must not silently strip them — an
+        /// enrollment, a group move and a staff flag are all edits to a grant
+        /// that have no opinion about its roles.
+        /// </para>
+        /// <para>
+        /// Installation roles, or roles belonging to this grant's activity. The
+        /// excess rule is applied to what is <b>added</b>, so re-sending what is
+        /// already there is never refused.
+        /// </para>
         /// </summary>
-        public string? RoleId { get; init; }
+        public IReadOnlyList<string>? RoleIds { get; init; }
 
-        /// <summary>Ignored where the permissions already settle it. The Server decides.</summary>
-        public bool? IsSystem { get; init; }
-        /// <summary>Ignored when <see cref="RoleId"/> is set: the link says it.</summary>
-        public string? CopiedFromRoleName { get; init; }
+        /// <summary>
+        /// Mark this membership as staff whatever its permissions imply — a jury
+        /// member holding a participant's keys. Clearing it does not make
+        /// somebody a competitor whose permissions say otherwise: the Server
+        /// derives the rest.
+        /// </summary>
+        public bool? StaffByHand { get; init; }
         public string? State { get; init; }
 
         /// <summary>

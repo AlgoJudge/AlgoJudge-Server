@@ -57,10 +57,11 @@ namespace AlgoJudge.Server.Database.Models
         /// a change that silently reverts is a change nobody can trust.
         /// </para>
         /// <para>
-        /// Null at activity scope, always — mapping into an activity belongs to
-        /// the LTI work, whose purpose is to mirror a course binding, and
-        /// building it before those requirements exist would build the wrong
-        /// mechanism.
+        /// <b>Null at activity scope, always</b>, and a database constraint says
+        /// so. An activity has one grant per person whoever wrote it, so a
+        /// source on the row would claim the whole membership for one platform;
+        /// what a platform asserted is recorded on the roles it added instead —
+        /// <see cref="GrantRole.SourceProviderId"/>.
         /// </para>
         /// </summary>
         public Guid? SourceProviderId { get; set; }
@@ -92,32 +93,29 @@ namespace AlgoJudge.Server.Database.Models
         public bool OverrideSystem { get; set; }
 
         /// <summary>
-        /// The <see cref="Role"/> this grant carries, or null for a grant that
-        /// holds its own set alone.
+        /// The roles this grant links. Empty for a grant that holds its own set
+        /// alone, which is what a hand-made one may still be.
         /// <para>
-        /// <b>A link, not a copy</b>: editing the role changes what this person
-        /// may do without anything touching this row. A grant made by hand out of
-        /// raw permissions still points at nothing, and so does every grant made
-        /// before roles existed — those keep their whole set in
-        /// <see cref="Permissions"/> and are not disturbed.
+        /// <b>Links, not copies</b>: editing a role changes what everybody
+        /// linked to it may do, without anything touching these rows. Several,
+        /// because both paths that write a grant speak in sets — a claim may
+        /// match several mapping rules, and a launch may carry several roles.
         /// </para>
         /// <para>
-        /// A provider's contribution also points at nothing, deliberately: a
-        /// claim may match several mapping rules and the contribution is the
-        /// union of what they name, which one link cannot say. It is live
-        /// already, by being rewritten at every sign-in.
+        /// A link marked <see cref="GrantRole.DismissedAt"/> is not held; it
+        /// records that somebody took that role away, so an LTI launch does not
+        /// put it back.
         /// </para>
         /// </summary>
-        public Guid? RoleId { get; set; }
-        public Role? Role { get; set; }
+        public ICollection<GrantRole> Roles { get; set; } = new List<GrantRole>();
 
         /// <summary>
         /// This grant's own permissions, as a <c>jsonb</c> array of strings.
         /// <para>
-        /// With a <see cref="Role"/> linked these are <b>additions</b> to it, and
-        /// what somebody holds is the union of the two: giving one person one
-        /// extra key does not cut them off from the role's corrections. With no
-        /// role linked this is the whole set.
+        /// With roles linked these are <b>additions</b> to them, and what
+        /// somebody holds is the union of all of it: giving one person one extra
+        /// key does not cut them off from a role's corrections. With no role
+        /// linked this is the whole set.
         /// </para>
         /// <para>
         /// Nothing subtracts. "A manager without the right to update something"
@@ -130,26 +128,34 @@ namespace AlgoJudge.Server.Database.Models
         /// <summary>
         /// A membership that runs the activity rather than takes part in it.
         /// <para>
-        /// <b>Computed by the Server on every write</b>, never accepted from the
-        /// caller: a grant carrying any permission an ordinary participant does
-        /// not hold is systemic, always. A jury member counted among the
-        /// competitors is a bug, not a preference — so this is what excludes them
-        /// from the participant count and from the results feed.
+        /// <b>Derived on every write</b>, never accepted from the caller: a grant
+        /// carrying any permission an ordinary participant does not hold is
+        /// systemic, always. A jury member counted among the competitors is a
+        /// bug, not a preference — so this is what excludes them from the
+        /// participant count and from the results feed.
+        /// </para>
+        /// <para>
+        /// <c>IsSystem = StaffByHand || IsStaff(effective)</c>, and it is
+        /// recomputed in both directions: a role edit that made a set systemic
+        /// raises it, and undoing that edit lowers it again. What a person
+        /// decided is in <see cref="StaffByHand"/>, which is why the two can no
+        /// longer be confused for each other.
         /// </para>
         /// </summary>
         public bool IsSystem { get; set; }
 
         /// <summary>
-        /// Which role a copied set started from. Informational, for the
-        /// interface — <b>not</b> a reference, and meaningless once
-        /// <see cref="RoleId"/> is set, which is why linking clears it.
+        /// Somebody's decision that this membership is staff whatever its
+        /// permissions say — a jury member holding nothing but a participant's
+        /// keys.
         /// <para>
-        /// What it is for is the grants that are copies: the ones edited before
-        /// roles existed, and the ones somebody deliberately fills in by hand. It
-        /// says where the set began, not what it is now.
+        /// It used to live inside <see cref="IsSystem"/>, which is why that flag
+        /// could be raised by a role edit and never lowered: the column held two
+        /// things and the recompute could not tell them apart. Split, so a
+        /// correction to a role is as undoable as it was reversible.
         /// </para>
         /// </summary>
-        public string? CopiedFromRoleName { get; set; }
+        public bool StaffByHand { get; set; }
 
         /// <summary>
         /// The group this person competes as in this activity, or null for

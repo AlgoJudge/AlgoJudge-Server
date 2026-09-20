@@ -91,8 +91,8 @@ public static class CopiedFields
             // Nobody's work, nobody's rights, nobody's teams.
             nameof(Activity.Questions), nameof(Activity.Printouts),
             nameof(Activity.Grants), nameof(Activity.Groups),
-            // Navigations; the ids beside them are what travels.
-            nameof(Activity.ParticipantRole), nameof(Activity.ManagerRole),
+            // A navigation; the rows beside it are what travels.
+            nameof(Activity.EnrollmentRoles),
         ],
         [typeof(Series)] =
         [
@@ -127,11 +127,10 @@ public static class CopiedFields
         [
             nameof(Activity.StartDate), nameof(Activity.EndDate),
             nameof(Activity.Series), nameof(Activity.AttachmentRules),
-            // The activity's own roles are copied and the two defaults are
-            // repointed at the copies; a global default is carried unchanged.
-            // Checked by `A_copy_carries_the_activitys_own_roles`.
+            // The activity's own roles are copied and the enrollment sets are
+            // repointed at the copies; an installation role is carried
+            // unchanged. Checked by `A_copy_carries_the_activitys_own_roles`.
             nameof(Activity.Roles),
-            nameof(Activity.ParticipantRoleId), nameof(Activity.ManagerRoleId),
         ],
         [typeof(Series)] =
         [

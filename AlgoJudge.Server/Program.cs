@@ -289,6 +289,7 @@ namespace AlgoJudge.Server
             builder.Services.AddScoped<IGrantService, GrantService>();
             builder.Services.AddScoped<IIdentityProviderService, IdentityProviderService>();
             builder.Services.AddScoped<IClaimMappingService, ClaimMappingService>();
+            builder.Services.AddScoped<IProviderMappingService, ProviderMappingService>();
             builder.Services.AddScoped<IFederatedSignInService, FederatedSignInService>();
             builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
             builder.Services.AddScoped<IAccountMergeService, AccountMergeService>();

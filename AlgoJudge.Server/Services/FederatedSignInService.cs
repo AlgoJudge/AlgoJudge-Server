@@ -93,12 +93,12 @@ namespace AlgoJudge.Server.Services
 
             if (mapped.Any)
             {
-                changed = await WriteContributionAsync(provider, link.UserId, mapped.Permissions, ct);
+                changed = await WriteContributionAsync(provider, link.UserId, mapped.RoleIds, ct);
                 answer = new FederatedSignIn(true, user, null);
             }
             else if (provider.UnmappedBehavior == UnmappedBehavior.DefaultRole)
             {
-                var fallback = await DefaultPermissionsAsync(provider, ct);
+                var fallback = await DefaultRoleIdsAsync(provider, ct);
                 changed = await WriteContributionAsync(provider, link.UserId, fallback, ct);
                 answer = new FederatedSignIn(true, user, null);
             }
@@ -139,13 +139,13 @@ namespace AlgoJudge.Server.Services
             MappedContribution mapped,
             CancellationToken ct)
         {
-            var permissions = mapped.Any
-                ? mapped.Permissions
+            var roleIds = mapped.Any
+                ? mapped.RoleIds
                 : provider.UnmappedBehavior == UnmappedBehavior.DefaultRole
-                    ? await DefaultPermissionsAsync(provider, ct)
+                    ? await DefaultRoleIdsAsync(provider, ct)
                     : null;
 
-            if (permissions is null)
+            if (roleIds is null)
             {
                 await RecordAsync(provider, subject, null, mapped,
                     FederatedSignInOutcome.Refused, false, "provider.unmapped", ct);
@@ -162,7 +162,7 @@ namespace AlgoJudge.Server.Services
                 LastSignInAt = clock.GetUtcNow().UtcDateTime,
             });
 
-            await WriteContributionAsync(provider, user.Id, permissions, ct);
+            await WriteContributionAsync(provider, user.Id, roleIds, ct);
             await context.SaveChangesAsync(ct);
 
             await RecordAsync(provider, subject, user.Id, mapped,
@@ -289,40 +289,91 @@ namespace AlgoJudge.Server.Services
                     System.Text.Encoding.UTF8.GetBytes(subject)))[..SuffixLength].ToLowerInvariant();
 
         /// <summary>
-        /// Writes this provider's contribution, replacing whatever it said before.
-        /// Answers whether anything actually moved, for the log.
+        /// Writes this provider's contribution, replacing whatever it said
+        /// before. Answers whether anything actually moved, for the log.
+        /// <para>
+        /// <b>Links, not a copy.</b> A claim may match several rules, and a
+        /// grant links several roles, so what the rules name is what the grant
+        /// holds — and an edit to one of those roles reaches these people at
+        /// once rather than at their next sign-in. The set is replaced
+        /// wholesale, because this row is the provider's: a group taken away at
+        /// the directory is taken away here, and there is nothing for a person
+        /// to have decided about it.
+        /// </para>
+        /// <para>
+        /// The row's own entries stay empty. A contribution that carried some
+        /// itself would be a set nobody could explain the source of, and the one
+        /// place this model would need an ordering rule.
+        /// </para>
         /// </summary>
         private async Task<bool> WriteContributionAsync(
-            IdentityProvider provider, string userId, IReadOnlySet<string> permissions, CancellationToken ct)
+            IdentityProvider provider, string userId, IReadOnlyList<Guid> roleIds, CancellationToken ct)
         {
-            var ordered = permissions.OrderBy(p => p, StringComparer.Ordinal).ToList();
-            var json = JsonSerializer.Serialize(ordered);
+            var grant = await context.Grants
+                .Include(g => g.Roles)
+                .FirstOrDefaultAsync(
+                    g => g.UserId == userId && g.ActivityId == null
+                        && g.SourceProviderId == provider.Id, ct);
 
-            var grant = await context.Grants.FirstOrDefaultAsync(
-                g => g.UserId == userId && g.ActivityId == null && g.SourceProviderId == provider.Id, ct);
+            var now = clock.GetUtcNow().UtcDateTime;
+            var changed = false;
 
             if (grant is null)
             {
-                context.Grants.Add(new Grant
+                grant = new Grant
                 {
                     UserId = userId,
                     SourceProviderId = provider.Id,
-                    Permissions = json,
-                    IsSystem = Authorization.Permissions.IsStaff(ordered),
-                    // **The one contribution that still holds a copy.** A claim
-                    // may match several mapping rules and this is the union of
-                    // every role they name, which a single link cannot say. It
-                    // loses nothing: the union is rewritten from those rules at
-                    // every sign-in, so a role edit reaches these people then.
-                    RoleId = null,
-                });
-                return true;
+                    Permissions = "[]",
+                };
+                context.Grants.Add(grant);
+                changed = true;
             }
 
-            if (grant.Permissions == json) return false;
+            // **Whatever it used to hold itself is dropped.** A contribution
+            // written before 2026-09-19 is a copy of a role's permissions, and
+            // the upgrade leaves it as one because nobody recorded which claim
+            // values made it. This is where it stops being one: without it the
+            // copy outlives every mapping change, and a directory that took a
+            // right away would never take it away here.
+            if (grant.Permissions != "[]")
+            {
+                grant.Permissions = "[]";
+                changed = true;
+            }
 
-            grant.Permissions = json;
-            grant.IsSystem = Authorization.Permissions.IsStaff(ordered);
+            foreach (var gone in grant.Roles.Where(r => !roleIds.Contains(r.RoleId)).ToList())
+            {
+                grant.Roles.Remove(gone);
+                context.GrantRoles.Remove(gone);
+                changed = true;
+            }
+
+            foreach (var roleId in roleIds)
+            {
+                if (grant.Roles.Any(r => r.RoleId == roleId)) continue;
+                var link = new GrantRole
+                {
+                    GrantId = grant.Id,
+                    RoleId = roleId,
+                    SourceProviderId = provider.Id,
+                    AddedAt = now,
+                };
+                grant.Roles.Add(link);
+                context.GrantRoles.Add(link);
+                changed = true;
+            }
+
+            if (!changed) return false;
+
+            var held = await context.PermissionRoles
+                .AsNoTracking()
+                .Where(r => roleIds.Contains(r.Id))
+                .Select(r => (string?)r.Permissions)
+                .ToListAsync(ct);
+
+            grant.IsSystem = Authorization.Permissions.IsStaff(
+                Authorization.Permissions.Effective(held, grant.Permissions));
             return true;
         }
 
@@ -338,29 +389,39 @@ namespace AlgoJudge.Server.Services
             return true;
         }
 
-        private async Task<IReadOnlySet<string>> DefaultPermissionsAsync(
+        /// <summary>
+        /// The roles granted when nothing matched, under
+        /// <see cref="UnmappedBehavior.DefaultRole"/>.
+        /// <para>
+        /// By id, and installation roles only. Looked up by name and without a
+        /// scope filter, this could pick an activity's role of the same name and
+        /// hand its permissions out installation-wide — which is what it did
+        /// until 2026-09-19.
+        /// </para>
+        /// </summary>
+        private async Task<IReadOnlyList<Guid>> DefaultRoleIdsAsync(
             IdentityProvider provider, CancellationToken ct)
         {
-            if (provider.DefaultRoleName is null) return new HashSet<string>();
-
-            var template = await context.PermissionRoles
+            var wanted = await context.IdentityProviderDefaultRoles
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Name == provider.DefaultRoleName, ct);
+                .Where(d => d.ProviderId == provider.Id)
+                .Select(d => d.RoleId)
+                .ToListAsync(ct);
 
-            if (template is null) return new HashSet<string>();
+            if (wanted.Count == 0) return [];
 
-            var keys = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var key in Deserialize(template.Permissions))
-            {
-                // The same two exclusions the mapping applies. A default template
-                // is a mapping with no claim in front of it, and "unreachable
-                // through a mapping" would be a strange thing to enforce on one
-                // path and not the other.
-                if (key == Authorization.Permissions.SystemAdministrator) continue;
-                if (Authorization.Permissions.Unknown([key]).Count > 0) continue;
-                keys.Add(key);
-            }
-            return keys;
+            var roles = await context.PermissionRoles
+                .AsNoTracking()
+                .Where(r => r.ActivityId == null && wanted.Contains(r.Id))
+                .ToListAsync(ct);
+
+            // The same exclusion the mapping applies. A default is a mapping
+            // with no claim in front of it, and "unreachable through a mapping"
+            // would be a strange thing to enforce on one path and not the other.
+            return [.. roles
+                .Where(r => !Authorization.Permissions.Parse(r.Permissions)
+                    .Contains(Authorization.Permissions.SystemAdministrator))
+                .Select(r => r.Id)];
         }
 
         private async Task RecordAsync(
