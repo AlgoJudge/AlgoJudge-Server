@@ -330,6 +330,18 @@ namespace AlgoJudge.Server.Services
                 changed = true;
             }
 
+            // **Whatever it used to hold itself is dropped.** A contribution
+            // written before 2026-09-19 is a copy of a role's permissions, and
+            // the upgrade leaves it as one because nobody recorded which claim
+            // values made it. This is where it stops being one: without it the
+            // copy outlives every mapping change, and a directory that took a
+            // right away would never take it away here.
+            if (grant.Permissions != "[]")
+            {
+                grant.Permissions = "[]";
+                changed = true;
+            }
+
             foreach (var gone in grant.Roles.Where(r => !roleIds.Contains(r.RoleId)).ToList())
             {
                 grant.Roles.Remove(gone);

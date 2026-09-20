@@ -218,6 +218,56 @@ public class FederatedSignInTests(ServerFixture server)
     }
 
     /// <summary>
+    /// **A contribution the upgrade left as a copy stops being one.**
+    ///
+    /// <para>
+    /// Contributions held a copy of a role's permissions until 2026-09-19, and
+    /// the migration cannot turn those into links: nothing recorded which claim
+    /// values produced them. So an upgraded installation carries copies until
+    /// their holders next sign in — and that sign-in has to clear the copy, not
+    /// just add links beside it. Left in place it would be a set no mapping
+    /// change could reach, so a right taken away in the directory would stay
+    /// granted here for as long as the account existed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_copied_contribution_is_emptied_at_the_next_sign_in()
+    {
+        var provider = await NewProviderAsync("upgraded", rules: [("students", "participant")]);
+
+        var first = await SignInAsync(provider, Token("upgraded-0001",
+            ("groups", "students"), ("preferred_username", "was-a-copy")));
+
+        // The shape the migration leaves: the permissions of whatever role the
+        // rule named, written on the grant itself, and no links at all.
+        await using (var context = server.NewContext())
+        {
+            var grant = await context.Grants
+                .Include(g => g.Roles)
+                .FirstAsync(g => g.UserId == first.User!.Id && g.SourceProviderId == provider);
+
+            context.GrantRoles.RemoveRange(grant.Roles);
+            grant.Permissions = """["activity:read","submission:create","submission:read:all"]""";
+            await context.SaveChangesAsync();
+        }
+
+        await SignInAsync(provider, Token("upgraded-0001",
+            ("groups", "students"), ("preferred_username", "was-a-copy")));
+
+        await using (var context = server.NewContext())
+        {
+            var grant = await context.Grants.AsNoTracking().FirstAsync(
+                g => g.UserId == first.User!.Id && g.SourceProviderId == provider);
+            Assert.Equal("[]", grant.Permissions);
+        }
+
+        // What it confers now is the role's, so the key the copy carried and
+        // the role does not is gone.
+        Assert.DoesNotContain("submission:read:all", await ConferredAsync(provider, first.User!.Id));
+        Assert.Contains("submission:create", await ConferredAsync(provider, first.User.Id));
+    }
+
+    /// <summary>
     /// **Unreachable through a mapping, in every configuration** — including one
     /// reached by writing the rule first and editing the role afterwards. The
     /// edit is refused; and if a role ever carries it anyway, the mapping leaves
