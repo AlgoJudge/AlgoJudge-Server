@@ -5,7 +5,8 @@ namespace AlgoJudge.Server.Tests;
 /// encryption on and go on serving.
 /// <para>
 /// <b>SeaweedFS accepts the configuration and then breaks the bucket.</b>
-/// Measured 2026-09-07, identically on 4.43 and 4.45:
+/// Measured on 4.43 and 4.45 (2026-09-07) and again on 4.47 (2026-09-20),
+/// identically:
 /// <c>PutBucketEncryption</c> is accepted, <c>GetBucketEncryption</c> returns
 /// the rule, and every write to that bucket afterwards fails with "we
 /// encountered an internal error". A write to the same bucket before the call
@@ -14,7 +15,7 @@ namespace AlgoJudge.Server.Tests;
 /// there.
 /// </para>
 /// <para>
-/// RustFS 1.0.0-rc.5 accepts it, keeps serving, and reports <c>AES256</c> for
+/// RustFS 1.0.0 accepts it, keeps serving, and reports <c>AES256</c> for
 /// the object — which is what the test asserts, and why the default endpoint
 /// runs it.
 /// </para>
@@ -33,7 +34,7 @@ public sealed class EncryptionCapableFactAttribute : FactAttribute
         {
             Skip =
                 "SeaweedFS accepts bucket-default encryption and then fails every write to that "
-                + "bucket — measured 2026-09-07 on 4.43 and 4.45 alike. The endpoint has to be one "
+                + "bucket — measured on 4.43, 4.45 and 4.47 alike. The endpoint has to be one "
                 + "that keeps serving after PutBucketEncryption.";
         }
     }

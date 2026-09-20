@@ -54,15 +54,11 @@ services:
   # exact tag for the same reason postgres is: an unpinned object store that
   # moves under a stack is a morning nobody planned.
   #
-  # `1.0.0-rc.5` is a release candidate, which is the newest thing this image
-  # publishes as a version. That is acceptable here and is one more reason this
-  # service is development-only.
-  #
   # Not published to the host, so nothing outside the Compose network reaches
   # it, and no console: the credentials below exist for this stack alone.
   rustfs:
     logging: *logging
-    image: rustfs/rustfs:1.0.0-rc.5
+    image: rustfs/rustfs:1.0.0
     environment:
       # **The same two values the Server signs with**, substituted from one
       # place. They were written out twice until 2026-08-13, and a pair that has
